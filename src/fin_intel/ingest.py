@@ -1,0 +1,314 @@
+"""Load provider payloads into the normalized tables.
+
+Live syncs fetch everything an item needs first and only then load it, because the raw
+store commits each response in its own transaction (so it survives a failed load).
+
+Each (provider, dataset) has one loader taking the raw payload. Live syncs fetch (which
+records the raw response) and then call the loader; `rebuild.py` replays stored raw
+responses through the same loaders. The API only ever reads what these have stored.
+"""
+
+import logging
+from collections import Counter, defaultdict
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from datetime import UTC, date, datetime
+from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from fin_intel import derive
+from fin_intel.db import upsert
+from fin_intel.models import (
+    Concept,
+    CorporateAction,
+    DailyBar,
+    EconomicObservation,
+    EconomicSeries,
+    Fact,
+    Filing,
+    Issuer,
+    Security,
+    SyncState,
+    TickerHistory,
+)
+from fin_intel.providers import (
+    FredProvider,
+    ProviderError,
+    SecProvider,
+    TiingoProvider,
+    fred,
+    sec,
+    tiingo,
+)
+
+log = logging.getLogger(__name__)
+
+
+# --- securities ------------------------------------------------------------------------
+
+
+def get_security(session: Session, ticker: str) -> Security | None:
+    """The security currently using `ticker`, else the one that used it most recently."""
+    ticker = ticker.upper()
+    security = session.scalar(select(Security).where(Security.ticker == ticker))
+    if security is None:
+        security = session.scalar(
+            select(Security)
+            .join(TickerHistory, TickerHistory.security_id == Security.id)
+            .where(TickerHistory.ticker == ticker)
+            .order_by(TickerHistory.last_seen.desc())
+        )
+    return security
+
+
+def record_tickers(session: Session, securities: list[Security], today: date) -> None:
+    rows = [
+        {"security_id": s.id, "ticker": s.ticker, "first_seen": today, "last_seen": today}
+        for s in securities
+        if s.ticker
+    ]
+    upsert(session, TickerHistory, rows, key=["security_id", "ticker"], update=["last_seen"])
+
+
+def load_company_tickers(session: Session, payload: Any, today: date) -> int:
+    """Reconcile our securities with SEC's current ticker list.
+
+    - Rename: a CIK's old ticker vanished and exactly one new ticker appeared for it
+      (FB -> META); the existing security takes the new ticker and keeps its history.
+    - Reuse: a ticker now belongs to a different CIK; the old holder gives it up and a new
+      security is created, so the two companies' price histories never merge.
+    - Delisting: a security with a CIK missing from the list is marked inactive but keeps
+      its ticker until someone else takes it.
+    """
+    incoming: dict[str, dict] = {}
+    for row in sec.parse_company_tickers(payload):
+        if row["ticker"]:
+            incoming[row["ticker"].upper()] = row  # the SEC file can repeat a ticker
+    issuers = {r["cik"]: {"cik": r["cik"], "name": r["name"]} for r in incoming.values()}
+    upsert(session, Issuer, issuers.values(), key=["cik"])
+
+    securities = list(session.scalars(select(Security)))
+    by_ticker = {s.ticker: s for s in securities if s.ticker}
+    # Securities with a CIK that no longer hold a listed ticker: candidates for a rename.
+    unlisted: dict[int, list[Security]] = defaultdict(list)
+
+    for ticker, row in incoming.items():
+        holder = by_ticker.get(ticker)
+        if holder is not None and holder.cik is not None and holder.cik != row["cik"]:
+            log.warning("%s moved from CIK %s to CIK %s", ticker, holder.cik, row["cik"])
+            holder.ticker = None
+            del by_ticker[ticker]
+            unlisted[holder.cik].append(holder)
+    session.flush()  # release reused tickers before anyone takes them
+    for s in by_ticker.values():
+        if s.cik is not None and s.ticker not in incoming:
+            unlisted[s.cik].append(s)
+
+    new_tickers_per_cik = Counter(r["cik"] for t, r in incoming.items() if t not in by_ticker)
+    for ticker, row in incoming.items():
+        security = by_ticker.get(ticker)
+        if security is None:
+            candidates = unlisted.get(row["cik"], [])
+            if len(candidates) == 1 and new_tickers_per_cik[row["cik"]] == 1:
+                security = candidates.pop()
+                log.info("%s renamed to %s", security.ticker, ticker)
+                by_ticker.pop(security.ticker, None)
+                security.ticker = ticker
+            else:
+                security = Security(ticker=ticker)
+                session.add(security)
+            by_ticker[ticker] = security
+        security.name, security.exchange, security.cik = row["name"], row["exchange"], row["cik"]
+        security.active = True
+
+    for s in securities:
+        if s.cik is not None and s.ticker not in incoming:
+            s.active = False
+    session.flush()
+    record_tickers(session, [by_ticker[t] for t in incoming], today)
+    return len(incoming)
+
+
+def load_tiingo_metadata(session: Session, ticker: str, payload: Any, today: date) -> int:
+    """Create a security for a symbol SEC doesn't list (e.g. some ETFs)."""
+    if get_security(session, ticker) is not None:
+        return 0
+    meta = tiingo.parse_metadata(payload)
+    security = Security(ticker=meta["ticker"], name=meta["name"], exchange=meta["exchange"])
+    session.add(security)
+    session.flush()
+    record_tickers(session, [security], today)
+    return 1
+
+
+# --- prices ----------------------------------------------------------------------------
+
+
+def load_tiingo_daily(session: Session, ticker: str, payload: Any) -> int:
+    security = get_security(session, ticker)
+    if security is None:
+        raise ProviderError(f"{ticker}: unknown security; load its metadata first")
+    bars, actions = tiingo.parse_daily(payload)
+    for row in bars + actions:
+        row["security_id"] = security.id
+    upsert(session, CorporateAction, actions, key=["security_id", "ex_date", "action", "source"])
+    return upsert(session, DailyBar, bars, key=["security_id", "date", "source"])
+
+
+# --- fundamentals ----------------------------------------------------------------------
+
+
+def load_company_facts(session: Session, cik: int, payload: Any) -> int:
+    filings, concepts, facts = sec.parse_company_facts(cik, payload)
+    upsert(session, Issuer, [{"cik": cik, "name": payload.get("entityName")}], key=["cik"])
+    upsert(session, Filing, filings, key=["accession"])
+    upsert(session, Concept, concepts, key=["taxonomy", "name"])
+
+    filing_ids = dict(
+        session.execute(select(Filing.accession, Filing.id).where(Filing.cik == cik)).all()
+    )
+    concept_ids = {
+        (t, n): i for t, n, i in session.execute(select(Concept.taxonomy, Concept.name, Concept.id))
+    }
+    rows = [
+        {
+            "filing_id": filing_ids[f["accession"]],
+            "concept_id": concept_ids[f["concept"]],
+            "unit": f["unit"],
+            "period_start": f["period_start"],
+            "period_end": f["period_end"],
+            "instant": f["instant"],
+            "value": f["value"],
+            "frame": f["frame"],
+            "cik": cik,
+        }
+        for f in facts
+    ]
+    count = upsert(
+        session,
+        Fact,
+        rows,
+        key=["filing_id", "concept_id", "unit", "period_start", "period_end"],
+    )
+    derive.derive_issuer(session, cik)
+    return count
+
+
+# --- economic data ---------------------------------------------------------------------
+
+
+def load_fred_series(session: Session, payload: Any) -> int:
+    return upsert(session, EconomicSeries, [fred.parse_series(payload)], key=["id"])
+
+
+def load_fred_observations(session: Session, series_id: str, payload: Any) -> int:
+    rows = fred.parse_observations(series_id, payload)
+    return upsert(session, EconomicObservation, rows, key=["series_id", "date"])
+
+
+# --- loader registry (used by rebuild) -------------------------------------------------
+
+# (provider, dataset) -> loader(session, key, payload, fetched_at)
+Loader = Callable[[Session, Any, Any, datetime], int]
+LOADERS: dict[tuple[str, str], Loader] = {
+    ("sec", "company_tickers"): lambda s, k, p, t: load_company_tickers(s, p, t.date()),
+    ("sec", "companyfacts"): lambda s, k, p, t: load_company_facts(s, int(k), p),
+    ("tiingo", "metadata"): lambda s, k, p, t: load_tiingo_metadata(s, k, p, t.date()),
+    ("tiingo", "daily_prices"): lambda s, k, p, t: load_tiingo_daily(s, k, p),
+    ("fred", "series"): lambda s, k, p, t: load_fred_series(s, p),
+    ("fred", "observations"): lambda s, k, p, t: load_fred_observations(s, k, p),
+}
+# Datasets where each response is a full snapshot, so only the latest one matters.
+SNAPSHOT_DATASETS = {("sec", "companyfacts"), ("fred", "series"), ("fred", "observations")}
+
+
+# --- live syncs ------------------------------------------------------------------------
+
+
+@contextmanager
+def tracked(session: Session, provider: str, dataset: str, key: str) -> Iterator[dict]:
+    """Record the outcome of one sync item in sync_state, committing or rolling back."""
+    now = datetime.now(UTC)
+    result: dict[str, Any] = {"rows": None}
+    try:
+        yield result
+    except Exception as exc:
+        session.rollback()
+        state = {"last_attempt": now, "last_error": str(exc)[:1000]}
+        upsert(
+            session,
+            SyncState,
+            [{"provider": provider, "dataset": dataset, "key": key, **state}],
+            key=["provider", "dataset", "key"],
+        )
+        session.commit()
+        raise
+    state = {"last_attempt": now, "last_success": now, "last_error": None, "rows": result["rows"]}
+    upsert(
+        session,
+        SyncState,
+        [{"provider": provider, "dataset": dataset, "key": key, **state}],
+        key=["provider", "dataset", "key"],
+    )
+    session.commit()
+
+
+def sync_tickers(session: Session, sec_provider: SecProvider) -> int:
+    with tracked(session, "sec", "company_tickers", "all") as result:
+        payload = sec_provider.fetch_company_tickers()
+        result["rows"] = load_company_tickers(session, payload, date.today())
+    return result["rows"]
+
+
+def sync_fundamentals(session: Session, sec_provider: SecProvider, ticker: str) -> int:
+    security = get_security(session, ticker)
+    if security is None or security.cik is None:
+        raise ProviderError(f"{ticker}: no CIK known; run sync-tickers first")
+    with tracked(session, "sec", "companyfacts", str(security.cik)) as result:
+        payload = sec_provider.fetch_company_facts(security.cik)
+        result["rows"] = load_company_facts(session, security.cik, payload)
+    return result["rows"]
+
+
+def sync_prices(
+    session: Session, tiingo_provider: TiingoProvider, ticker: str, start: date | None = None
+) -> int:
+    """Incrementally sync unadjusted bars and corporate actions. Stored history never needs
+    refetching: adjustments are computed on read."""
+    ticker = ticker.upper()
+    with tracked(session, "tiingo", "daily_prices", ticker) as result:
+        # Fetch everything before writing anything: the raw store commits each response in
+        # its own transaction, which must not interleave with this session's writes.
+        security = get_security(session, ticker)
+        metadata = None
+        if security is None:
+            metadata = tiingo_provider.fetch_metadata(ticker)
+            symbol, last_stored = tiingo.parse_metadata(metadata)["ticker"], None
+        elif security.ticker is None:
+            raise ProviderError(f"{ticker}: symbol now belongs to another security")
+        else:
+            symbol = security.ticker
+            last_stored = session.scalar(
+                select(func.max(DailyBar.date)).where(
+                    DailyBar.security_id == security.id, DailyBar.source == tiingo_provider.name
+                )
+            )
+        # Refetch the last stored day too, so a late correction to it is picked up.
+        payload = tiingo_provider.fetch_daily(symbol, start=start or last_stored)
+
+        if metadata is not None:
+            load_tiingo_metadata(session, symbol, metadata, date.today())
+        result["rows"] = load_tiingo_daily(session, symbol, payload)
+    return result["rows"]
+
+
+def sync_economic(session: Session, fred_provider: FredProvider, series_id: str) -> int:
+    """Full refetch each time: one call returns the whole series and picks up revisions."""
+    with tracked(session, "fred", "observations", series_id) as result:
+        series = fred_provider.fetch_series(series_id)
+        observations = fred_provider.fetch_observations(series_id)
+        load_fred_series(session, series)
+        result["rows"] = load_fred_observations(session, series_id, observations)
+    return result["rows"]

@@ -1,0 +1,397 @@
+from datetime import date, datetime
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, HTTPException, Query
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from fin_intel import ingest
+from fin_intel.db import get_session
+from fin_intel.fundamentals import Fact, derive_q4, latest_per_period, split_adjust
+from fin_intel.models import (
+    Concept,
+    CorporateAction,
+    DailyBar,
+    EconomicObservation,
+    EconomicSeries,
+    Filing,
+    FiscalCalendar,
+    Security,
+    SyncRun,
+    SyncState,
+    TickerHistory,
+)
+from fin_intel.models import Fact as FactRow
+from fin_intel.prices import adjustments
+
+app = FastAPI(title="Financial Intelligence API", version="0.2.0")
+
+SessionDep = Annotated[Session, Depends(get_session)]
+
+
+class Orm(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SecurityOut(Orm):
+    id: int
+    ticker: str | None
+    active: bool
+    name: str | None
+    exchange: str | None
+    cik: int | None
+
+
+class TickerHistoryOut(Orm):
+    ticker: str
+    first_seen: date
+    last_seen: date
+
+
+class SecurityDetailOut(SecurityOut):
+    ticker_history: list[TickerHistoryOut]
+
+
+class BarOut(BaseModel):
+    date: date
+    open: float | None
+    high: float | None
+    low: float | None
+    close: float | None
+    volume: int | None
+    adj_open: float | None
+    adj_high: float | None
+    adj_low: float | None
+    adj_close: float | None
+    adj_volume: float | None
+
+
+class ActionOut(Orm):
+    ex_date: date
+    action: str
+    value: float
+    source: str
+
+
+class ConceptOut(BaseModel):
+    taxonomy: str
+    concept: str
+    label: str | None
+    unit: str
+    facts: int
+
+
+class FactOut(Orm):
+    unit: str
+    period_start: date
+    period_end: date
+    period_type: str | None
+    value: float
+    fiscal_year: int | None
+    fiscal_period: str | None
+    form: str | None
+    filed: date | None
+    accession: str | None
+    split_adjustment: float
+    derived: bool
+
+
+class FilingOut(Orm):
+    accession: str
+    form: str | None
+    filed: date | None
+    report_period_end: date | None
+    fiscal_year: int | None
+    fiscal_period: str | None
+
+
+class CalendarOut(Orm):
+    segment: int
+    year_end_month: int
+    year_end_day: int
+    year_offset: int
+    first_year_end: date
+    last_year_end: date
+
+
+class SeriesOut(Orm):
+    id: str
+    source: str
+    title: str | None
+    units: str | None
+    frequency: str | None
+
+
+class ObservationOut(Orm):
+    date: date
+    value: float | None
+
+
+class SyncStateOut(Orm):
+    provider: str
+    dataset: str
+    key: str
+    last_attempt: datetime
+    last_success: datetime | None
+    last_error: str | None
+    rows: int | None
+
+
+class SyncRunOut(Orm):
+    id: int
+    job: str
+    started_at: datetime
+    finished_at: datetime | None
+    status: str
+    items_ok: int
+    items_failed: int
+    message: str | None
+
+
+class StatusOut(BaseModel):
+    recent_runs: list[SyncRunOut]
+    failing: list[SyncStateOut]
+
+
+def _security(session: Session, ticker: str) -> Security:
+    security = ingest.get_security(session, ticker)
+    if security is None:
+        raise HTTPException(404, f"unknown ticker {ticker}")
+    return security
+
+
+def _issuer_cik(session: Session, ticker: str) -> int:
+    security = _security(session, ticker)
+    if security.cik is None:
+        raise HTTPException(404, f"{ticker} has no SEC filings")
+    return security.cik
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/status", response_model=StatusOut)
+def status(session: SessionDep) -> StatusOut:
+    """Recent sync runs and every item whose last sync failed."""
+    runs = session.scalars(select(SyncRun).order_by(SyncRun.id.desc()).limit(20))
+    failing = session.scalars(
+        select(SyncState).where(SyncState.last_error.is_not(None)).order_by(SyncState.key)
+    )
+    return StatusOut(
+        recent_runs=[SyncRunOut.model_validate(r) for r in runs],
+        failing=[SyncStateOut.model_validate(s) for s in failing],
+    )
+
+
+@app.get("/securities", response_model=list[SecurityOut])
+def list_securities(
+    session: SessionDep, q: str | None = None, limit: int = Query(50, le=500)
+) -> list[Security]:
+    stmt = select(Security).order_by(Security.ticker).limit(limit)
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(Security.ticker.ilike(like) | Security.name.ilike(like))
+    return list(session.scalars(stmt))
+
+
+@app.get("/securities/{ticker}", response_model=SecurityDetailOut)
+def get_security(session: SessionDep, ticker: str) -> SecurityDetailOut:
+    security = _security(session, ticker)
+    history = session.scalars(
+        select(TickerHistory)
+        .where(TickerHistory.security_id == security.id)
+        .order_by(TickerHistory.first_seen)
+    )
+    return SecurityDetailOut(
+        **SecurityOut.model_validate(security).model_dump(),
+        ticker_history=[TickerHistoryOut.model_validate(h) for h in history],
+    )
+
+
+@app.get("/prices/{ticker}/daily", response_model=list[BarOut])
+def daily_prices(
+    session: SessionDep,
+    ticker: str,
+    start: date | None = None,
+    end: date | None = None,
+    source: str = "tiingo",
+) -> list[BarOut]:
+    """Unadjusted bars plus split- and dividend-adjusted values computed from stored actions."""
+    security = _security(session, ticker)
+    # Adjusting a bar needs every later action and the close before each, so load through
+    # the latest bar and cut to `end` afterwards.
+    stmt = select(DailyBar).where(DailyBar.security_id == security.id, DailyBar.source == source)
+    if start:
+        stmt = stmt.where(DailyBar.date >= start)
+    bars = list(session.scalars(stmt.order_by(DailyBar.date)))
+    actions = session.execute(
+        select(CorporateAction.ex_date, CorporateAction.action, CorporateAction.value).where(
+            CorporateAction.security_id == security.id, CorporateAction.source == source
+        )
+    ).all()
+    factors = adjustments(bars, [tuple(a) for a in actions])
+
+    def scaled(value: float | None, factor: float) -> float | None:
+        return None if value is None else value * factor
+
+    out = []
+    for b in bars:
+        if end and b.date > end:
+            break
+        f = factors[b.date]
+        out.append(
+            BarOut(
+                date=b.date,
+                open=b.open,
+                high=b.high,
+                low=b.low,
+                close=b.close,
+                volume=b.volume,
+                adj_open=scaled(b.open, f.price),
+                adj_high=scaled(b.high, f.price),
+                adj_low=scaled(b.low, f.price),
+                adj_close=scaled(b.close, f.price),
+                adj_volume=scaled(b.volume, f.volume),
+            )
+        )
+    return out
+
+
+@app.get("/prices/{ticker}/actions", response_model=list[ActionOut])
+def corporate_actions(session: SessionDep, ticker: str) -> list[CorporateAction]:
+    security = _security(session, ticker)
+    return list(
+        session.scalars(
+            select(CorporateAction)
+            .where(CorporateAction.security_id == security.id)
+            .order_by(CorporateAction.ex_date)
+        )
+    )
+
+
+@app.get("/fundamentals/{ticker}/concepts", response_model=list[ConceptOut])
+def fundamental_concepts(session: SessionDep, ticker: str) -> list[ConceptOut]:
+    cik = _issuer_cik(session, ticker)
+    stmt = (
+        select(Concept.taxonomy, Concept.name, Concept.label, FactRow.unit, func.count())
+        .join(FactRow, FactRow.concept_id == Concept.id)
+        .where(FactRow.cik == cik)
+        .group_by(Concept.taxonomy, Concept.name, Concept.label, FactRow.unit)
+        .order_by(Concept.taxonomy, Concept.name)
+    )
+    return [
+        ConceptOut(taxonomy=t, concept=c, label=lbl, unit=u, facts=n)
+        for t, c, lbl, u, n in session.execute(stmt)
+    ]
+
+
+@app.get("/fundamentals/{ticker}/filings", response_model=list[FilingOut])
+def filings(session: SessionDep, ticker: str, form: str | None = None) -> list[Filing]:
+    cik = _issuer_cik(session, ticker)
+    stmt = select(Filing).where(Filing.cik == cik).order_by(Filing.filed.desc())
+    if form:
+        stmt = stmt.where(Filing.form == form)
+    return list(session.scalars(stmt))
+
+
+@app.get("/fundamentals/{ticker}/calendar", response_model=list[CalendarOut])
+def fiscal_calendar(session: SessionDep, ticker: str) -> list[FiscalCalendar]:
+    """The inferred fiscal year end(s); more than one row means the company changed it."""
+    cik = _issuer_cik(session, ticker)
+    return list(
+        session.scalars(
+            select(FiscalCalendar).where(FiscalCalendar.cik == cik).order_by(FiscalCalendar.segment)
+        )
+    )
+
+
+@app.get("/fundamentals/{ticker}", response_model=list[FactOut])
+def fundamentals(
+    session: SessionDep,
+    ticker: str,
+    concept: str,
+    unit: str | None = Query(None, description="e.g. USD, USD/shares, shares; default: all"),
+    period_type: str | None = Query(
+        None, description="annual, quarter, half, nine_months, instant or other"
+    ),
+    form: str | None = Query(None, description="e.g. 10-K or 10-Q"),
+    as_reported: bool = Query(
+        False, description="Every filing's value as filed, instead of the latest per period"
+    ),
+    split_adjusted: bool = Query(
+        True, description="Restate share counts and per-share values for later stock splits"
+    ),
+    fill_q4: bool = Query(
+        True, description="Derive missing Q4 values as FY minus 9M (monetary flows only)"
+    ),
+) -> list[Fact]:
+    security = _security(session, ticker)
+    if security.cik is None:
+        raise HTTPException(404, f"{ticker} has no SEC filings")
+    stmt = (
+        select(
+            Concept.name,
+            FactRow.unit,
+            FactRow.period_start,
+            FactRow.period_end,
+            FactRow.period_type,
+            FactRow.value,
+            FactRow.fiscal_year,
+            FactRow.fiscal_period,
+            Filing.form,
+            Filing.filed,
+            Filing.accession,
+        )
+        .join(Concept, Concept.id == FactRow.concept_id)
+        .join(Filing, Filing.id == FactRow.filing_id)
+        .where(FactRow.cik == security.cik, Concept.name == concept)
+    )
+    if unit:
+        stmt = stmt.where(FactRow.unit == unit)
+    if form:
+        stmt = stmt.where(Filing.form == form)
+    facts = [Fact.from_row(r) for r in session.execute(stmt)]
+
+    if as_reported:
+        facts.sort(key=lambda f: (f.unit, f.period_end, f.period_start, f.filed or date.min))
+    else:
+        facts = latest_per_period(facts)
+        if fill_q4:
+            facts = derive_q4(facts)
+    if split_adjusted:
+        splits = session.execute(
+            select(CorporateAction.ex_date, CorporateAction.value)
+            .where(CorporateAction.security_id == security.id, CorporateAction.action == "split")
+            .distinct()
+        ).all()
+        facts = split_adjust(facts, [tuple(s) for s in splits])
+    if period_type:
+        facts = [f for f in facts if f.period_type == period_type]
+    return facts
+
+
+@app.get("/economic/{series_id}", response_model=SeriesOut)
+def economic_series(session: SessionDep, series_id: str) -> EconomicSeries:
+    series = session.get(EconomicSeries, series_id.upper())
+    if series is None:
+        raise HTTPException(404, f"unknown series {series_id}")
+    return series
+
+
+@app.get("/economic/{series_id}/observations", response_model=list[ObservationOut])
+def economic_observations(
+    session: SessionDep, series_id: str, start: date | None = None, end: date | None = None
+) -> list[EconomicObservation]:
+    stmt = (
+        select(EconomicObservation)
+        .where(EconomicObservation.series_id == series_id.upper())
+        .order_by(EconomicObservation.date)
+    )
+    if start:
+        stmt = stmt.where(EconomicObservation.date >= start)
+    if end:
+        stmt = stmt.where(EconomicObservation.date <= end)
+    return list(session.scalars(stmt))
