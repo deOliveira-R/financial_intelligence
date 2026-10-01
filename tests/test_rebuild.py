@@ -96,3 +96,15 @@ def test_rebuild_picks_up_parser_changes(synced, raw_store, monkeypatch):
     monkeypatch.setattr(sec, "parse_company_facts", patched)
     rebuild(synced, raw_store, "fundamentals")
     assert synced.scalar(select(Concept.label).where(Concept.name == "Revenues")) == "REVENUES"
+
+
+def test_rebuild_still_reproduces_tables_after_pruning(synced, raw_store):
+    from datetime import timedelta
+
+    from fin_intel.ingest import SNAPSHOT_DATASETS
+    from fin_intel.raw import prune
+
+    before = snapshot(synced)
+    prune(raw_store, SNAPSHOT_DATASETS, keep=1, min_age=timedelta(0))
+    rebuild(synced, raw_store, "all")
+    assert snapshot(synced) == before

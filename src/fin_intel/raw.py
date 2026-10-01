@@ -7,13 +7,14 @@ Bodies are stored once per content hash under raw_dir/<provider>/<hash[:2]>/<has
 import gzip
 import hashlib
 import json
+from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.engine import Engine
 
 from fin_intel.models import RawResponse
@@ -132,6 +133,74 @@ class RawStore:
                     )
                 )
             )
+
+
+@dataclass(frozen=True)
+class PruneResult:
+    responses: int
+    files: int
+    bytes: int
+
+
+def prune(
+    store: RawStore,
+    snapshot_datasets: set[tuple[str, str]],
+    keep: int = 3,
+    min_age: timedelta = timedelta(days=31),
+    dry_run: bool = False,
+) -> PruneResult:
+    """Drop raw responses a rebuild can't need, then delete bodies nothing references.
+
+    - Snapshot datasets (each response complete): keep the latest `keep` per key.
+    - Error responses: never replayed, so dropped.
+    - Everything else (incremental datasets, ticker lists) is kept: rebuilds replay all of it.
+    Nothing younger than `min_age` is touched: rate limits and Tiingo's monthly symbol cap
+    count recent calls.
+    """
+    cutoff = datetime.now(UTC) - min_age
+    with store.engine.connect() as conn:
+        rows = conn.execute(
+            select(
+                RawResponse.id,
+                RawResponse.provider,
+                RawResponse.dataset,
+                RawResponse.key,
+                RawResponse.status,
+                RawResponse.fetched_at,
+                RawResponse.content_hash,
+            ).order_by(RawResponse.id.desc())
+        ).all()
+
+    doomed: set[int] = set()
+    seen: Counter[tuple] = Counter()
+    for r in rows:  # newest first
+        old = _aware(r.fetched_at) < cutoff
+        if r.status != 200:
+            if old:
+                doomed.add(r.id)
+            continue
+        if (r.provider, r.dataset) in snapshot_datasets:
+            seen[(r.provider, r.dataset, r.key)] += 1
+            if seen[(r.provider, r.dataset, r.key)] > keep and old:
+                doomed.add(r.id)
+
+    # Bodies are shared by identical responses; delete only those no survivor references.
+    surviving = {(r.provider, r.content_hash) for r in rows if r.id not in doomed}
+    orphans = {(r.provider, r.content_hash) for r in rows if r.id in doomed} - surviving
+    paths = [store._path(p, h) for p, h in orphans]
+    size = sum(path.stat().st_size for path in paths if path.exists())
+    if not dry_run:
+        with store.engine.begin() as conn:
+            for chunk in _chunks(sorted(doomed), 500):
+                conn.execute(delete(RawResponse).where(RawResponse.id.in_(chunk)))
+        for path in paths:  # after the commit: a crash can leave a stray file, never a gap
+            path.unlink(missing_ok=True)
+    return PruneResult(responses=len(doomed), files=len(paths), bytes=size)
+
+
+def _chunks(items: list, n: int):
+    for i in range(0, len(items), n):
+        yield items[i : i + n]
 
 
 def _aware(t: datetime) -> datetime:

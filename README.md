@@ -21,7 +21,7 @@ derived      fact labels, filing period ends, fiscal calendars; adjusted prices,
 bookkeeping  sync_runs (one per CLI command), sync_state (last outcome per item)
 ```
 
-- **Raw layer.** Every provider response is kept, errors included, without credentials. `fin-intel rebuild <fundamentals|prices|economic|all>` wipes those tables and replays the stored responses through the same loaders, with no network. So a parser fix never costs API quota. A full rebuild reproduces the live-synced database exactly. Responses older than this layer (before 2026-10-01) were never captured.
+- **Raw layer.** Every provider response is kept, errors included, without credentials. `fin-intel rebuild <fundamentals|prices|economic|all>` wipes those tables and replays the stored responses through the same loaders, with no network. So a parser fix never costs API quota. A full rebuild reproduces the live-synced database exactly. Responses older than this layer (before 2026-10-01) were never captured. `fin-intel prune-raw` keeps raw storage bounded. It keeps the latest N responses per item for snapshot datasets (SEC company facts, FRED), keeps incremental datasets and ticker lists in full (rebuilds replay all of them), drops old error responses, and never touches anything under 31 days old (rate limits and Tiingo's symbol cap count recent calls).
 - **Store first, serve from storage.** The HTTP API only reads the database and never calls providers.
 - **Reported vs derived.** Values from providers are never edited after load. Our inferences (fiscal calendars, each fact's `period_type`/`fiscal_year`/`fiscal_period`, each filing's `report_period_end`) are written by `derive.py`, which runs after each fundamentals load. `fin-intel derive` recomputes them for every issuer offline.
 - **Fundamentals are normalized.** One row per filing and per concept, with integer foreign keys from facts. This takes about a third of the space of the original flat table and gives the API filings lists and concept labels. Each filing's copy of a value is kept, so data is point-in-time.
@@ -72,6 +72,7 @@ uv run fin-intel sync-economic GDP CPIAUCSL DGS10   # FRED series
 uv run fin-intel serve                              # http://127.0.0.1:8000/docs
 uv run fin-intel rebuild fundamentals               # re-load from raw/ after a parser change
 uv run fin-intel derive                             # recompute fiscal labels after a periods.py change
+uv run fin-intel prune-raw --dry-run                # what retention would remove (then without --dry-run)
 ```
 
 API endpoints:

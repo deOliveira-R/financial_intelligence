@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from fin_intel import derive, ingest
 from fin_intel.db import init_db, session_factory
+from fin_intel.ingest import SNAPSHOT_DATASETS
 from fin_intel.models import SyncRun
 from fin_intel.providers import (
     FredProvider,
@@ -16,7 +17,7 @@ from fin_intel.providers import (
     SecProvider,
     TiingoProvider,
 )
-from fin_intel.raw import default_store
+from fin_intel.raw import default_store, prune
 from fin_intel.rebuild import TARGETS, rebuild
 
 app = typer.Typer(help="Financial Intelligence data backend", no_args_is_help=True)
@@ -120,6 +121,29 @@ def derive_cmd() -> None:
     """Recompute fiscal calendars and fact labels for every issuer (no network)."""
     with session_factory()() as session:
         typer.echo(f"derived {derive.derive_all(session)} issuers")
+
+
+@app.command()
+def prune_raw(
+    keep: Annotated[int, typer.Option(help="Snapshot responses to keep per item")] = 3,
+    min_age_days: Annotated[int, typer.Option(help="Never prune anything younger")] = 31,
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+) -> None:
+    """Drop raw responses no rebuild can need (old snapshots, old errors)."""
+    from datetime import timedelta
+
+    result = prune(
+        default_store(),
+        SNAPSHOT_DATASETS,
+        keep=keep,
+        min_age=timedelta(days=min_age_days),
+        dry_run=dry_run,
+    )
+    verb = "would remove" if dry_run else "removed"
+    typer.echo(
+        f"{verb} {result.responses} responses, {result.files} files "
+        f"({result.bytes / 1_048_576:.1f} MB)"
+    )
 
 
 @app.command()
