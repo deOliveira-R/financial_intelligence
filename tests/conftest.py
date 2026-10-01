@@ -15,6 +15,7 @@ def settings(monkeypatch):
     monkeypatch.setenv("FI_SEC_USER_AGENT", "Test test@example.com")
     monkeypatch.setenv("FI_FRED_API_KEY", "fred-key")
     monkeypatch.setenv("FI_TIINGO_API_KEY", "tiingo-key")
+    monkeypatch.setenv("FI_MASSIVE_API_KEY", "massive-key")
     get_settings.cache_clear()
     base._limiters.clear()
     yield
@@ -173,4 +174,59 @@ FRED_SERIES = {
 }
 FRED_OBS = {
     "observations": [{"date": "2026-07-01", "value": "4.2"}, {"date": "2026-08-01", "value": "."}]
+}
+
+
+MASSIVE_GROUPED = {
+    "status": "OK",
+    "resultsCount": 3,
+    "results": [
+        {"T": "AAPL", "o": 254.0, "h": 256.0, "l": 253.0, "c": 255.5, "v": 41e6, "t": 0},
+        {"T": "BRK.B", "o": 480.0, "h": 482.0, "l": 478.0, "c": 481.0, "v": 3e6, "t": 0},
+        {"T": "ZZZZW", "o": 0.1, "h": 0.1, "l": 0.1, "c": 0.1, "v": 100, "t": 0},
+    ],
+}
+MASSIVE_SPLITS_PAGE1 = {
+    "status": "OK",
+    "results": [
+        {
+            "ticker": "AAPL",
+            "execution_date": "2020-08-31",
+            "split_from": 1,
+            "split_to": 4,
+            "adjustment_type": "forward_split",
+        },
+    ],
+    "next_url": "https://api.massive.com/stocks/v1/splits?cursor=abc",
+}
+MASSIVE_SPLITS_PAGE2 = {
+    "status": "OK",
+    "results": [
+        {
+            "ticker": "BRK.B",
+            "execution_date": "2010-01-21",
+            "split_from": 1,
+            "split_to": 50,
+            "adjustment_type": "forward_split",
+        },
+        {
+            "ticker": "ZZZZ",
+            "execution_date": "2025-01-02",
+            "split_from": 10,
+            "split_to": 1,
+            "adjustment_type": "reverse_split",
+        },
+    ],
+}
+MASSIVE_DIVIDENDS = {
+    "status": "OK",
+    "results": [
+        {
+            "ticker": "AAPL",
+            "ex_dividend_date": "2026-08-11",
+            "cash_amount": 0.26,
+            "currency": "USD",
+            "distribution_type": "recurring",
+        },
+    ],
 }

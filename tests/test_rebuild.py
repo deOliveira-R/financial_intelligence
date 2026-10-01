@@ -1,7 +1,19 @@
+from datetime import date
+
 import httpx
 import pytest
 import respx
-from conftest import COMPANY_FACTS, FRED_OBS, FRED_SERIES, TICKERS, tiingo_bar
+from conftest import (
+    COMPANY_FACTS,
+    FRED_OBS,
+    FRED_SERIES,
+    MASSIVE_DIVIDENDS,
+    MASSIVE_GROUPED,
+    MASSIVE_SPLITS_PAGE1,
+    MASSIVE_SPLITS_PAGE2,
+    TICKERS,
+    tiingo_bar,
+)
 from sqlalchemy import select
 
 from fin_intel import ingest
@@ -16,7 +28,7 @@ from fin_intel.models import (
     Security,
     TickerHistory,
 )
-from fin_intel.providers import FredProvider, SecProvider, TiingoProvider
+from fin_intel.providers import FredProvider, MassiveProvider, SecProvider, TiingoProvider
 from fin_intel.rebuild import TARGETS, rebuild
 
 SNAPSHOT_TABLES = [
@@ -60,6 +72,17 @@ def synced(session, raw_store):
                 ),
             ]
         )
+        massive_api = "https://api.massive.com"
+        respx.get(f"{massive_api}/v2/aggs/grouped/locale/us/market/stocks/2026-09-29").respond(
+            json=MASSIVE_GROUPED
+        )
+        respx.get(f"{massive_api}/stocks/v1/splits", params={"limit": "5000"}).respond(
+            json=MASSIVE_SPLITS_PAGE1
+        )
+        respx.get(f"{massive_api}/stocks/v1/splits", params={"cursor": "abc"}).respond(
+            json=MASSIVE_SPLITS_PAGE2
+        )
+        respx.get(f"{massive_api}/stocks/v1/dividends").respond(json=MASSIVE_DIVIDENDS)
         respx.get("https://api.stlouisfed.org/fred/series").respond(json=FRED_SERIES)
         respx.get("https://api.stlouisfed.org/fred/series/observations").respond(json=FRED_OBS)
         sec = SecProvider(raw_store=raw_store)
@@ -69,6 +92,10 @@ def synced(session, raw_store):
         ingest.sync_prices(session, tiingo, "SPY")  # not in SEC's list: created via metadata
         ingest.sync_prices(session, tiingo, "SPY")
         ingest.sync_economic(session, FredProvider(raw_store=raw_store), "UNRATE")
+        massive = MassiveProvider(raw_store=raw_store)
+        ingest.sync_market_daily(session, massive, date(2026, 9, 29))
+        ingest.sync_market_actions(session, massive, "splits", date(2000, 1, 1))
+        ingest.sync_market_actions(session, massive, "dividends", date(2000, 1, 1))
     return session
 
 

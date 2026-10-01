@@ -32,7 +32,13 @@ TARGETS = {
         [Fact, FiscalCalendar, Filing, Concept],
     ),
     "prices": (
-        [("tiingo", "metadata"), ("tiingo", "daily_prices")],
+        [
+            ("tiingo", "metadata"),
+            ("tiingo", "daily_prices"),
+            ("massive", "grouped_daily"),
+            ("massive", "splits"),
+            ("massive", "dividends"),
+        ],
         [DailyBar, CorporateAction],
     ),
     "economic": (

@@ -62,12 +62,14 @@ class Provider:
         if not url.startswith("http"):
             url = self.base_url + url
         public_params = params or {}
-        all_params = {**public_params, **self.auth_params()}
+        # Merge into any query already in the URL (pagination links carry a cursor):
+        # httpx's `params=` would replace it instead.
+        request_url = httpx.URL(url).copy_merge_params({**public_params, **self.auth_params()})
         headers = self.headers()
         for attempt in range(self.max_retries + 1):
             self.limiter.acquire()
             try:
-                resp = self.client.get(url, params=all_params, headers=headers)
+                resp = self.client.get(request_url, headers=headers)
             except httpx.TransportError as exc:
                 if attempt == self.max_retries:
                     raise ProviderError(f"{self.name}: {exc}") from exc

@@ -197,3 +197,14 @@ def test_raw_fetched_at_is_utc(raw_store):
     (record,) = raw_store.records()
     assert record.fetched_at.tzinfo is not None
     assert abs((datetime.now(UTC) - record.fetched_at).total_seconds()) < 60
+
+
+@respx.mock
+def test_pagination_links_keep_their_query_alongside_auth_params():
+    # FRED sends its key as a query parameter; a link with its own query must keep both.
+    route = respx.get("https://api.stlouisfed.org/fred/series/observations").respond(json={})
+    FredProvider().get(
+        "https://api.stlouisfed.org/fred/series/observations?offset=1000", dataset="x"
+    )
+    params = route.calls[0].request.url.params
+    assert (params["offset"], params["api_key"]) == ("1000", "fred-key")

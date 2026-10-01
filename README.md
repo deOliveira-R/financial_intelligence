@@ -25,6 +25,7 @@ bookkeeping  sync_runs (one per CLI command), sync_state (last outcome per item)
 - **Store first, serve from storage.** The HTTP API only reads the database and never calls providers.
 - **Reported vs derived.** Values from providers are never edited after load. Our inferences (fiscal calendars, each fact's `period_type`/`fiscal_year`/`fiscal_period`, each filing's `report_period_end`) are written by `derive.py`, which runs after each fundamentals load. `fin-intel derive` recomputes them for every issuer offline.
 - **Fundamentals are normalized.** One row per filing and per concept, with integer foreign keys from facts. This takes about a third of the space of the original flat table and gives the API filings lists and concept labels. Each filing's copy of a value is kept, so data is point-in-time.
+- **Two price sources.** Tiingo gives deep per-ticker history. Massive's grouped daily endpoint gives every US stock for one day in one call (free plan: 5 calls/minute, 2 years of history). Bars and corporate actions are stored per `source`; `/prices/{ticker}/daily?source=massive` adjusts Massive bars with Massive's own actions. Massive symbols are mapped to SEC-style tickers (BRK.B → BRK-B, JPMpC → JPM-PC), and symbols we don't know (warrants, units, OTC) are skipped, so run `sync-tickers` first.
 - **Prices are stored unadjusted**, with splits and dividends in `corporate_actions`. Adjusted OHLCV is computed on read (standard total-return method; within 0.1% of Tiingo's own series since 2010). A new split or dividend never rewrites history, so incremental syncs never need a full refetch.
 - **Fiscal periods come from each fact's own dates.** SEC's `fy`/`fp` describe the filing, not the value, and are sometimes mis-tagged. `periods.py` classifies each fact by duration (`annual`, `quarter`, `half`, `nine_months`, `instant`, `other`). It assigns fiscal year/period from the issuer's fiscal calendar, which is inferred from annual and transition (10-KT) filings. It handles 52/53-week years, fiscal years named after the prior calendar year, and fiscal year end changes (the stub period between regimes is `fiscal_period = "T"`).
 - **`/fundamentals` returns consistent series.** Share counts and per-share values filed before a split are restated using `corporate_actions` (needs `sync-prices` for that ticker). Missing Q4s are derived as FY − 9M for monetary flows (`derived: true`). All units are returned unless `unit` is given. `split_adjusted=false`, `fill_q4=false` and `as_reported=true` turn these off.
@@ -40,7 +41,7 @@ bookkeeping  sync_runs (one per CLI command), sync_state (last outcome per item)
 | 1 | SEC EDGAR | Fundamentals, ticker↔CIK, insiders (Form 4), 13F, filings | ✅ tickers + XBRL facts |
 | 2 | FRED / ALFRED | Macro, rates, yield curve, FX, commodities | ✅ series + observations |
 | 3 | Tiingo | Adjusted daily price history | ✅ daily bars |
-| 4 | Massive (Polygon) | Whole-market daily bars, splits/dividends, reference data | |
+| 4 | Massive (Polygon) | Whole-market daily bars, splits/dividends, reference data | ✅ grouped daily + splits + dividends |
 | 5 | Alpaca | Intraday bars, real-time IEX stream | |
 | 6 | Finnhub | Real-time quotes, earnings calendar, company news | |
 | 7 | yfinance | Fallback prices, options chains | |
@@ -69,6 +70,8 @@ uv run fin-intel sync-tickers                       # ~10k SEC tickers + CIKs
 uv run fin-intel sync-fundamentals AAPL MSFT        # SEC XBRL facts
 uv run fin-intel sync-prices AAPL MSFT              # Tiingo daily bars (incremental)
 uv run fin-intel sync-economic GDP CPIAUCSL DGS10   # FRED series
+uv run fin-intel sync-market-daily --since 2026-09-01   # Massive: every US stock, 1 call/day
+uv run fin-intel sync-actions --since 2024-10-01    # Massive: market-wide splits and dividends
 uv run fin-intel serve                              # http://127.0.0.1:8000/docs
 uv run fin-intel rebuild fundamentals               # re-load from raw/ after a parser change
 uv run fin-intel derive                             # recompute fiscal labels after a periods.py change

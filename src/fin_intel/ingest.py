@@ -35,10 +35,12 @@ from fin_intel.models import (
 )
 from fin_intel.providers import (
     FredProvider,
+    MassiveProvider,
     ProviderError,
     SecProvider,
     TiingoProvider,
     fred,
+    massive,
     sec,
     tiingo,
 )
@@ -157,6 +159,40 @@ def load_tiingo_daily(session: Session, ticker: str, payload: Any) -> int:
     return upsert(session, DailyBar, bars, key=["security_id", "date", "source"])
 
 
+def _by_symbol(session: Session, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attach security_id to market-wide rows by current ticker; drop unknown symbols.
+
+    Market-wide feeds list warrants, units and OTC names we don't track; run sync-tickers
+    first so every SEC-listed security is known.
+    """
+    ids = dict(
+        session.execute(
+            select(Security.ticker, Security.id).where(Security.ticker.is_not(None))
+        ).all()
+    )
+    out = []
+    for row in rows:
+        security_id = ids.get(row.pop("symbol"))
+        if security_id is not None:
+            out.append({**row, "security_id": security_id})
+    if skipped := len(rows) - len(out):
+        log.info("skipped %d of %d rows with unknown symbols", skipped, len(rows))
+    return out
+
+
+def load_massive_grouped_daily(session: Session, day: str, payload: Any) -> int:
+    rows = _by_symbol(session, massive.parse_grouped_daily(date.fromisoformat(day), payload))
+    return upsert(session, DailyBar, rows, key=["security_id", "date", "source"])
+
+
+def load_massive_actions(session: Session, dataset: str, payload: Any) -> int:
+    parse = massive.parse_splits if dataset == "splits" else massive.parse_dividends
+    rows = _by_symbol(session, parse(payload))
+    return upsert(
+        session, CorporateAction, rows, key=["security_id", "ex_date", "action", "source"]
+    )
+
+
 # --- fundamentals ----------------------------------------------------------------------
 
 
@@ -217,11 +253,19 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("sec", "companyfacts"): lambda s, k, p, t: load_company_facts(s, int(k), p),
     ("tiingo", "metadata"): lambda s, k, p, t: load_tiingo_metadata(s, k, p, t.date()),
     ("tiingo", "daily_prices"): lambda s, k, p, t: load_tiingo_daily(s, k, p),
+    ("massive", "grouped_daily"): lambda s, k, p, t: load_massive_grouped_daily(s, k, p),
+    ("massive", "splits"): lambda s, k, p, t: load_massive_actions(s, "splits", p),
+    ("massive", "dividends"): lambda s, k, p, t: load_massive_actions(s, "dividends", p),
     ("fred", "series"): lambda s, k, p, t: load_fred_series(s, p),
     ("fred", "observations"): lambda s, k, p, t: load_fred_observations(s, k, p),
 }
 # Datasets where each response is a full snapshot, so only the latest one matters.
-SNAPSHOT_DATASETS = {("sec", "companyfacts"), ("fred", "series"), ("fred", "observations")}
+SNAPSHOT_DATASETS = {
+    ("sec", "companyfacts"),
+    ("massive", "grouped_daily"),  # one complete response per trading day
+    ("fred", "series"),
+    ("fred", "observations"),
+}
 
 
 # --- live syncs ------------------------------------------------------------------------
@@ -301,6 +345,27 @@ def sync_prices(
         if metadata is not None:
             load_tiingo_metadata(session, symbol, metadata, date.today())
         result["rows"] = load_tiingo_daily(session, symbol, payload)
+    return result["rows"]
+
+
+def sync_market_daily(session: Session, massive_provider: MassiveProvider, day: date) -> int:
+    """Unadjusted bars for every known security on one trading day, in one call."""
+    with tracked(session, "massive", "grouped_daily", day.isoformat()) as result:
+        payload = massive_provider.fetch_grouped_daily(day)
+        result["rows"] = load_massive_grouped_daily(session, day.isoformat(), payload)
+    return result["rows"]
+
+
+def sync_market_actions(
+    session: Session, massive_provider: MassiveProvider, dataset: str, since: date
+) -> int:
+    """Market-wide splits or dividends with ex-dates on or after `since`."""
+    fetch = (
+        massive_provider.fetch_splits if dataset == "splits" else massive_provider.fetch_dividends
+    )
+    with tracked(session, "massive", dataset, "all") as result:
+        pages = fetch(since)
+        result["rows"] = sum(load_massive_actions(session, dataset, page) for page in pages)
     return result["rows"]
 
 

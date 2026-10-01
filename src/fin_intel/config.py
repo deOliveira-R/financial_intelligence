@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     sec_user_agent: str | None = None
     fred_api_key: str | None = None
     tiingo_api_key: str | None = None
+    massive_api_key: str | None = None
     http_timeout: float = 30.0
 
 

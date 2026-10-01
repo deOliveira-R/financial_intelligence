@@ -1,17 +1,19 @@
 import logging
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any
 
 import typer
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fin_intel import derive, ingest
 from fin_intel.db import init_db, session_factory
 from fin_intel.ingest import SNAPSHOT_DATASETS
-from fin_intel.models import SyncRun
+from fin_intel.models import DailyBar, SyncRun
 from fin_intel.providers import (
     FredProvider,
+    MassiveProvider,
     ProviderError,
     QuotaExceededError,
     SecProvider,
@@ -93,6 +95,60 @@ def sync_prices(
     tiingo = TiingoProvider(raw_store=default_store())
     start_date = date.fromisoformat(start) if start else None
     _run("sync-prices", tickers, lambda s, t: ingest.sync_prices(s, tiingo, t, start_date))
+
+
+def _weekdays(start: date, end: date) -> list[date]:
+    days = (start + timedelta(days=i) for i in range((end - start).days + 1))
+    return [d for d in days if d.weekday() < 5]
+
+
+@app.command()
+def sync_market_daily(
+    since: Annotated[
+        str | None, typer.Option(help="YYYY-MM-DD; default: day after the last stored day")
+    ] = None,
+    until: Annotated[str | None, typer.Option(help="YYYY-MM-DD; default: yesterday")] = None,
+) -> None:
+    """Load whole-market daily bars from Massive, one call per trading day.
+
+    The free plan allows 5 calls/minute and two years of history, so a full backfill
+    (about 500 trading days) takes roughly 100 minutes. Holidays return no rows.
+    """
+    massive = MassiveProvider(raw_store=default_store())
+    end = date.fromisoformat(until) if until else date.today() - timedelta(days=1)
+    if since:
+        start = date.fromisoformat(since)
+    else:
+        with session_factory()() as session:
+            last = session.scalar(
+                select(func.max(DailyBar.date)).where(DailyBar.source == massive.name)
+            )
+        start = last + timedelta(days=1) if last else end - timedelta(days=7)
+    days = _weekdays(start, end)
+    if not days:
+        typer.echo("up to date")
+        return
+    _run(
+        "sync-market-daily",
+        [d.isoformat() for d in days],
+        lambda s, d: ingest.sync_market_daily(s, massive, date.fromisoformat(d)),
+    )
+
+
+@app.command()
+def sync_actions(
+    since: Annotated[
+        str, typer.Option(help="YYYY-MM-DD; ex-dates on or after this (free plan: 2 years)")
+    ] = (date.today() - timedelta(days=60)).isoformat(),
+) -> None:
+    """Load market-wide splits and dividends from Massive."""
+    massive = MassiveProvider(raw_store=default_store())
+    start = date.fromisoformat(since)
+    _run(
+        "sync-actions",
+        ["splits", "dividends"],
+        lambda s, dataset: ingest.sync_market_actions(s, massive, dataset, start),
+    )
 
 
 @app.command()
