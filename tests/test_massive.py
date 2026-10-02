@@ -21,7 +21,17 @@ API = "https://api.massive.com"
 
 @pytest.mark.parametrize(
     ("massive", "ours"),
-    [("AAPL", "AAPL"), ("BRK.B", "BRK-B"), ("JPMpC", "JPM-PC"), ("BACpL", "BAC-PL")],
+    [
+        ("AAPL", "AAPL"),
+        ("BRK.B", "BRK-B"),
+        ("JPMpC", "JPM-PC"),
+        ("BACpL", "BAC-PL"),
+        ("AAC.U", "AAC-UN"),
+        ("BBAI.WS", "BBAI-WT"),
+        ("AIIAr", "AIIA-RI"),
+        ("BCATrw", "BCAT-RW"),
+        ("AACOW", "AACOW"),  # five-letter Nasdaq warrants are plain symbols on both sides
+    ],
 )
 def test_normalize_symbol(massive, ours):
     assert normalize_symbol(massive) == ours

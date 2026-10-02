@@ -80,3 +80,9 @@ def test_no_q4_for_per_share_or_existing_q4_or_transition():
     ]
     for facts in (eps, reported, mismatched_start):
         assert not any(f.derived for f in derive_q4(facts))
+
+
+def test_split_adjust_ignores_announced_future_splits():
+    eps = fact("2025-01-01", "2025-12-31", 4.0, unit="USD/shares", filed="2026-02-01")
+    (out,) = split_adjust([eps], [(D("2026-12-01"), 2.0)], as_of=D("2026-10-01"))
+    assert (out.value, out.split_adjustment) == (4.0, 1.0)

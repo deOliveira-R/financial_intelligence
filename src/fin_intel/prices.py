@@ -27,8 +27,14 @@ def adjustments(
     bars: Sequence[BarLike], actions: Sequence[tuple[date, str, float]]
 ) -> dict[date, Adjustment]:
     """Factor per bar date. `bars` must cover every ex-date's prior close for dividends to
-    be applied; `actions` are (ex_date, "split" | "dividend", value)."""
-    pending = sorted(actions, reverse=True)
+    be applied; `actions` are (ex_date, "split" | "dividend", value). Actions dated after
+    the latest bar (announced, not yet effective) are ignored."""
+    if not bars:
+        return {}
+    # Providers list announced actions ahead of time; one dated after the latest bar
+    # hasn't happened yet in our data and must not adjust anything.
+    latest = max(b.date for b in bars)
+    pending = sorted((a for a in actions if a[0] <= latest), reverse=True)
     price = volume = 1.0
     out: dict[date, Adjustment] = {}
     i = 0

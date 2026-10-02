@@ -53,13 +53,21 @@ class MassiveProvider(Provider):
         return pages
 
 
-_PREFERRED = re.compile(r"^([A-Z]+)p([A-Z]?)$")
+# Massive's symbol suffixes and SEC's equivalents (SEC_style = base + suffix).
+_SUFFIXES = [
+    (re.compile(r"^([A-Z]+)p([A-Z]?)$"), r"\1-P\2"),  # preferred: JPMpC -> JPM-PC
+    (re.compile(r"^([A-Z]+)\.U$"), r"\1-UN"),  # unit: AAC.U -> AAC-UN
+    (re.compile(r"^([A-Z]+)\.WS$"), r"\1-WT"),  # warrant: BBAI.WS -> BBAI-WT
+    (re.compile(r"^([A-Z]+)rw$"), r"\1-RW"),  # right, when issued: BCATrw -> BCAT-RW
+    (re.compile(r"^([A-Z]+)r$"), r"\1-RI"),  # right: AIIAr -> AIIA-RI
+]
 
 
 def normalize_symbol(symbol: str) -> str:
-    """Massive's symbols in SEC's style: BRK.B -> BRK-B, JPMpC (preferred C) -> JPM-PC."""
-    if m := _PREFERRED.match(symbol):
-        return f"{m[1]}-P{m[2]}"
+    """Massive's symbols in SEC's style; share classes use a dash (BRK.B -> BRK-B)."""
+    for pattern, replacement in _SUFFIXES:
+        if pattern.match(symbol):
+            return pattern.sub(replacement, symbol)
     return symbol.replace(".", "-")
 
 

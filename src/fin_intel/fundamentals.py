@@ -66,12 +66,17 @@ def is_per_share(unit: str) -> bool:
     return unit.endswith("/shares")
 
 
-def split_adjust(facts: Iterable[Fact], splits: list[tuple[date, float]]) -> list[Fact]:
+def split_adjust(
+    facts: Iterable[Fact], splits: list[tuple[date, float]], as_of: date | None = None
+) -> list[Fact]:
     """Restate share counts and per-share values filed before each split in post-split terms.
 
     `splits` holds (ex-date, factor), e.g. (2024-06-10, 10.0) for a 10-for-1 split. A filing
-    made on or after the ex-date is assumed to already reflect the split.
+    made on or after the ex-date is assumed to already reflect the split. Splits after
+    `as_of` (default: today) are announced but not yet effective, and are ignored.
     """
+    as_of = as_of or date.today()
+    splits = [(ex_date, ratio) for ex_date, ratio in splits if ex_date <= as_of]
     out = []
     for f in facts:
         if f.filed is None or not (is_share_count(f.unit) or is_per_share(f.unit)):

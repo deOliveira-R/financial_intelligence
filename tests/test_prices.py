@@ -32,3 +32,9 @@ def test_actions_compound():
     actions = [(date(2026, 1, 2), "split", 2.0), (date(2026, 1, 3), "dividend", 1.0)]
     f = adjustments(bars, actions)
     assert f[date(2026, 1, 1)].price == pytest.approx(0.5 * (1 - 1 / 100))
+
+
+def test_announced_actions_after_latest_bar_are_ignored():
+    bars = [Bar(date(2026, 10, 1), 10.0)]
+    actions = [(date(2026, 10, 2), "split", 0.0002), (date(2026, 10, 5), "dividend", 1.0)]
+    assert adjustments(bars, actions)[date(2026, 10, 1)].price == 1.0

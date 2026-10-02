@@ -271,6 +271,11 @@ SNAPSHOT_DATASETS = {
 # --- live syncs ------------------------------------------------------------------------
 
 
+def _today() -> date:
+    """UTC, like raw fetched_at: a rebuild must stamp the same dates a live sync did."""
+    return datetime.now(UTC).date()
+
+
 @contextmanager
 def tracked(session: Session, provider: str, dataset: str, key: str) -> Iterator[dict]:
     """Record the outcome of one sync item in sync_state, committing or rolling back."""
@@ -302,7 +307,7 @@ def tracked(session: Session, provider: str, dataset: str, key: str) -> Iterator
 def sync_tickers(session: Session, sec_provider: SecProvider) -> int:
     with tracked(session, "sec", "company_tickers", "all") as result:
         payload = sec_provider.fetch_company_tickers()
-        result["rows"] = load_company_tickers(session, payload, date.today())
+        result["rows"] = load_company_tickers(session, payload, _today())
     return result["rows"]
 
 
@@ -343,7 +348,7 @@ def sync_prices(
         payload = tiingo_provider.fetch_daily(symbol, start=start or last_stored)
 
         if metadata is not None:
-            load_tiingo_metadata(session, symbol, metadata, date.today())
+            load_tiingo_metadata(session, symbol, metadata, _today())
         result["rows"] = load_tiingo_daily(session, symbol, payload)
     return result["rows"]
 
