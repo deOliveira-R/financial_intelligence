@@ -83,6 +83,26 @@ def synced(session, raw_store):
             json=MASSIVE_SPLITS_PAGE2
         )
         respx.get(f"{massive_api}/stocks/v1/dividends").respond(json=MASSIVE_DIVIDENDS)
+        respx.get(f"{massive_api}/v3/reference/tickers").respond(
+            json={
+                "results": [
+                    {
+                        "ticker": "AAPL",
+                        "type": "CS",
+                        "cik": "0000320193",
+                        "composite_figi": "BBG000B9XRY4",
+                        "primary_exchange": "XNAS",
+                    },
+                    {
+                        "ticker": "XLV",
+                        "type": "ETF",
+                        "cik": "0001064641",
+                        "composite_figi": "BBG000BJ7007",
+                        "primary_exchange": "ARCX",
+                    },
+                ]
+            }
+        )
         respx.get("https://api.stlouisfed.org/fred/series").respond(json=FRED_SERIES)
         respx.get("https://api.stlouisfed.org/fred/series/observations").respond(json=FRED_OBS)
         sec = SecProvider(raw_store=raw_store)
@@ -93,6 +113,7 @@ def synced(session, raw_store):
         ingest.sync_prices(session, tiingo, "SPY")
         ingest.sync_economic(session, FredProvider(raw_store=raw_store), "UNRATE")
         massive = MassiveProvider(raw_store=raw_store)
+        ingest.sync_reference_tickers(session, massive)
         ingest.sync_market_daily(session, massive, date(2026, 9, 29))
         ingest.sync_market_actions(session, massive, "splits", date(2000, 1, 1))
         ingest.sync_market_actions(session, massive, "dividends", date(2000, 1, 1))

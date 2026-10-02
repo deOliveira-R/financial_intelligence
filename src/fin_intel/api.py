@@ -38,9 +38,14 @@ class SecurityOut(Orm):
     id: int
     ticker: str | None
     active: bool
+    origin: str
     name: str | None
+    security_type: str | None
     exchange: str | None
+    mic: str | None
     cik: int | None
+    figi: str | None
+    share_class_figi: str | None
 
 
 class TickerHistoryOut(Orm):
@@ -188,9 +193,17 @@ def status(session: SessionDep) -> StatusOut:
 
 @app.get("/securities", response_model=list[SecurityOut])
 def list_securities(
-    session: SessionDep, q: str | None = None, limit: int = Query(50, le=500)
+    session: SessionDep,
+    q: str | None = None,
+    type: str | None = Query(None, description="e.g. CS, ETF, PFD, WARRANT, ADRC, FUND"),
+    active: bool | None = None,
+    limit: int = Query(50, le=500),
 ) -> list[Security]:
     stmt = select(Security).order_by(Security.ticker).limit(limit)
+    if type:
+        stmt = stmt.where(Security.security_type == type.upper())
+    if active is not None:
+        stmt = stmt.where(Security.active == active)
     if q:
         like = f"%{q}%"
         stmt = stmt.where(Security.ticker.ilike(like) | Security.name.ilike(like))

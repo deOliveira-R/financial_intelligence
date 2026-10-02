@@ -10,7 +10,7 @@ responses through the same loaders. The API only ever reads what these have stor
 
 import logging
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from typing import Any
@@ -44,6 +44,7 @@ from fin_intel.providers import (
     sec,
     tiingo,
 )
+from fin_intel.raw import RawStore
 
 log = logging.getLogger(__name__)
 
@@ -81,8 +82,10 @@ def load_company_tickers(session: Session, payload: Any, today: date) -> int:
       (FB -> META); the existing security takes the new ticker and keeps its history.
     - Reuse: a ticker now belongs to a different CIK; the old holder gives it up and a new
       security is created, so the two companies' price histories never merge.
-    - Delisting: a security with a CIK missing from the list is marked inactive but keeps
+    - Delisting: an SEC-origin security missing from the list is marked inactive but keeps
       its ticker until someone else takes it.
+    Securities other sources created are left alone unless SEC lists their ticker, in which
+    case SEC claims them.
     """
     incoming: dict[str, dict] = {}
     for row in sec.parse_company_tickers(payload):
@@ -105,7 +108,7 @@ def load_company_tickers(session: Session, payload: Any, today: date) -> int:
             unlisted[holder.cik].append(holder)
     session.flush()  # release reused tickers before anyone takes them
     for s in by_ticker.values():
-        if s.cik is not None and s.ticker not in incoming:
+        if s.origin == "sec" and s.cik is not None and s.ticker not in incoming:
             unlisted[s.cik].append(s)
 
     new_tickers_per_cik = Counter(r["cik"] for t, r in incoming.items() if t not in by_ticker)
@@ -124,9 +127,11 @@ def load_company_tickers(session: Session, payload: Any, today: date) -> int:
             by_ticker[ticker] = security
         security.name, security.exchange, security.cik = row["name"], row["exchange"], row["cik"]
         security.active = True
+        security.origin = "sec"  # SEC's list is the authority for what it lists
 
+    # Securities other sources created (ETFs from Massive, ...) are theirs to deactivate.
     for s in securities:
-        if s.cik is not None and s.ticker not in incoming:
+        if s.origin == "sec" and s.cik is not None and s.ticker not in incoming:
             s.active = False
     session.flush()
     record_tickers(session, [by_ticker[t] for t in incoming], today)
@@ -134,15 +139,101 @@ def load_company_tickers(session: Session, payload: Any, today: date) -> int:
 
 
 def load_tiingo_metadata(session: Session, ticker: str, payload: Any, today: date) -> int:
-    """Create a security for a symbol SEC doesn't list (e.g. some ETFs)."""
+    """Create a security for a symbol no reference list has given us yet."""
     if get_security(session, ticker) is not None:
         return 0
     meta = tiingo.parse_metadata(payload)
-    security = Security(ticker=meta["ticker"], name=meta["name"], exchange=meta["exchange"])
+    security = Security(
+        ticker=meta["ticker"], name=meta["name"], exchange=meta["exchange"], origin="tiingo"
+    )
     session.add(security)
     session.flush()
     record_tickers(session, [security], today)
     return 1
+
+
+MASSIVE_ORIGINS = {"stocks": "massive", "otc": "massive-otc"}
+
+
+def load_massive_tickers(session: Session, market: str, payload: Any, today: date) -> int:
+    """Add and enrich securities from one page of Massive's reference tickers.
+
+    - Every listed security gets Massive's type, FIGIs and primary exchange.
+    - Unknown symbols (ETFs, funds, notes SEC doesn't list) become securities with
+      origin "massive"; known ones keep their SEC name and CIK.
+    - Identity is the composite FIGI, which survives ticker changes: a known FIGI under a
+      new symbol is a rename; a held symbol arriving with a different FIGI is a reuse, so
+      the old holder gives the symbol up.
+    Deactivation needs the whole list, so it is a separate step (deactivate_unseen_massive).
+    Securities created from the OTC list have origin "massive-otc"; the main list promotes
+    them to "massive" if they uplist.
+    """
+    origin = MASSIVE_ORIGINS[market]
+    rows = massive.parse_tickers(payload)
+    securities = list(session.scalars(select(Security)))
+    by_ticker = {s.ticker: s for s in securities if s.ticker}
+    by_figi = {s.figi: s for s in securities if s.figi}
+    seen = []
+    for row in rows:
+        symbol, figi = row["symbol"], row["figi"]
+        security = by_ticker.get(symbol)
+        if security is not None and figi and security.figi and security.figi != figi:
+            log.warning("%s moved from FIGI %s to %s", symbol, security.figi, figi)
+            security.ticker, security.active = None, False
+            del by_ticker[symbol]
+            session.flush()  # release the symbol before anyone takes it
+            security = None
+        if security is not None and row["cik"] and security.cik and security.cik != row["cik"]:
+            # Same symbol, issuer attributed differently (e.g. a preferred issued by a
+            # subsidiary). SEC is the authority on CIKs; the type and FIGIs still apply.
+            log.info("%s: Massive CIK %s, SEC CIK %s; kept SEC's", symbol, row["cik"], security.cik)
+        if security is None and figi and (moved := by_figi.get(figi)) is not None:
+            log.info("%s renamed to %s (FIGI %s)", moved.ticker, symbol, figi)
+            by_ticker.pop(moved.ticker, None)
+            moved.ticker = symbol
+            security = moved
+        if security is None:
+            security = Security(ticker=symbol, name=row["name"], origin=origin)
+            session.add(security)
+        by_ticker[symbol] = security
+        if figi:
+            by_figi[figi] = security
+
+        if row["cik"] and security.cik is None:
+            upsert(session, Issuer, [{"cik": row["cik"], "name": None}], key=["cik"], update=[])
+            security.cik = row["cik"]
+        security.name = security.name or row["name"]
+        security.security_type = row["security_type"]
+        security.figi = figi or security.figi
+        security.share_class_figi = row["share_class_figi"] or security.share_class_figi
+        security.mic = row["mic"]
+        if security.origin in MASSIVE_ORIGINS.values():
+            if origin == "massive":
+                security.origin = origin
+            security.active = True
+        seen.append(security)
+    session.flush()
+    record_tickers(session, seen, today)
+    return len(seen)
+
+
+def deactivate_unseen_massive(session: Session, market: str, as_of: date) -> int:
+    """Deactivate securities a Massive list created but hasn't listed since `as_of`."""
+    last_seen = (
+        select(func.max(TickerHistory.last_seen))
+        .where(TickerHistory.security_id == Security.id)
+        .scalar_subquery()
+    )
+    stale = session.scalars(
+        select(Security).where(
+            Security.origin == MASSIVE_ORIGINS[market],
+            Security.active,
+            func.coalesce(last_seen, date.min) < as_of,
+        )
+    ).all()
+    for security in stale:
+        security.active = False
+    return len(stale)
 
 
 # --- prices ----------------------------------------------------------------------------
@@ -253,12 +344,23 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("sec", "companyfacts"): lambda s, k, p, t: load_company_facts(s, int(k), p),
     ("tiingo", "metadata"): lambda s, k, p, t: load_tiingo_metadata(s, k, p, t.date()),
     ("tiingo", "daily_prices"): lambda s, k, p, t: load_tiingo_daily(s, k, p),
+    ("massive", "tickers"): lambda s, k, p, t: load_massive_tickers(s, k, p, t.date()),
     ("massive", "grouped_daily"): lambda s, k, p, t: load_massive_grouped_daily(s, k, p),
     ("massive", "splits"): lambda s, k, p, t: load_massive_actions(s, "splits", p),
     ("massive", "dividends"): lambda s, k, p, t: load_massive_actions(s, "dividends", p),
     ("fred", "series"): lambda s, k, p, t: load_fred_series(s, p),
     ("fred", "observations"): lambda s, k, p, t: load_fred_observations(s, k, p),
 }
+# Datasets that create or rename securities. Rebuilds replay them before everything else,
+# so symbol-keyed market data always resolves against the full security list.
+REFERENCE_DATASETS = [("sec", "company_tickers"), ("massive", "tickers"), ("tiingo", "metadata")]
+# Market-wide datasets keyed by symbol: rows for unknown symbols are skipped at load time,
+# so they are replayed for securities discovered later (backfill_from_raw).
+SYMBOL_KEYED_DATASETS = [
+    ("massive", "grouped_daily"),
+    ("massive", "splits"),
+    ("massive", "dividends"),
+]
 # Datasets where each response is a full snapshot, so only the latest one matters.
 SNAPSHOT_DATASETS = {
     ("sec", "companyfacts"),
@@ -277,7 +379,7 @@ def _today() -> date:
 
 
 @contextmanager
-def tracked(session: Session, provider: str, dataset: str, key: str) -> Iterator[dict]:
+def tracked(session: Session, provider: str, dataset: str, key: str) -> Generator[dict[str, Any]]:
     """Record the outcome of one sync item in sync_state, committing or rolling back."""
     now = datetime.now(UTC)
     result: dict[str, Any] = {"rows": None}
@@ -304,10 +406,58 @@ def tracked(session: Session, provider: str, dataset: str, key: str) -> Iterator
     session.commit()
 
 
+def backfill_from_raw(session: Session, store: RawStore | None, security_ids: set[int]) -> int:
+    """Load stored market-wide rows for newly discovered securities, without the network.
+
+    Grouped daily bars, splits and dividends were filtered to known symbols when first
+    loaded; a security discovered later gets its rows from those same raw responses, so
+    the live database matches what a rebuild would produce.
+    """
+    if store is None or not security_ids:
+        return 0
+    symbols = set(
+        session.scalars(select(Security.ticker).where(Security.id.in_(security_ids))).all()
+    ) - {None}
+    records = list(
+        store.records(
+            provider="massive",
+            datasets=[d for _, d in SYMBOL_KEYED_DATASETS],
+            connection=session.connection(),
+        )
+    )
+    latest = {(r.dataset, r.key): r.id for r in records}
+    loaded = 0
+    for r in records:
+        if (r.provider, r.dataset) in SNAPSHOT_DATASETS and latest[(r.dataset, r.key)] != r.id:
+            continue
+        payload = r.json()
+        rows = [
+            row
+            for row in payload.get("results") or []
+            if massive.normalize_symbol(row.get("T") or row.get("ticker") or "") in symbols
+        ]
+        if rows:
+            loaded += LOADERS[(r.provider, r.dataset)](
+                session, r.key, {**payload, "results": rows}, r.fetched_at
+            )
+    log.info("backfilled %d rows for %d new securities", loaded, len(symbols))
+    return loaded
+
+
+@contextmanager
+def discovering(session: Session, store: RawStore | None) -> Generator[None]:
+    """Backfill stored market data for any security created inside the block."""
+    before = set(session.scalars(select(Security.id)))
+    yield
+    session.flush()
+    backfill_from_raw(session, store, set(session.scalars(select(Security.id))) - before)
+
+
 def sync_tickers(session: Session, sec_provider: SecProvider) -> int:
     with tracked(session, "sec", "company_tickers", "all") as result:
         payload = sec_provider.fetch_company_tickers()
-        result["rows"] = load_company_tickers(session, payload, _today())
+        with discovering(session, sec_provider.raw_store):
+            result["rows"] = load_company_tickers(session, payload, _today())
     return result["rows"]
 
 
@@ -353,10 +503,26 @@ def sync_prices(
     return result["rows"]
 
 
-def sync_market_daily(session: Session, massive_provider: MassiveProvider, day: date) -> int:
+def sync_reference_tickers(
+    session: Session, massive_provider: MassiveProvider, market: str = "stocks"
+) -> int:
+    """Massive's full active ticker list for a market: add, enrich, then deactivate the
+    Massive-origin securities it no longer lists."""
+    with tracked(session, "massive", "tickers", market) as result:
+        pages = massive_provider.fetch_tickers(market)
+        today = _today()
+        with discovering(session, massive_provider.raw_store):
+            result["rows"] = sum(load_massive_tickers(session, market, p, today) for p in pages)
+        deactivate_unseen_massive(session, market, today)
+    return result["rows"]
+
+
+def sync_market_daily(
+    session: Session, massive_provider: MassiveProvider, day: date, include_otc: bool = False
+) -> int:
     """Unadjusted bars for every known security on one trading day, in one call."""
     with tracked(session, "massive", "grouped_daily", day.isoformat()) as result:
-        payload = massive_provider.fetch_grouped_daily(day)
+        payload = massive_provider.fetch_grouped_daily(day, include_otc=include_otc)
         result["rows"] = load_massive_grouped_daily(session, day.isoformat(), payload)
     return result["rows"]
 

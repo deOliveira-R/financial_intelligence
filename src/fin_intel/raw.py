@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, func, insert, select
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from fin_intel.models import RawResponse
 
@@ -81,8 +81,13 @@ class RawStore:
         provider: str | None = None,
         datasets: list[str] | None = None,
         latest_per_key: bool = False,
+        connection: Connection | None = None,
     ) -> Iterator[RawRecord]:
-        """Successful responses in fetch order, optionally only the latest per (dataset, key)."""
+        """Successful responses in fetch order, optionally only the latest per (dataset, key).
+
+        Pass `connection` to read inside a caller's open transaction (e.g. a session's);
+        a separate connection could block on, or in tests reset, the caller's writes.
+        """
         stmt = select(RawResponse).where(RawResponse.status == 200)
         if provider:
             stmt = stmt.where(RawResponse.provider == provider)
@@ -95,8 +100,12 @@ class RawStore:
                 .group_by(RawResponse.provider, RawResponse.dataset, RawResponse.key)
             )
             stmt = stmt.where(RawResponse.id.in_(latest))
-        with self.engine.connect() as conn:
-            rows = conn.execute(stmt.order_by(RawResponse.fetched_at, RawResponse.id)).all()
+        stmt = stmt.order_by(RawResponse.fetched_at, RawResponse.id)
+        if connection is not None:
+            rows = connection.execute(stmt).all()
+        else:
+            with self.engine.connect() as conn:
+                rows = conn.execute(stmt).all()
         for r in rows:
             yield RawRecord(
                 id=r.id,

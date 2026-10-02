@@ -93,7 +93,8 @@ class Security(Base):
 
     `ticker` is the symbol it currently trades under. It is kept after delisting (so history
     stays reachable) and set to NULL only when another security takes the symbol over.
-    `active` is False once the security drops out of SEC's current ticker list.
+    `origin` is the source whose list created it (sec, massive, tiingo); `active` is False once
+    it drops out of that source's current list. Each source only deactivates its own.
     """
 
     __tablename__ = "securities"
@@ -101,10 +102,15 @@ class Security(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     ticker: Mapped[str | None] = mapped_column(String(32), unique=True)
     active: Mapped[bool] = mapped_column(default=True, server_default=true())
+    origin: Mapped[str] = mapped_column(String(16), server_default="sec")
     name: Mapped[str | None] = mapped_column(String(256))
-    exchange: Mapped[str | None] = mapped_column(String(32))
+    exchange: Mapped[str | None] = mapped_column(String(32))  # as named by SEC, e.g. Nasdaq
+    mic: Mapped[str | None] = mapped_column(String(8))  # ISO 10383 primary exchange
+    # Massive's type code: CS, ETF, PFD, WARRANT, UNIT, RIGHT, ADRC, ETN, FUND, ...
+    security_type: Mapped[str | None] = mapped_column(String(16), index=True)
     cik: Mapped[int | None] = mapped_column(ForeignKey("issuers.cik"), index=True)
-    figi: Mapped[str | None] = mapped_column(String(12))
+    figi: Mapped[str | None] = mapped_column(String(12), index=True)  # composite FIGI
+    share_class_figi: Mapped[str | None] = mapped_column(String(12))
 
 
 class TickerHistory(Base):

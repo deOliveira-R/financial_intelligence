@@ -108,6 +108,7 @@ def sync_market_daily(
         str | None, typer.Option(help="YYYY-MM-DD; default: day after the last stored day")
     ] = None,
     until: Annotated[str | None, typer.Option(help="YYYY-MM-DD; default: yesterday")] = None,
+    otc: Annotated[bool, typer.Option("--otc", help="Include OTC securities")] = False,
 ) -> None:
     """Load whole-market daily bars from Massive, one call per trading day.
 
@@ -131,8 +132,21 @@ def sync_market_daily(
     _run(
         "sync-market-daily",
         [d.isoformat() for d in days],
-        lambda s, d: ingest.sync_market_daily(s, massive, date.fromisoformat(d)),
+        lambda s, d: ingest.sync_market_daily(s, massive, date.fromisoformat(d), otc),
     )
+
+
+@app.command()
+def sync_reference(
+    otc: Annotated[
+        bool, typer.Option("--otc", help="Also load OTC tickers (~20 more calls)")
+    ] = False,
+) -> None:
+    """Load Massive's reference tickers: types and FIGIs for all, plus ETFs and funds SEC
+    doesn't list. Run after sync-tickers; weekly is plenty."""
+    massive = MassiveProvider(raw_store=default_store())
+    markets = ["stocks", "otc"] if otc else ["stocks"]
+    _run("sync-reference", markets, lambda s, m: ingest.sync_reference_tickers(s, massive, m))
 
 
 @app.command()

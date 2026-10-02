@@ -102,7 +102,8 @@ def upsert(
     columns = rows[0].keys()
     for i in range(0, len(rows), chunk_size):
         stmt = insert(model).values(rows[i : i + chunk_size])
-        updates = {c: stmt.excluded[c] for c in (update or columns) if c not in key}
+        targets = columns if update is None else update  # [] means insert-only
+        updates = {c: stmt.excluded[c] for c in targets if c not in key}
         if updates:
             stmt = stmt.on_conflict_do_update(index_elements=list(key), set_=updates)
         else:
