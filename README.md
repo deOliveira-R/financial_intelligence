@@ -76,6 +76,8 @@ uv run fin-intel sync-economic GDP CPIAUCSL DGS10   # FRED series
 uv run fin-intel sync-reference                     # Massive: ETFs, types, FIGIs (weekly; --otc for OTC)
 uv run fin-intel sync-market-daily --since 2026-09-01   # Massive: every US stock, 1 call/day
 uv run fin-intel sync-actions --since 2024-10-01    # Massive: market-wide splits and dividends
+uv run fin-intel sync-daily                         # scheduled bundle: market bars, actions, FRED, watchlist
+uv run fin-intel sync-weekly                        # scheduled bundle: security lists, fundamentals, retention
 uv run fin-intel serve                              # http://127.0.0.1:8000/docs
 uv run fin-intel rebuild fundamentals               # re-load from raw/ after a parser change
 uv run fin-intel derive                             # recompute fiscal labels after a periods.py change
@@ -95,6 +97,10 @@ API endpoints:
 - `GET /fundamentals/{ticker}?concept=Revenues&period_type=annual&form=10-K&as_reported=false`
 - `GET /economic/{series_id}`
 - `GET /economic/{series_id}/observations?start=&end=`
+
+## Deployment
+
+See [deploy/README.md](deploy/README.md): one Oracle Cloud Always Free Arm VM runs the API as a systemd service, scheduled syncs as timers, and nightly backups to object storage. Set `FI_API_KEY` so every endpoint except `/health` requires an `X-API-Key` header.
 
 ## Development
 

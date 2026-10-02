@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the daily sync after the US market close
+
+[Timer]
+# 23:30 UTC = 19:30 New York in summer, 18:30 in winter: end-of-day data is published.
+OnCalendar=Mon..Fri 23:30 UTC
+RandomizedDelaySec=10min
+# Run a missed sync at the next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

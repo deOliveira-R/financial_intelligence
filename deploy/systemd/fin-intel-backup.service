@@ -1,0 +1,14 @@
+[Unit]
+Description=Financial Intelligence backup (database snapshot and raw responses)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=finintel
+WorkingDirectory=/home/finintel/financial_intelligence
+# Provides FI_BACKUP_REMOTE (an rclone remote and path).
+EnvironmentFile=/home/finintel/financial_intelligence/.env
+ExecStart=/home/finintel/financial_intelligence/deploy/backup.sh
+TimeoutStartSec=2h
+Nice=15

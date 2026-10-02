@@ -1,12 +1,14 @@
+import secrets
 from datetime import date, datetime
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fin_intel import ingest
+from fin_intel.config import get_settings
 from fin_intel.db import get_session
 from fin_intel.fundamentals import Fact, derive_q4, latest_per_period, split_adjust
 from fin_intel.models import (
@@ -25,7 +27,16 @@ from fin_intel.models import (
 from fin_intel.models import Fact as FactRow
 from fin_intel.prices import adjustments
 
+
+def require_api_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
+    """With FI_API_KEY set, every endpoint but /health needs the header X-API-Key."""
+    expected = get_settings().api_key
+    if expected and not (x_api_key and secrets.compare_digest(x_api_key, expected)):
+        raise HTTPException(401, "missing or invalid X-API-Key", {"WWW-Authenticate": "ApiKey"})
+
+
 app = FastAPI(title="Financial Intelligence API", version="0.2.0")
+api = APIRouter(dependencies=[Depends(require_api_key)])
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
@@ -173,12 +184,12 @@ def _issuer_cik(session: Session, ticker: str) -> int:
     return security.cik
 
 
-@app.get("/health")
+@app.get("/health")  # unauthenticated: for uptime checks
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/status", response_model=StatusOut)
+@api.get("/status", response_model=StatusOut)
 def status(session: SessionDep) -> StatusOut:
     """Recent sync runs and every item whose last sync failed."""
     runs = session.scalars(select(SyncRun).order_by(SyncRun.id.desc()).limit(20))
@@ -191,7 +202,7 @@ def status(session: SessionDep) -> StatusOut:
     )
 
 
-@app.get("/securities", response_model=list[SecurityOut])
+@api.get("/securities", response_model=list[SecurityOut])
 def list_securities(
     session: SessionDep,
     q: str | None = None,
@@ -210,7 +221,7 @@ def list_securities(
     return list(session.scalars(stmt))
 
 
-@app.get("/securities/{ticker}", response_model=SecurityDetailOut)
+@api.get("/securities/{ticker}", response_model=SecurityDetailOut)
 def get_security(session: SessionDep, ticker: str) -> SecurityDetailOut:
     security = _security(session, ticker)
     history = session.scalars(
@@ -224,7 +235,7 @@ def get_security(session: SessionDep, ticker: str) -> SecurityDetailOut:
     )
 
 
-@app.get("/prices/{ticker}/daily", response_model=list[BarOut])
+@api.get("/prices/{ticker}/daily", response_model=list[BarOut])
 def daily_prices(
     session: SessionDep,
     ticker: str,
@@ -273,7 +284,7 @@ def daily_prices(
     return out
 
 
-@app.get("/prices/{ticker}/actions", response_model=list[ActionOut])
+@api.get("/prices/{ticker}/actions", response_model=list[ActionOut])
 def corporate_actions(session: SessionDep, ticker: str) -> list[CorporateAction]:
     security = _security(session, ticker)
     return list(
@@ -285,7 +296,7 @@ def corporate_actions(session: SessionDep, ticker: str) -> list[CorporateAction]
     )
 
 
-@app.get("/fundamentals/{ticker}/concepts", response_model=list[ConceptOut])
+@api.get("/fundamentals/{ticker}/concepts", response_model=list[ConceptOut])
 def fundamental_concepts(session: SessionDep, ticker: str) -> list[ConceptOut]:
     cik = _issuer_cik(session, ticker)
     stmt = (
@@ -301,7 +312,7 @@ def fundamental_concepts(session: SessionDep, ticker: str) -> list[ConceptOut]:
     ]
 
 
-@app.get("/fundamentals/{ticker}/filings", response_model=list[FilingOut])
+@api.get("/fundamentals/{ticker}/filings", response_model=list[FilingOut])
 def filings(session: SessionDep, ticker: str, form: str | None = None) -> list[Filing]:
     cik = _issuer_cik(session, ticker)
     stmt = select(Filing).where(Filing.cik == cik).order_by(Filing.filed.desc())
@@ -310,7 +321,7 @@ def filings(session: SessionDep, ticker: str, form: str | None = None) -> list[F
     return list(session.scalars(stmt))
 
 
-@app.get("/fundamentals/{ticker}/calendar", response_model=list[CalendarOut])
+@api.get("/fundamentals/{ticker}/calendar", response_model=list[CalendarOut])
 def fiscal_calendar(session: SessionDep, ticker: str) -> list[FiscalCalendar]:
     """The inferred fiscal year end(s); more than one row means the company changed it."""
     cik = _issuer_cik(session, ticker)
@@ -321,7 +332,7 @@ def fiscal_calendar(session: SessionDep, ticker: str) -> list[FiscalCalendar]:
     )
 
 
-@app.get("/fundamentals/{ticker}", response_model=list[FactOut])
+@api.get("/fundamentals/{ticker}", response_model=list[FactOut])
 def fundamentals(
     session: SessionDep,
     ticker: str,
@@ -386,7 +397,7 @@ def fundamentals(
     return facts
 
 
-@app.get("/economic/{series_id}", response_model=SeriesOut)
+@api.get("/economic/{series_id}", response_model=SeriesOut)
 def economic_series(session: SessionDep, series_id: str) -> EconomicSeries:
     series = session.get(EconomicSeries, series_id.upper())
     if series is None:
@@ -394,7 +405,7 @@ def economic_series(session: SessionDep, series_id: str) -> EconomicSeries:
     return series
 
 
-@app.get("/economic/{series_id}/observations", response_model=list[ObservationOut])
+@api.get("/economic/{series_id}/observations", response_model=list[ObservationOut])
 def economic_observations(
     session: SessionDep, series_id: str, start: date | None = None, end: date | None = None
 ) -> list[EconomicObservation]:
@@ -408,3 +419,6 @@ def economic_observations(
     if end:
         stmt = stmt.where(EconomicObservation.date <= end)
     return list(session.scalars(stmt))
+
+
+app.include_router(api)

@@ -104,3 +104,15 @@ def test_status(client):
     status = client.get("/status").json()
     assert status["recent_runs"][0]["job"] == "sync-prices"
     assert status["failing"] == []
+
+
+def test_api_key_required_when_configured(client, monkeypatch):
+    from fin_intel.config import get_settings
+
+    assert client.get("/securities/AAPL").status_code == 200  # no key configured: open
+    monkeypatch.setenv("FI_API_KEY", "s3cret")
+    get_settings.cache_clear()
+    assert client.get("/securities/AAPL").status_code == 401
+    assert client.get("/securities/AAPL", headers={"X-API-Key": "wrong"}).status_code == 401
+    assert client.get("/securities/AAPL", headers={"X-API-Key": "s3cret"}).status_code == 200
+    assert client.get("/health").status_code == 200  # uptime checks stay open

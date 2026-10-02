@@ -13,6 +13,24 @@ class Settings(BaseSettings):
     tiingo_api_key: str | None = None
     massive_api_key: str | None = None
     http_timeout: float = 30.0
+    # When set, every API endpoint except /health requires the header `X-API-Key: <value>`.
+    api_key: str | None = None
+    # Scheduled syncs (sync-daily / sync-weekly). Comma-separated lists.
+    watchlist: str = ""  # tickers for Tiingo history and SEC fundamentals
+    fred_series: str = "GDP,CPIAUCSL,DGS10,FEDFUNDS,UNRATE"
+    market_otc: bool = True  # include OTC securities in Massive's daily bars
+
+    @property
+    def watchlist_tickers(self) -> list[str]:
+        return _split(self.watchlist)
+
+    @property
+    def fred_series_ids(self) -> list[str]:
+        return _split(self.fred_series)
+
+
+def _split(value: str) -> list[str]:
+    return [item.strip().upper() for item in value.split(",") if item.strip()]
 
 
 @lru_cache

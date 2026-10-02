@@ -1,0 +1,12 @@
+[Unit]
+Description=Financial Intelligence weekly sync (security lists, fundamentals, retention)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=finintel
+WorkingDirectory=/home/finintel/financial_intelligence
+ExecStart=/home/finintel/financial_intelligence/.venv/bin/fin-intel sync-weekly
+TimeoutStartSec=4h
+Nice=10

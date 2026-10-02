@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fin_intel import derive, ingest
+from fin_intel.config import get_settings
 from fin_intel.db import init_db, session_factory
 from fin_intel.ingest import SNAPSHOT_DATASETS
 from fin_intel.models import DailyBar, SyncRun
@@ -174,6 +175,54 @@ def sync_economic(series: list[str]) -> None:
     )
 
 
+def _steps(job: str, steps: list[tuple[str, Callable[[], None]]]) -> None:
+    """Run each step even if an earlier one failed; fail at the end if any did."""
+    failed = []
+    for name, step in steps:
+        typer.secho(f"== {name}", bold=True)
+        try:
+            step()
+        except typer.Exit as exc:
+            if exc.exit_code:
+                failed.append(name)
+    if failed:
+        typer.secho(f"{job}: failed steps: {', '.join(failed)}", fg="red", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def sync_daily() -> None:
+    """Scheduled daily sync: market bars, recent actions, watchlist prices, FRED series.
+
+    Run after the US close (data is end-of-day). Lists come from FI_WATCHLIST and
+    FI_FRED_SERIES; OTC bars follow FI_MARKET_OTC.
+    """
+    settings = get_settings()
+    recent = (date.today() - timedelta(days=30)).isoformat()  # catches late corrections
+    steps = [
+        ("market bars", lambda: sync_market_daily(otc=settings.market_otc)),
+        ("splits and dividends", lambda: sync_actions(since=recent)),
+        ("economic series", lambda: sync_economic(settings.fred_series_ids)),
+    ]
+    if settings.watchlist_tickers:
+        steps.append(("watchlist prices", lambda: sync_prices(settings.watchlist_tickers)))
+    _steps("sync-daily", steps)
+
+
+@app.command()
+def sync_weekly() -> None:
+    """Scheduled weekly sync: security lists, watchlist fundamentals, raw retention."""
+    settings = get_settings()
+    steps = [
+        ("SEC tickers", sync_tickers),
+        ("Massive reference", lambda: sync_reference(otc=settings.market_otc)),
+    ]
+    if settings.watchlist_tickers:
+        steps.append(("fundamentals", lambda: sync_fundamentals(settings.watchlist_tickers)))
+    steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
+    _steps("sync-weekly", steps)
+
+
 @app.command("rebuild")
 def rebuild_cmd(
     target: Annotated[str, typer.Argument(help=f"One of: {', '.join(TARGETS)}")],
@@ -214,6 +263,13 @@ def prune_raw(
         f"{verb} {result.responses} responses, {result.files} files "
         f"({result.bytes / 1_048_576:.1f} MB)"
     )
+
+
+@app.command()
+def migrate() -> None:
+    """Apply pending database migrations (every command does this first; deploys call it
+    explicitly before restarting the API)."""
+    typer.echo("database schema is up to date")
 
 
 @app.command()

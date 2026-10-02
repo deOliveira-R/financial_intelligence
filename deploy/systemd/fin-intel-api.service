@@ -1,0 +1,15 @@
+[Unit]
+Description=Financial Intelligence API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=finintel
+WorkingDirectory=/home/finintel/financial_intelligence
+# Listens on localhost only; reach it through Tailscale or a Cloudflare Tunnel (see README).
+ExecStart=/home/finintel/financial_intelligence/.venv/bin/fin-intel serve --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

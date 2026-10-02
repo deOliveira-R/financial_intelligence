@@ -1,0 +1,13 @@
+[Unit]
+Description=Financial Intelligence daily sync (market bars, actions, watchlist, FRED)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=finintel
+WorkingDirectory=/home/finintel/financial_intelligence
+ExecStart=/home/finintel/financial_intelligence/.venv/bin/fin-intel sync-daily
+# Catch-up runs after downtime can take a while at the providers' rate limits.
+TimeoutStartSec=4h
+Nice=10

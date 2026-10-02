@@ -71,3 +71,30 @@ def test_failed_item_marks_run_partial(db_file):
         run = conn.execute(select(SyncRun).where(SyncRun.job == "sync-fundamentals")).one()
         assert (run.status, run.items_ok, run.items_failed) == ("partial", 1, 1)
         assert run.message == "failed: MSFT"
+
+
+def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch):
+    import typer
+
+    from fin_intel import cli
+
+    calls = []
+
+    def ok(name):
+        return lambda *a, **k: calls.append(name)
+
+    def failing(*a, **k):
+        calls.append("market")
+        raise typer.Exit(1)
+
+    monkeypatch.setenv("FI_WATCHLIST", "aapl, msft")
+    monkeypatch.setenv("FI_FRED_SERIES", "GDP")
+    monkeypatch.setattr(cli, "sync_market_daily", failing)
+    monkeypatch.setattr(cli, "sync_actions", ok("actions"))
+    monkeypatch.setattr(cli, "sync_economic", lambda series: calls.append(("fred", series)))
+    monkeypatch.setattr(cli, "sync_prices", lambda tickers: calls.append(("prices", tickers)))
+
+    result = CliRunner().invoke(app, ["sync-daily"])
+    # A failed step doesn't stop the others, but the command still fails.
+    assert result.exit_code == 1 and "failed steps: market bars" in result.output
+    assert calls == ["market", "actions", ("fred", ["GDP"]), ("prices", ["AAPL", "MSFT"])]
