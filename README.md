@@ -57,13 +57,14 @@ bookkeeping  sync_runs (one per CLI command), sync_state (last outcome per item)
 
 ## Setup
 
-The project uses a virtual environment built on the Homebrew Python (`pyproject.toml` sets `python-preference = "only-system"`, so uv never downloads its own interpreter):
+Only [uv](https://docs.astral.sh/uv/) is needed. It installs the pinned Python (`.python-version`, currently 3.14) as one of its own managed builds. `pyproject.toml` sets `python-preference = "only-managed"`, so system or Homebrew Pythons are never used. It also creates the project's `.venv` with the locked dependencies:
 
 ```sh
-uv venv --python /opt/homebrew/bin/python3.14 .venv   # once
-uv sync                                               # install dependencies into .venv
-cp .env.example .env                                  # then fill in keys
+uv sync                 # installs Python 3.14 if needed, creates .venv, installs dependencies
+cp .env.example .env    # then fill in keys
 ```
+
+Run everything through `uv run …`; there's no need to activate the venv.
 
 ## Usage
 

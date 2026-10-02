@@ -29,8 +29,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv]
-# Use the Homebrew interpreter, never a uv-downloaded one.
-python-preference = "only-system"
+# Always use uv's own Python builds (version pinned in .python-version), so every machine,
+# including servers with an older system Python, runs the same interpreter.
+python-preference = "only-managed"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
