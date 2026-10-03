@@ -100,11 +100,28 @@ curl -H "X-API-Key: $KEY" https://<host>/securities/AAPL
 Any [rclone](https://rclone.org) remote works. [Cloudflare R2](https://developers.cloudflare.com/r2/) has 10 GB free; OCI Object Storage has 20 GB free in an Always Free tenancy (S3-compatible API).
 
 ```sh
-sudo -u finintel rclone config      # create a remote, e.g. "r2" (type s3, provider Cloudflare)
+sudo -u finintel rclone config      # create a remote, e.g. "oci" (type s3, provider Other)
 sudo systemctl start fin-intel-backup && journalctl -u fin-intel-backup -n 20
 ```
 
-Each night `backup.sh` uploads a consistent database snapshot (gzip, kept 8 days) and any new raw files. Raw files are content-addressed, so only new ones upload. To restore, download a snapshot to `data/fin_intel.db` and the raw files to `data/raw/`. `fin-intel rebuild all` reconstructs every table from raw alone if needed.
+Nearly every table can be rebuilt from the raw provider responses. Once all fundamentals are loaded the database is tens of GB, so `backup.sh` doesn't snapshot it every night. Instead, nightly it uploads:
+- `essential/`: the tables that can't be rebuilt, as SQL inserts. That's the raw response index (which body file is which response), accounts, portfolio transactions and broker snapshots. A few hundred KB, kept 30 days.
+- `raw/`: the response bodies. They're content-addressed, so only new files upload.
+
+Set `FI_BACKUP_DB_SNAPSHOT=1` to also upload a full compressed database snapshot (faster restore, much larger).
+
+Every upload is verified by checksum.
+
+**Restore** (a few hours, mostly re-loading fundamentals):
+
+```sh
+sudo -u finintel bash -c 'cd ~/financial_intelligence &&
+  rclone copy oci:fin-intel-backups/raw data/raw &&
+  rclone copy oci:fin-intel-backups/essential /tmp/essential &&
+  .venv/bin/fin-intel migrate &&
+  gunzip -c $(ls /tmp/essential/*.sql.gz | tail -1) | sqlite3 data/fin_intel.db &&
+  .venv/bin/fin-intel rebuild all'
+```
 
 ## Operations
 

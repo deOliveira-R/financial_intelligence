@@ -7,16 +7,19 @@ responses, in the order they were fetched, through the same loaders live syncs u
 from collections import Counter
 from datetime import datetime
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
+from fin_intel import breadth, metrics
 from fin_intel.ingest import (
     LOADERS,
     REFERENCE_DATASETS,
     SNAPSHOT_DATASETS,
     deactivate_unseen_massive,
+    get_security,
 )
 from fin_intel.models import (
+    CompanyMetrics,
     Concept,
     CorporateAction,
     DailyBar,
@@ -27,6 +30,7 @@ from fin_intel.models import (
     Filing,
     FiscalCalendar,
     Issuer,
+    PortfolioTransaction,
     Security,
     StatementItem,
     TickerHistory,
@@ -53,10 +57,22 @@ TARGETS = {
         [("fred", "series"), ("fred", "observations"), ("fred", "vintages")],
         [EconomicVintage, EconomicObservation, EconomicSeries],
     ),
+    # Securities and market data, without re-loading fundamentals (minutes, not hours).
+    "market": (
+        [
+            *REFERENCE_DATASETS,
+            ("tiingo", "daily_prices"),
+            ("massive", "grouped_daily"),
+            ("massive", "splits"),
+            ("massive", "dividends"),
+        ],
+        [CompanyMetrics, DailyBar, CorporateAction, TickerHistory, Security],
+    ),
     # Everything: reference data in fetch order (so renames happen as they did), then the rest.
     "all": (
         list(LOADERS),
         [
+            CompanyMetrics,
             StatementItem,
             Fact,
             FiscalCalendar,
@@ -77,6 +93,10 @@ TARGETS = {
 
 def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
     datasets, tables = TARGETS[target]
+    wipes_securities = Security in tables
+    if wipes_securities:
+        # Portfolio transactions point at securities; detach, re-attach by symbol after.
+        session.execute(update(PortfolioTransaction).values(security_id=None))
     for table in tables:
         session.execute(delete(table))
 
@@ -101,5 +121,15 @@ def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
             latest_ticker_sync[r.key] = r.fetched_at
     for market, fetched_at in latest_ticker_sync.items():
         deactivate_unseen_massive(session, market, fetched_at.date())
+    if wipes_securities:
+        for tx in session.scalars(
+            select(PortfolioTransaction).where(PortfolioTransaction.symbol.is_not(None))
+        ):
+            security = get_security(session, tx.symbol)
+            tx.security_id = security.id if security else None
     session.commit()
+    if target in ("market", "prices", "all"):
+        # Derived from bars and statements: refresh now rather than at the next daily sync.
+        breadth.compute(session)
+        metrics.compute(session)
     return loaded

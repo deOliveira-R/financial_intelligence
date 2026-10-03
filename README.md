@@ -31,6 +31,7 @@ bookkeeping  sync_runs (one per CLI command), sync_state (last outcome per item)
 - **`/fundamentals` returns consistent series.** Share counts and per-share values filed before a split are restated using `corporate_actions` (needs `sync-prices` for that ticker). Missing Q4s are derived as FY − 9M for monetary flows (`derived: true`). All units are returned unless `unit` is given. `split_adjusted=false`, `fill_q4=false` and `as_reported=true` turn these off.
 - **Two security masters.** SEC's ticker list is the authority for companies and CIKs. Massive's reference tickers (`sync-reference`) give every security a type (`CS`, `ETF`, `PFD`, `WARRANT`, `UNIT`, `ADRC`, …), composite and share-class FIGIs, and a primary exchange (MIC). They also add the ~5,500 ETFs, funds and notes SEC doesn't list. `origin` records which list created a security (`sec`, `massive`, `massive-otc`, `tiingo`), and each list only deactivates its own. When SEC lists a ticker, SEC claims that security. On CIK disagreements (e.g. preferreds issued by a subsidiary) SEC's CIK is kept.
 - **Ticker changes.** SEC side: a rename (FB → META) keeps the security and its history, and the old symbol still resolves. Massive side: the composite FIGI identifies renames (same FIGI, new symbol) and reuse (same symbol, new FIGI). A reused ticker always gets a new security.
+- **SEC owns the symbols it lists.** Massive never renames or releases a security SEC lists. When Massive shows that security's FIGI under another symbol (a temporary `D` suffix after a reverse split, an OTC line, a rename SEC hasn't caught up with), the symbol becomes an alias in its ticker history. FIGI-based renames and reuse apply only to securities Massive created. `fin-intel rebuild market` recomputes securities and market data from raw in minutes, without re-loading fundamentals.
 - **Delisted securities (no survivorship bias).** `sync-reference` also imports tickers delisted within our market history (origin `massive-delisted`, `ticker` NULL, old symbol in `ticker_history` through `delisted_on`). Market-wide rows are assigned to the security that held the symbol *on that date* (`SymbolResolver`), so a reused symbol's old history stays with the old company. On 2024-10-04, 4,887 listed stocks traded; without delisted securities we saw 4,162.
 - **Portfolio** (`portfolio.py`). Accounts, broker transactions and position snapshots. Tax lots are rebuilt from transactions on every request (FIFO; long-term after more than one year). Harvesting candidates come from taxable accounts, checked against purchases in any account within 30 days. Accounts without history are reported from the broker's snapshot (`basis_source: "broker"`). Replacement ETFs are ranked by tracking error, which keeps leveraged funds out. Fidelity positions import directly (`--format fidelity`).
 - **Macro pack with point-in-time history** (`macro.py`). 53 FRED series across energy, inflation, rates, activity, labor, dollar, risk and liquidity, each stored with its full revision history (ALFRED vintages, `economic_vintages`).
@@ -89,6 +90,9 @@ uv run fin-intel portfolio positions | harvest | realized --year 2026
 uv run fin-intel sync-weekly                        # scheduled bundle: security lists, fundamentals, retention
 uv run fin-intel serve                              # http://127.0.0.1:8000/docs
 uv run fin-intel rebuild fundamentals               # re-load from raw/ after a parser change
+uv run fin-intel rebuild market                     # securities, prices, actions (minutes)
+uv run fin-intel sync-fundamentals-bulk             # every tracked company from SEC's nightly file
+uv run fin-intel screen --preset magic              # or --where 'pe<15' --where 'roic>0.15' --sort -fcf_yield
 uv run fin-intel derive                             # recompute fiscal labels after a periods.py change
 uv run fin-intel prune-raw --dry-run                # what retention would remove (then without --dry-run)
 ```
@@ -107,6 +111,7 @@ API endpoints:
 - `GET /economic/{series_id}`
 - `GET /economic/{series_id}/observations?start=&end=`
 - `GET /timeseries?s=px:SPY|rsi:14&s=fred:T10Y2Y&start=&pit=true&format=json|csv`
+- `GET /screener?where=pe<15&where=roic>=0.15&sort=-earnings_yield&preset=magic|deep_value|quality|cash_cows`
 - `GET /portfolio/accounts`, `/portfolio/positions`, `/portfolio/lots`, `/portfolio/realized?year=`, `/portfolio/harvest?min_loss=`, `/portfolio/context/{ticker}`, `/portfolio/replacements/{ticker}`
 
 ## Deployment

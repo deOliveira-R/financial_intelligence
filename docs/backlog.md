@@ -39,6 +39,19 @@ Each needs a walk-forward backtest on point-in-time data with transaction costs.
 Infrastructure these need: a backtest module (signals, position sizing, costs, walk-forward
 splits, performance stats), plus storing strategy runs for comparison.
 
+## Fundamentals and screening
+
+- **Multi-class share counts:** companies reporting EPS and shares per class (Berkshire,
+  Greif) get no market cap. Per-class counts are dimensioned XBRL facts, which SEC's
+  company facts omit; the filings' instance documents have them.
+- **Bank metrics:** price to tangible book, net interest margin, efficiency ratio (banks
+  report no operating income, so EV/EBIT and ROIC don't apply).
+- **Historical point-in-time metrics:** backfill company_metrics for past dates from
+  statement filing dates and historical prices, for screening backtests.
+- **Sector/industry:** SIC codes (SEC submissions) for peer-relative valuation.
+- **PostgreSQL:** SQLite holds the full fundamentals load (~20-25 GB, read-mostly, one
+  writer); move when concurrency or size demands it.
+
 ## Portfolio
 
 - Fidelity transaction-history parser (holding periods, recent purchases, realized gains).

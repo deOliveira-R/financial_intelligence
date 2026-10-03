@@ -163,9 +163,11 @@ def load_massive_tickers(session: Session, market: str, payload: Any, today: dat
     - Every listed security gets Massive's type, FIGIs and primary exchange.
     - Unknown symbols (ETFs, funds, notes SEC doesn't list) become securities with
       origin "massive"; known ones keep their SEC name and CIK.
-    - Identity is the composite FIGI, which survives ticker changes: a known FIGI under a
-      new symbol is a rename; a held symbol arriving with a different FIGI is a reuse, so
-      the old holder gives the symbol up.
+    - Identity is the composite FIGI, which survives ticker changes. For securities Massive
+      created, a known FIGI under a new symbol is a rename, and a held symbol arriving with
+      a different FIGI is a reuse (the old holder gives the symbol up). Securities SEC lists
+      are never renamed or released by Massive: another symbol for their FIGI becomes an
+      alias in their ticker history (VSEE -> VSEED, CSAN -> CSANY).
     Deactivation needs the whole list, so it is a separate step (deactivate_unseen_massive).
     Securities created from the OTC list have origin "massive-otc"; the main list promotes
     them to "massive" if they uplist.
@@ -175,11 +177,17 @@ def load_massive_tickers(session: Session, market: str, payload: Any, today: dat
     securities = list(session.scalars(select(Security)))
     by_ticker = {s.ticker: s for s in securities if s.ticker}
     by_figi = {s.figi: s for s in securities if s.figi}
-    seen = []
+    seen, aliases = [], []
     for row in rows:
         symbol, figi = row["symbol"], row["figi"]
         security = by_ticker.get(symbol)
         if security is not None and figi and security.figi and security.figi != figi:
+            if not _massive_owned(security):
+                # SEC lists this symbol for another instrument; SEC decides.
+                log.info(
+                    "%s: Massive FIGI %s differs from %s; skipped", symbol, figi, security.figi
+                )
+                continue
             log.warning("%s moved from FIGI %s to %s", symbol, security.figi, figi)
             security.ticker, security.active = None, False
             del by_ticker[symbol]
@@ -189,11 +197,17 @@ def load_massive_tickers(session: Session, market: str, payload: Any, today: dat
             # Same symbol, issuer attributed differently (e.g. a preferred issued by a
             # subsidiary). SEC is the authority on CIKs; the type and FIGIs still apply.
             log.info("%s: Massive CIK %s, SEC CIK %s; kept SEC's", symbol, row["cik"], security.cik)
-        if security is None and figi and (moved := by_figi.get(figi)) is not None:
-            log.info("%s renamed to %s (FIGI %s)", moved.ticker, symbol, figi)
-            by_ticker.pop(moved.ticker, None)
-            moved.ticker = symbol
-            security = moved
+        if security is None and figi and (same := by_figi.get(figi)) is not None:
+            if not _massive_owned(same):
+                # A security SEC lists, shown by Massive under another symbol: a temporary
+                # one (VSEE -> VSEED after a reverse split), an OTC line (CSAN -> CSANY) or
+                # a rename SEC hasn't caught up with. Record an alias; SEC keeps the ticker.
+                aliases.append((same, symbol))
+                continue
+            log.info("%s renamed to %s (FIGI %s)", same.ticker, symbol, figi)
+            by_ticker.pop(same.ticker, None)
+            same.ticker = symbol
+            security = same
         if security is None:
             security = Security(ticker=symbol, name=row["name"], origin=origin)
             session.add(security)
@@ -216,7 +230,22 @@ def load_massive_tickers(session: Session, market: str, payload: Any, today: dat
         seen.append(security)
     session.flush()
     record_tickers(session, seen, today)
+    upsert(
+        session,
+        TickerHistory,
+        [
+            {"security_id": sec.id, "ticker": sym, "first_seen": today, "last_seen": today}
+            for sec, sym in aliases
+        ],
+        key=["security_id", "ticker"],
+        update=["last_seen"],
+    )
     return len(seen)
+
+
+def _massive_owned(security: Security) -> bool:
+    """Created from Massive's lists: Massive may rename it or give its symbol up."""
+    return security.origin.startswith("massive")
 
 
 def deactivate_unseen_massive(session: Session, market: str, as_of: date) -> int:
@@ -385,10 +414,15 @@ class SymbolResolver:
             listings.sort()
 
     def resolve(self, symbol: str, on: date) -> int | None:
-        for last_seen, security_id in self.past.get(symbol, ()):
+        past = self.past.get(symbol, ())
+        for last_seen, security_id in past:
             if on <= last_seen:
                 return security_id
-        return self.current.get(symbol)
+        if symbol in self.current:
+            return self.current[symbol]
+        # No current holder: its most recent past holder (an alias still in use since the
+        # last reference sync, or a delisted listing).
+        return past[-1][1] if past else None
 
 
 def _by_symbol(
