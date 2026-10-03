@@ -12,6 +12,7 @@ from fin_intel import (
     backtest,
     congress,
     cot,
+    events,
     ingest,
     insiders,
     portfolio,
@@ -798,6 +799,26 @@ def backtest_rule(
             for d, e, b in zip(r.dates, r.equity, r.benchmark_equity, strict=True)
         ]
     return out
+
+
+@api.get("/events/{source}")
+def event_study(
+    session: SessionDep,
+    source: str,
+    member: str | None = None,
+    min_amount: float = 0,
+    cik: int | None = None,
+    min_insiders: int = 3,
+) -> events.Study:
+    """Average returns vs SPY 5, 21, 63 and 126 trading days after disclosed trades:
+    source = insiders (cluster buys), congress (purchases) or 13f (new positions)."""
+    try:
+        found = events.from_source(session, source, member, min_amount, cik, min_insiders)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    result = events.study(session, found)
+    result.unpriced = result.unpriced[:100]
+    return result
 
 
 # --- economic calendar ----------------------------------------------------------------------

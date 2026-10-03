@@ -101,6 +101,7 @@ uv run fin-intel sync-congress --since 2024         # House and Senate periodic 
 uv run fin-intel sync-cot                           # CFTC Commitments of Traders (26 markets, weekly)
 uv run fin-intel sync-eia                           # EIA weekly petroleum and natural gas data
 uv run fin-intel sync-calendar && uv run fin-intel calendar --days 14   # upcoming CPI, payrolls, FOMC...
+uv run fin-intel event-study insiders              # returns vs SPY after cluster buys (also congress, 13f)
 uv run fin-intel backtest SPY 'px:SPY > px:SPY|sma:200 and breadth:pct_above_200d > 40'   # rule backtest
 uv run fin-intel prune-raw --dry-run                # what retention would remove (then without --dry-run)
 ```
@@ -120,6 +121,7 @@ API endpoints:
 - `GET /economic/{series_id}/observations?start=&end=`
 - `GET /timeseries?s=px:SPY|rsi:14&s=fred:T10Y2Y&s=cot:gold:managed_money:index&s=eia:crude_stocks|diff:1&start=&pit=true&format=json|csv`
 - `GET /backtest?asset=SPY&rule=px:SPY > px:SPY|sma:200&cost_bps=5&short=false&curve=true`
+- `GET /events/{insiders|congress|13f}?member=&min_amount=&cik=`: event study, excess returns after disclosures
 - `GET /calendar?days=30&daily=false`: scheduled releases (CPI, payrolls, GDP, FOMC decisions) and the series they update
 - `GET /cot`: speculative positioning per market with its 3-year COT index; `/cot/{market}?group=commercial`
 - `GET /screener?where=pe<15&where=roic>=0.15&sort=-earnings_yield&preset=magic|deep_value|quality|cash_cows`

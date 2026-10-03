@@ -71,8 +71,9 @@ walk-forward out-of-sample splits, and storing runs for comparison.
 - **13D/13G stakes:** activists crossing 5% (EDGAR full-text search or daily index).
 - **Famous-investor watchlist:** named 13F filers (Berkshire, Pershing Square, Scion,
   Baupost, Appaloosa...) with alerts on new positions.
-- **Insider and 13F signal backtests:** cluster buys and "new position by N top managers"
-  vs forward returns.
+- **Signal studies:** `fin-intel event-study insiders|congress|13f` measures returns vs
+  SPY after disclosures. Next: control for size and sector, condition on value metrics
+  (insider buying in cheap stocks), and use historical tickers for renamed companies.
 
 ## Portfolio
 

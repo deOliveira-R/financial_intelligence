@@ -677,6 +677,34 @@ def backtest_cmd(
         typer.echo(f"wrote {len(r.dates)} rows to {csv_path}")
 
 
+@app.command("event-study")
+def event_study_cmd(
+    source: Annotated[str, typer.Argument(help="insiders, congress or 13f")],
+    member: Annotated[str | None, typer.Option(help="congress: part of a name")] = None,
+    min_amount: Annotated[float, typer.Option(help="congress: minimum reported amount")] = 0,
+    cik: Annotated[int | None, typer.Option(help="13f: one filer")] = None,
+    min_insiders: Annotated[int, typer.Option(help="insiders: cluster size")] = 3,
+) -> None:
+    """Average returns vs SPY after disclosed trades (from the next trading day)."""
+    from fin_intel import events
+
+    with session_factory()() as session:
+        try:
+            found = events.from_source(session, source, member, min_amount, cik, min_insiders)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from None
+        result = events.study(session, found)
+    typer.echo(f"{result.events} events, {result.priced} with prices")
+    typer.echo(f"{'horizon':>8}{'n':>7}{'excess':>9}{'median':>9}{'hit':>7}{'t':>7}{'return':>9}")
+    for h in result.horizons:
+        if not h.n:
+            continue
+        typer.echo(
+            f"{h.horizon:>7}d{h.n:>7}{h.mean_excess:>+9.2%}{h.median_excess:>+9.2%}"
+            f"{h.hit_rate:>7.0%}{h.t_stat or 0:>7.1f}{h.mean_return:>+9.2%}"
+        )
+
+
 @app.command("screen")
 def screen_cmd(
     where: Annotated[list[str] | None, typer.Option("--where", "-w", help="e.g. 'pe<15'")] = None,
