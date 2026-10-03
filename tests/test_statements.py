@@ -225,3 +225,11 @@ def test_rederiving_replaces_rows(session):
     assert session.scalar(select(StatementItem.period_end).where(StatementItem.cik == 6)) == date(
         2025, 12, 31
     )
+
+
+def test_company_without_facts_loads_cleanly(session):
+    # Some filers' company facts contain no facts at all; this crashed the bulk load.
+    assert (
+        ingest.load_company_facts(session, 7, {"cik": 7, "entityName": "Empty", "facts": {}}) == 0
+    )
+    assert items(session, 7, "revenue") == []

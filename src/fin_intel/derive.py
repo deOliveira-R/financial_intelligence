@@ -71,6 +71,8 @@ def derive_issuer(session: Session, cik: int) -> None:
     # time on per-row bookkeeping).
     facts_table = Fact.__table__
     pk = ("filing_id", "concept_id", "unit", "period_start", "period_end")
+    if not facts:  # executing with no parameter sets would run once with none
+        return
     session.connection().execute(
         update(facts_table)
         .where(*(facts_table.c[c] == bindparam(f"k_{c}") for c in pk))

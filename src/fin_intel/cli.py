@@ -64,6 +64,9 @@ def _run(job: str, items: list[str], fn: Callable[[Session, str], Any]) -> None:
                     typer.secho(f"{job} {item}: {exc}", fg="red", err=True)
                 bookkeeping.commit()
         except BaseException as exc:
+            # Release the work session's write lock first, or recording the crash below
+            # waits on it (SQLite) and reports a lock timeout instead of the real error.
+            session.rollback()
             message = f"crashed: {exc!r}"[:1000]
             raise
         finally:
