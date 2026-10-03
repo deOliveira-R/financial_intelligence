@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fin_intel import (
+    backtest,
     congress,
     cot,
     ingest,
@@ -763,6 +764,40 @@ def congress_popular(
 ) -> list[congress.Popular]:
     """Tickers traded by the most distinct members within the window."""
     return congress.most_traded(session, days)[:limit]
+
+
+# --- backtests -----------------------------------------------------------------------------
+
+
+@api.get("/backtest")
+def backtest_rule(
+    session: SessionDep,
+    asset: str,
+    rule: str = Query(..., description="e.g. px:SPY > px:SPY|sma:200"),
+    start: date | None = None,
+    end: date | None = None,
+    cost_bps: float = 5.0,
+    short: bool = False,
+    curve: bool = Query(False, description="Include the daily equity curves"),
+) -> dict:
+    """Backtest a rule on point-in-time series: the position decided at each close is held
+    over the next day. Returns strategy vs buy-and-hold stats, per-year returns, trades."""
+    try:
+        r = backtest.run(session, asset, rule, start, end, cost_bps, short)
+    except backtest.RuleError as exc:
+        raise HTTPException(400, str(exc)) from None
+    out = {
+        k: v
+        for k, v in asdict(r).items()
+        if k not in ("dates", "equity", "benchmark_equity", "trade_list")
+    }
+    out["trade_list"] = [asdict(t) for t in r.trade_list[-50:]]
+    if curve:
+        out["curve"] = [
+            {"date": d, "strategy": e, "benchmark": b}
+            for d, e, b in zip(r.dates, r.equity, r.benchmark_equity, strict=True)
+        ]
+    return out
 
 
 # --- economic calendar ----------------------------------------------------------------------

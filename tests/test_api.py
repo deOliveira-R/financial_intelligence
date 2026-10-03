@@ -132,3 +132,16 @@ def test_congress_endpoints(client, session):
     assert client.get("/congress/trades", params={"ticker": "AAPL"}).json() == []
     popular = client.get("/congress/popular", params={"days": 730}).json()
     assert {p["ticker"] for p in popular} == {"INTC", "UBER"}
+
+
+def test_backtest_endpoint(client, session):
+    from test_timeseries import add_bars
+
+    add_bars(session, "SPY", date(2026, 1, 1), [100.0, 110.0, 99.0, 120.0, 120.0])
+    r = client.get("/backtest", params={"asset": "SPY", "rule": "px:SPY > 105", "curve": True})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["strategy"]["total_return"] < 0 and len(body["curve"]) == 4
+    assert body["trade_list"][0]["entry"] == "2026-01-02"
+    bad = client.get("/backtest", params={"asset": "SPY", "rule": "px:SPY"})
+    assert bad.status_code == 400

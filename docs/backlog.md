@@ -41,8 +41,10 @@ Each needs a walk-forward backtest on point-in-time data with transaction costs.
   (CPER, USO, GLD, TLT, IWM). Commercials' index as a contrarian confirmation.
 - **Trend and momentum:** SMA/EMA crossovers and RSI on sector ETFs, with breadth confirmation.
 
-Infrastructure these need: a backtest module (signals, position sizing, costs, walk-forward
-splits, performance stats), plus storing strategy runs for comparison.
+Run them with `fin-intel backtest ASSET 'rule'` (backtest.py: rules on any timeseries spec,
+next-day execution, costs, long/flat or long/short, per-year breakdown). Still to build:
+position sizing (e.g. volatility targeting), multi-asset rotation, parameter sweeps with
+walk-forward out-of-sample splits, and storing runs for comparison.
 
 ## Fundamentals and screening
 

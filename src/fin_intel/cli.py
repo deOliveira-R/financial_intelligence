@@ -614,6 +614,69 @@ def timeseries_cmd(
         typer.echo(f"{dates[i].isoformat():<11}{cells}")
 
 
+@app.command("backtest")
+def backtest_cmd(
+    asset: Annotated[str, typer.Argument(help="Ticker traded, e.g. SPY")],
+    rule: Annotated[str, typer.Argument(help="e.g. 'px:SPY > px:SPY|sma:200'")],
+    start: Annotated[str | None, typer.Option(help="YYYY-MM-DD")] = None,
+    end: Annotated[str | None, typer.Option(help="YYYY-MM-DD")] = None,
+    cost_bps: Annotated[float, typer.Option(help="Cost per unit traded, basis points")] = 5.0,
+    short: Annotated[bool, typer.Option(help="Short when the rule is false")] = False,
+    csv_path: Annotated[str | None, typer.Option("--csv", help="Write the equity curve")] = None,
+) -> None:
+    """Backtest a long/flat (or long/short) rule on point-in-time series (see backtest.py)."""
+    import csv
+
+    from fin_intel import backtest
+
+    with session_factory()() as session:
+        try:
+            r = backtest.run(
+                session,
+                asset,
+                rule,
+                date.fromisoformat(start) if start else None,
+                date.fromisoformat(end) if end else None,
+                cost_bps,
+                short,
+            )
+        except backtest.RuleError as exc:
+            raise typer.BadParameter(str(exc)) from None
+
+    def pct(v: float | None) -> str:
+        return "—" if v is None else f"{v:+.1%}"
+
+    typer.echo(f"{r.asset}: {r.rule}")
+    typer.echo(f"{r.start} to {r.end} ({r.years:.1f} years), exposure {r.exposure:.0%}")
+    typer.echo(f"{'':12}{'strategy':>10}{'buy&hold':>10}")
+    for label, key in [
+        ("total", "total_return"),
+        ("CAGR", "cagr"),
+        ("volatility", "volatility"),
+        ("max DD", "max_drawdown"),
+    ]:
+        a, b = getattr(r.strategy, key), getattr(r.benchmark, key)
+        typer.echo(f"{label:12}{pct(a):>10}{pct(b):>10}")
+    sharpe = [s.sharpe for s in (r.strategy, r.benchmark)]
+    typer.echo(
+        f"{'Sharpe':12}" + "".join(f"{'—' if s is None else f'{s:.2f}':>10}" for s in sharpe)
+    )
+    typer.echo(
+        f"trades {r.trades}, win rate {pct(r.win_rate).lstrip('+')}, avg trade {pct(r.avg_trade)}"
+    )
+    typer.echo(
+        "by year: "
+        + "  ".join(f"{y['year']} {pct(y['strategy'])}/{pct(y['benchmark'])}" for y in r.by_year)
+    )
+    if csv_path:
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["date", "strategy", "benchmark"])
+            for d, e, b in zip(r.dates, r.equity, r.benchmark_equity, strict=True):
+                writer.writerow([d.isoformat(), e, b])
+        typer.echo(f"wrote {len(r.dates)} rows to {csv_path}")
+
+
 @app.command("screen")
 def screen_cmd(
     where: Annotated[list[str] | None, typer.Option("--where", "-w", help="e.g. 'pe<15'")] = None,
