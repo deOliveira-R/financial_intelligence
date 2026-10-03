@@ -1,11 +1,13 @@
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 from fin_intel.config import get_settings
-from fin_intel.providers.base import NotConfiguredError, Provider
+from fin_intel.providers.base import NotConfiguredError, Provider, ProviderError
 from fin_intel.providers.ratelimit import SECOND, Limit
 
 TICKERS_URL = "https://www.sec.gov/files/company_tickers_exchange.json"
+BULK_COMPANY_FACTS_URL = "https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
 
 
 class SecProvider(Provider):
@@ -23,6 +25,23 @@ class SecProvider(Provider):
 
     def fetch_company_tickers(self) -> Any:
         return self.get(TICKERS_URL, dataset="company_tickers")
+
+    def download_bulk_company_facts(self, path: Path) -> Path:
+        """Stream SEC's nightly companyfacts.zip (~1.4 GB, every filer) to `path`. Its
+        entries are stored in the raw layer one company at a time, not as one file."""
+        self.limiter.acquire()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".part")
+        with self.client.stream(
+            "GET", BULK_COMPANY_FACTS_URL, headers=self.headers(), timeout=None
+        ) as resp:
+            if resp.is_error:
+                raise ProviderError(f"sec: HTTP {resp.status_code} for the bulk file")
+            with tmp.open("wb") as f:
+                for chunk in resp.iter_bytes(1 << 20):
+                    f.write(chunk)
+        tmp.replace(path)
+        return path
 
     def fetch_company_facts(self, cik: int) -> Any:
         return self.get(

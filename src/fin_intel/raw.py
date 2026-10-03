@@ -118,6 +118,27 @@ class RawStore:
                 body=gzip.decompress(self._path(r.provider, r.content_hash).read_bytes()),
             )
 
+    def latest_hashes(self, provider: str, dataset: str) -> dict[str | None, str]:
+        """Content hash of the latest successful response per key, e.g. to skip companies
+        whose bulk-file entry hasn't changed since it was last loaded."""
+        latest = (
+            select(RawResponse.key, func.max(RawResponse.id).label("id"))
+            .where(
+                RawResponse.provider == provider,
+                RawResponse.dataset == dataset,
+                RawResponse.status == 200,
+            )
+            .group_by(RawResponse.key)
+            .subquery()
+        )
+        with self.engine.connect() as conn:
+            rows = conn.execute(
+                select(RawResponse.key, RawResponse.content_hash).join(
+                    latest, latest.c.id == RawResponse.id
+                )
+            )
+            return dict(rows.all())
+
     def call_times(self, provider: str, since: datetime) -> list[datetime]:
         """When this provider was called (any status), for rate limits across processes."""
         with self.engine.connect() as conn:

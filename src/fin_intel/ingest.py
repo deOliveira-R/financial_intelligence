@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, func, select
@@ -622,6 +623,55 @@ def sync_fundamentals(session: Session, sec_provider: SecProvider, ticker: str) 
         payload = sec_provider.fetch_company_facts(security.cik)
         result["rows"] = load_company_facts(session, security.cik, payload)
     return result["rows"]
+
+
+def load_bulk_company_facts(
+    session: Session,
+    store: RawStore,
+    zip_path: Path,
+    ciks: set[int] | None = None,
+    progress: Callable[[int, int], None] | None = None,
+) -> tuple[int, int]:
+    """Load SEC's bulk companyfacts.zip, one company at a time, skipping unchanged ones.
+
+    Each entry is stored as its own raw response (dataset companyfacts, key = CIK), exactly
+    like a per-company fetch, so rebuilds and retention treat both the same. Entries whose
+    content matches the latest stored response for that company are skipped: on a normal
+    night only companies that filed something are reloaded. Returns (loaded, unchanged).
+    """
+    import hashlib
+    import json
+    import zipfile
+
+    latest = store.latest_hashes("sec", "companyfacts")
+    loaded = unchanged = 0
+    with zipfile.ZipFile(zip_path) as archive:
+        entries = [
+            (int(info.filename[3:13]), info)
+            for info in archive.infolist()
+            if info.filename.startswith("CIK") and info.filename.endswith(".json")
+        ]
+        entries = [(cik, info) for cik, info in entries if ciks is None or cik in ciks]
+        for n, (cik, info) in enumerate(entries, start=1):
+            body = archive.read(info)
+            if latest.get(str(cik)) == hashlib.sha256(body).hexdigest():
+                unchanged += 1
+            else:
+                # Fetch-then-load per company: commit first so the raw store's own
+                # transaction never waits on this session's write lock.
+                session.commit()
+                store.save("sec", "companyfacts", str(cik), None, 200, body)
+                load_company_facts(session, cik, json.loads(body))
+                session.commit()
+                loaded += 1
+            if progress:
+                progress(n, len(entries))
+    return loaded, unchanged
+
+
+def tracked_ciks(session: Session) -> set[int]:
+    """Issuers we follow: those with at least one security, active or delisted."""
+    return set(session.scalars(select(Security.cik).where(Security.cik.is_not(None)).distinct()))
 
 
 def sync_prices(

@@ -88,6 +88,51 @@ def sync_fundamentals(tickers: list[str]) -> None:
 
 
 @app.command()
+def sync_fundamentals_bulk(
+    zip_path: Annotated[
+        str | None, typer.Option("--zip", help="Use an already downloaded companyfacts.zip")
+    ] = None,
+    all_filers: Annotated[
+        bool, typer.Option(help="Every SEC filer, not just issuers with a security")
+    ] = False,
+) -> None:
+    """Load SEC fundamentals for every tracked issuer from the nightly bulk file.
+
+    The first run loads everything (hours); later runs reload only companies whose data
+    changed. Each company becomes its own raw response, as with sync-fundamentals.
+    """
+    from pathlib import Path
+
+    from fin_intel.config import get_settings as settings
+
+    store = default_store()
+    downloaded = zip_path is None
+    path = (
+        Path(zip_path) if zip_path else Path(settings().raw_dir).parent / "tmp" / "companyfacts.zip"
+    )
+
+    def work(session: Session, _: str) -> int:
+        if downloaded:
+            typer.echo("downloading companyfacts.zip ...")
+            SecProvider(raw_store=store).download_bulk_company_facts(path)
+        ciks = None if all_filers else ingest.tracked_ciks(session)
+
+        def progress(n: int, total: int) -> None:
+            if n % 250 == 0 or n == total:
+                typer.echo(f"  {n}/{total} companies")
+
+        loaded, unchanged = ingest.load_bulk_company_facts(session, store, path, ciks, progress)
+        typer.echo(f"loaded {loaded}, unchanged {unchanged}")
+        return loaded
+
+    try:
+        _run("sync-fundamentals-bulk", ["bulk"], work)
+    finally:
+        if downloaded:
+            path.unlink(missing_ok=True)
+
+
+@app.command()
 def sync_prices(
     tickers: list[str],
     start: Annotated[str | None, typer.Option(help="YYYY-MM-DD; default: incremental")] = None,
