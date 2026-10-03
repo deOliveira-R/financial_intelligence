@@ -374,6 +374,21 @@ def _mark_delisted(security: Security, delisted_on: date) -> None:
         security.active = False
 
 
+def load_massive_ticker_details(session: Session, ticker: str, payload: Any, today: date) -> int:
+    """A listing's shares outstanding (for an ADR, in depositary shares)."""
+    info = payload.get("results") or {}
+    shares = info.get("share_class_shares_outstanding")
+    figi = info.get("composite_figi")
+    security = (
+        session.scalar(select(Security).where(Security.figi == figi)) if figi else None
+    ) or get_security(session, massive.normalize_symbol(ticker))
+    if security is None or not shares:
+        return 0
+    security.shares_outstanding = float(shares)
+    security.shares_as_of = today
+    return 1
+
+
 def _same_company(holder: Security, cik: int | None, figi: str | None) -> bool:
     """No identifier contradicts it. Missing identifiers count as a match: this never
     moves data on a guess."""
@@ -541,6 +556,9 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("massive", "grouped_daily"): lambda s, k, p, t: load_massive_grouped_daily(s, k, p),
     ("massive", "splits"): lambda s, k, p, t: load_massive_actions(s, "splits", p),
     ("massive", "dividends"): lambda s, k, p, t: load_massive_actions(s, "dividends", p),
+    ("massive", "ticker_details"): lambda s, k, p, t: load_massive_ticker_details(
+        s, k, p, t.date()
+    ),
     ("sec", "insider_dataset"): lambda s, k, p, t: load_insider_dataset(s, p),
     ("sec", "form4"): lambda s, k, p, t: load_form4(s, k, p),
     ("sec", "13f_dataset"): lambda s, k, p, t: load_13f_dataset(s, p),
@@ -596,6 +614,7 @@ REQUEST_DATASETS = {("openfigi", "mapping")}
 SNAPSHOT_DATASETS = {
     ("sec", "companyfacts"),
     ("massive", "grouped_daily"),  # one complete response per trading day
+    ("massive", "ticker_details"),
     ("fred", "series"),
     ("fred", "observations"),
     ("house", "fd_index"),  # the year's complete index
@@ -813,6 +832,29 @@ def sync_reference_tickers(
             for page in delisted:
                 load_massive_delisted(session, page)
         deactivate_unseen_massive(session, market, today)
+    return result["rows"]
+
+
+def due_listing_shares(session: Session, max_age_days: int = 28, limit: int = 150) -> list[str]:
+    """ADRs (primary listings) whose depositary share count is missing or stale, oldest
+    first. Each run refreshes at most `limit` (Massive's free plan: 5 calls a minute)."""
+    from fin_intel import metrics
+
+    cutoff = _today() - timedelta(days=max_age_days)
+    due = [
+        s
+        for s in metrics.primary_securities(session).values()
+        if s.security_type == "ADRC" and s.ticker and (s.shares_as_of or date.min) < cutoff
+    ]
+    due.sort(key=lambda s: s.shares_as_of or date.min)
+    return [s.ticker for s in due[:limit] if s.ticker]
+
+
+def sync_listing_shares(session: Session, massive_provider: MassiveProvider, ticker: str) -> int:
+    with tracked(session, "massive", "ticker_details", ticker) as result:
+        session.commit()  # fetch-then-load
+        payload = massive_provider.fetch_ticker_details(ticker.replace("-", "."))
+        result["rows"] = load_massive_ticker_details(session, ticker, payload, _today())
     return result["rows"]
 
 

@@ -32,6 +32,7 @@ from fin_intel.models import CompanyMetrics, DailyBar, Security, StatementItem
 STALE_AFTER = timedelta(days=550)  # newest financials older than this: skip (likely gone)
 CURRENT_WINDOW = timedelta(days=400)  # inputs must be this close to the latest financials
 PRIMARY_TYPES = ("CS", "ADRC", "OS")
+ADR_SHARES_WINDOW = timedelta(days=120)  # depositary share counts older than this: unknown
 PRIMARY_MICS = ("XNYS", "XNAS", "XASE")
 
 
@@ -152,7 +153,13 @@ def compute(session: Session, as_of: date | None = None) -> int:
             continue
         currency, items = in_dollars(rows, rates)
         price = prices[security.id][0]
-        row = _issuer_metrics(items, price, as_of, valued=currency in rates)
+        row = _issuer_metrics(
+            items,
+            price,
+            as_of,
+            valued=currency in rates,
+            listing_shares=_adr_shares(security, as_of),
+        )
         if row is not None:
             records.append(
                 {
@@ -194,11 +201,26 @@ def in_dollars(
     return currency, out
 
 
+def _adr_shares(security: Security, as_of: date) -> float | None:
+    """For an ADR, its depositary shares outstanding if known recently, else 0 (no market
+    cap: the ADR ratio is unknown); None for other securities (use the financials' count)."""
+    if security.security_type != "ADRC":
+        return None
+    fresh = security.shares_as_of and as_of - security.shares_as_of <= ADR_SHARES_WINDOW
+    return (security.shares_outstanding or 0.0) if fresh else 0.0
+
+
 def _issuer_metrics(
-    items: dict[str, list[Item]], price: float, as_of: date, valued: bool = True
+    items: dict[str, list[Item]],
+    price: float,
+    as_of: date,
+    valued: bool = True,
+    listing_shares: float | None = None,
 ) -> dict | None:
     """Metrics from an issuer's items (in US dollars). Without `valued` (no exchange rate
-    for its currency) market-cap-based metrics are left empty."""
+    for its currency) market-cap-based metrics are left empty. `listing_shares` overrides
+    the financials' share count (ADRs, which may bundle several ordinary shares); 0 means
+    the listing's count is unknown."""
 
     # Values must belong to the period being described: a years-old share count or debt
     # balance (e.g. a company that now reports only per share class) is ignored rather
@@ -244,7 +266,11 @@ def _issuer_metrics(
     current_assets, current_liabilities = bal("current_assets"), bal("current_liabilities")
     shares = bal("shares_outstanding") or ttm_last(items.get("shares_diluted", []))
 
-    market_cap = price * shares if valued and shares and _consistent(shares, price, items) else None
+    if listing_shares is not None:  # an ADR: its own count, in depositary shares
+        market_cap = price * listing_shares if valued and listing_shares else None
+    else:
+        consistent = shares and _consistent(shares, price, items)
+        market_cap = price * shares if valued and shares and consistent else None
     ev = None if market_cap is None else market_cap + debt + leases - cash
     ebitda = None if ebit is None else ebit + (depreciation or 0.0)
     tax_rate = min(max(_div(tax, pretax) or 0.21, 0.0), 0.5)

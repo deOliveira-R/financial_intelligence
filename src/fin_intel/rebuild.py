@@ -106,6 +106,7 @@ TARGETS = {
             ("massive", "grouped_daily"),
             ("massive", "splits"),
             ("massive", "dividends"),
+            ("massive", "ticker_details"),
         ],
         [CompanyMetrics, DailyBar, CorporateAction, TickerHistory, Security],
     ),

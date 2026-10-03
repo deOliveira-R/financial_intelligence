@@ -267,6 +267,19 @@ def sync_congress(
 
 
 @app.command()
+def sync_adr_shares(
+    limit: Annotated[int, typer.Option(help="Most ADRs to refresh this run")] = 150,
+) -> None:
+    """Refresh ADRs' depositary share counts from Massive (for their market caps), oldest
+    first; each is refreshed every four weeks."""
+    massive = MassiveProvider(raw_store=default_store())
+    with session_factory()() as session:
+        tickers = ingest.due_listing_shares(session, limit=limit)
+    if tickers:
+        _run("sync-adr-shares", tickers, lambda s, t: ingest.sync_listing_shares(s, massive, t))
+
+
+@app.command()
 def sync_calendar() -> None:
     """Load the economic release calendar for the tracked FRED series (plus FOMC)."""
     from fin_intel.providers import FedProvider
@@ -490,6 +503,7 @@ def sync_weekly() -> None:
         ("Massive reference", lambda: sync_reference(otc=settings.market_otc)),
         ("institutional holdings (13F)", lambda: sync_13f(files=4)),
         ("CFTC positioning", sync_cot),
+        ("ADR share counts", sync_adr_shares),
         ("economic release calendar", sync_calendar),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))

@@ -115,6 +115,10 @@ class Security(Base):
     # Last trading listing per Massive. Delisted securities keep `ticker` NULL (the symbol
     # may be reused); their old symbol lives in ticker_history with last_seen = delisted_on.
     delisted_on: Mapped[date | None] = mapped_column(Date)
+    # Shares of this listing (for an ADR, depositary shares) per Massive's ticker details:
+    # financials count ordinary shares, which an ADR may bundle (or split).
+    shares_outstanding: Mapped[float | None] = mapped_column(Float)
+    shares_as_of: Mapped[date | None] = mapped_column(Date)
 
 
 class TickerHistory(Base):

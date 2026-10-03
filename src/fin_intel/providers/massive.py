@@ -39,6 +39,10 @@ class MassiveProvider(Provider):
             key=day.isoformat(),
         )
 
+    def fetch_ticker_details(self, ticker: str) -> Any:
+        """One ticker's details, including its listing's shares outstanding."""
+        return self.get(f"/v3/reference/tickers/{ticker}", dataset="ticker_details", key=ticker)
+
     def fetch_tickers(self, market: str = "stocks") -> list[Any]:
         """Every active ticker in a market ("stocks" or "otc"), with type and identifiers."""
         return self._pages(
