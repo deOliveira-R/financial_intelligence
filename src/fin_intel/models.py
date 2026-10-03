@@ -111,6 +111,9 @@ class Security(Base):
     cik: Mapped[int | None] = mapped_column(ForeignKey("issuers.cik"), index=True)
     figi: Mapped[str | None] = mapped_column(String(12), index=True)  # composite FIGI
     share_class_figi: Mapped[str | None] = mapped_column(String(12))
+    # Last trading listing per Massive. Delisted securities keep `ticker` NULL (the symbol
+    # may be reused); their old symbol lives in ticker_history with last_seen = delisted_on.
+    delisted_on: Mapped[date | None] = mapped_column(Date)
 
 
 class TickerHistory(Base):

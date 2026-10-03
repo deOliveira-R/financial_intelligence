@@ -18,6 +18,11 @@ def settings(monkeypatch):
     monkeypatch.setenv("FI_MASSIVE_API_KEY", "massive-key")
     get_settings.cache_clear()
     base._limiters.clear()
+    # Mocked providers needn't wait out Massive's free-plan 5 calls/minute.
+    from fin_intel.providers import MassiveProvider
+    from fin_intel.providers.ratelimit import MINUTE, Limit
+
+    monkeypatch.setattr(MassiveProvider, "limits", (Limit(10_000, MINUTE),))
     yield
     get_settings.cache_clear()
 

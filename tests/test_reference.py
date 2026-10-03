@@ -121,6 +121,9 @@ def test_reference_sync_reads_every_page(session, raw_store):
     respx.get("https://api.massive.com/v3/reference/tickers", params={"cursor": "p2"}).respond(
         json={"results": [ref("VYM", "ETF", figi="BBG000Q3DFH4")]}
     )
+    respx.get("https://api.massive.com/v3/reference/tickers", params={"active": "false"}).respond(
+        json={"results": []}
+    )
     rows = ingest.sync_reference_tickers(session, MassiveProvider(raw_store=raw_store))
     assert rows == 2 and first.called
     types = session.execute(select(Security.ticker, Security.security_type)).all()

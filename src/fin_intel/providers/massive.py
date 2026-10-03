@@ -59,6 +59,22 @@ class MassiveProvider(Provider):
             "/stocks/v1/dividends", {"ex_dividend_date.gte": since.isoformat()}, dataset="dividends"
         )
 
+    def fetch_delisted(self, since: date) -> list[Any]:
+        """Tickers delisted on or after `since`, newest first; stops paging once a page
+        reaches back past `since` (the list goes back to 2003 otherwise)."""
+        params = {"market": "stocks", "active": "false", "sort": "delisted_utc", "order": "desc"}
+        pages = [
+            self.get(
+                "/v3/reference/tickers",
+                {**params, "limit": TICKERS_PAGE_SIZE},
+                dataset="delisted",
+                key="stocks",
+            )
+        ]
+        while (next_url := pages[-1].get("next_url")) and _oldest_delisting(pages[-1]) >= since:
+            pages.append(self.get(next_url, dataset="delisted", key="stocks"))
+        return pages
+
     def _pages(
         self,
         path: str,
@@ -138,18 +154,37 @@ def parse_dividends(payload: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _ticker_row(r: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "symbol": normalize_symbol(r["ticker"]),
+        "name": r.get("name"),
+        "security_type": r.get("type"),
+        "cik": int(r["cik"]) if r.get("cik") else None,
+        "figi": r.get("composite_figi"),
+        "share_class_figi": r.get("share_class_figi"),
+        "mic": r.get("primary_exchange"),
+    }
+
+
 def parse_tickers(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Reference tickers in SEC-style symbols, with type and identifiers."""
+    return [_ticker_row(r) for r in payload.get("results") or [] if r.get("ticker")]
+
+
+def _delisting_date(row: dict[str, Any]) -> date | None:
+    value = row.get("delisted_utc")
+    return date.fromisoformat(value[:10]) if value else None
+
+
+def _oldest_delisting(page: dict[str, Any]) -> date:
+    dates = [d for r in page.get("results") or [] if (d := _delisting_date(r))]
+    return min(dates, default=date.min)
+
+
+def parse_delisted(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Delisted tickers in SEC-style symbols, with the date they stopped trading."""
     return [
-        {
-            "symbol": normalize_symbol(r["ticker"]),
-            "name": r.get("name"),
-            "security_type": r.get("type"),
-            "cik": int(r["cik"]) if r.get("cik") else None,
-            "figi": r.get("composite_figi"),
-            "share_class_figi": r.get("share_class_figi"),
-            "mic": r.get("primary_exchange"),
-        }
+        {**_ticker_row(r), "delisted_on": delisted}
         for r in payload.get("results") or []
-        if r.get("ticker")
+        if r.get("ticker") and (delisted := _delisting_date(r))
     ]

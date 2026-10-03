@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from fin_intel import derive
@@ -237,6 +237,112 @@ def deactivate_unseen_massive(session: Session, market: str, as_of: date) -> int
     return len(stale)
 
 
+def load_massive_delisted(session: Session, payload: Any) -> int:
+    """Record delisted securities, so history isn't limited to today's survivors.
+
+    For each delisted listing (symbol S, last traded around date d), in order:
+    1. Same composite FIGI as a security we know: it's that security, under an old symbol
+       (a rename, recorded in its ticker history) or now delisted.
+    2. S's current holder has the same CIK (or either identifier is missing): that
+       company has just delisted; its data stays put.
+    3. Otherwise S was reused: a separate delisted security takes S's history up to d,
+       and rows already attached to the new holder for those dates move to it.
+    Delisted securities keep `ticker` NULL; S is in their ticker history through d.
+    """
+    rows = massive.parse_delisted(payload)
+    securities = list(session.scalars(select(Security)))
+    by_ticker = {s.ticker: s for s in securities if s.ticker}
+    by_figi = {s.figi: s for s in securities if s.figi}
+    known = set(
+        session.execute(
+            select(TickerHistory.ticker, Security.delisted_on)
+            .join(Security, Security.id == TickerHistory.security_id)
+            .where(Security.ticker.is_(None), Security.delisted_on.is_not(None))
+        ).all()
+    )
+    history, repairs, count = [], [], 0
+    for row in rows:
+        symbol, delisted_on, figi, cik = row["symbol"], row["delisted_on"], row["figi"], row["cik"]
+        if (symbol, delisted_on) in known:
+            continue  # imported on an earlier sync
+        if figi and (same := by_figi.get(figi)) is not None:
+            if same.ticker == symbol:
+                _mark_delisted(same, delisted_on)
+            else:  # an old symbol of a renamed security
+                history.append((same, symbol, delisted_on))
+            continue
+        holder = by_ticker.get(symbol)
+        if holder is not None and _same_company(holder, cik, figi):
+            _mark_delisted(holder, delisted_on)
+            holder.figi = holder.figi or figi
+            continue
+        if cik:
+            upsert(session, Issuer, [{"cik": cik, "name": None}], key=["cik"], update=[])
+        security = Security(
+            ticker=None,
+            name=row["name"],
+            origin="massive-delisted",
+            active=False,
+            security_type=row["security_type"],
+            mic=row["mic"],
+            cik=cik,
+            figi=figi,
+            share_class_figi=row["share_class_figi"],
+            delisted_on=delisted_on,
+        )
+        session.add(security)
+        history.append((security, symbol, delisted_on))
+        known.add((symbol, delisted_on))
+        if figi:
+            by_figi[figi] = security
+        if holder is not None:
+            repairs.append((holder.id, delisted_on))
+        count += 1
+    session.flush()
+    upsert(
+        session,
+        TickerHistory,
+        [
+            {"security_id": s.id, "ticker": t, "first_seen": d, "last_seen": d}
+            for s, t, d in history
+        ],
+        key=["security_id", "ticker"],
+        update=["last_seen"],
+    )
+    # Market rows for a reused symbol were attached to its current holder; those dated up
+    # to the old listing's delisting belong to the delisted security (backfilled from raw).
+    for holder_id, until in repairs:
+        session.execute(
+            delete(DailyBar).where(
+                DailyBar.security_id == holder_id,
+                DailyBar.source == "massive",
+                DailyBar.date <= until,
+            )
+        )
+        session.execute(
+            delete(CorporateAction).where(
+                CorporateAction.security_id == holder_id,
+                CorporateAction.source == "massive",
+                CorporateAction.ex_date <= until,
+            )
+        )
+    return count
+
+
+def _mark_delisted(security: Security, delisted_on: date) -> None:
+    security.delisted_on = delisted_on
+    if security.origin.startswith("massive"):  # SEC decides for securities it lists
+        security.active = False
+
+
+def _same_company(holder: Security, cik: int | None, figi: str | None) -> bool:
+    """No identifier contradicts it. Missing identifiers count as a match: this never
+    moves data on a guess."""
+    return not (cik and holder.cik and holder.cik != cik) and not (
+        figi and holder.figi and holder.figi != figi
+    )
+
+
 # --- prices ----------------------------------------------------------------------------
 
 
@@ -251,20 +357,48 @@ def load_tiingo_daily(session: Session, ticker: str, payload: Any) -> int:
     return upsert(session, DailyBar, bars, key=["security_id", "date", "source"])
 
 
-def _by_symbol(session: Session, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Attach security_id to market-wide rows by current ticker; drop unknown symbols.
+class SymbolResolver:
+    """Which security a symbol meant on a given date.
 
-    Market-wide feeds list warrants, units and OTC names we don't track; run sync-tickers
-    first so every SEC-listed security is known.
+    A symbol can pass from one company to another, and market-wide feeds identify rows by
+    symbol only. Past holders are known from ticker_history entries for symbols a security
+    no longer uses (delisted securities, renames), valid through their last_seen date; on
+    later dates the symbol means its current holder.
     """
-    ids = dict(
-        session.execute(
-            select(Security.ticker, Security.id).where(Security.ticker.is_not(None))
-        ).all()
-    )
+
+    def __init__(self, session: Session):
+        self.current = dict(
+            session.execute(
+                select(Security.ticker, Security.id).where(Security.ticker.is_not(None))
+            ).all()
+        )
+        self.past: dict[str, list[tuple[date, int]]] = defaultdict(list)
+        rows = session.execute(
+            select(TickerHistory.ticker, TickerHistory.last_seen, TickerHistory.security_id)
+            .join(Security, Security.id == TickerHistory.security_id)
+            .where((Security.ticker.is_(None)) | (Security.ticker != TickerHistory.ticker))
+        )
+        for symbol, last_seen, security_id in rows:
+            self.past[symbol].append((last_seen, security_id))
+        for listings in self.past.values():
+            listings.sort()
+
+    def resolve(self, symbol: str, on: date) -> int | None:
+        for last_seen, security_id in self.past.get(symbol, ()):
+            if on <= last_seen:
+                return security_id
+        return self.current.get(symbol)
+
+
+def _by_symbol(
+    session: Session, rows: list[dict[str, Any]], date_field: str
+) -> list[dict[str, Any]]:
+    """Attach security_id to market-wide rows by symbol as of each row's date; drop
+    unknown symbols (warrants, units, OTC names we don't track)."""
+    resolver = SymbolResolver(session)
     out = []
     for row in rows:
-        security_id = ids.get(row.pop("symbol"))
+        security_id = resolver.resolve(row.pop("symbol"), row[date_field])
         if security_id is not None:
             out.append({**row, "security_id": security_id})
     if skipped := len(rows) - len(out):
@@ -273,13 +407,15 @@ def _by_symbol(session: Session, rows: list[dict[str, Any]]) -> list[dict[str, A
 
 
 def load_massive_grouped_daily(session: Session, day: str, payload: Any) -> int:
-    rows = _by_symbol(session, massive.parse_grouped_daily(date.fromisoformat(day), payload))
+    rows = _by_symbol(
+        session, massive.parse_grouped_daily(date.fromisoformat(day), payload), "date"
+    )
     return upsert(session, DailyBar, rows, key=["security_id", "date", "source"])
 
 
 def load_massive_actions(session: Session, dataset: str, payload: Any) -> int:
     parse = massive.parse_splits if dataset == "splits" else massive.parse_dividends
-    rows = _by_symbol(session, parse(payload))
+    rows = _by_symbol(session, parse(payload), "ex_date")
     return upsert(
         session, CorporateAction, rows, key=["security_id", "ex_date", "action", "source"]
     )
@@ -351,6 +487,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("tiingo", "metadata"): lambda s, k, p, t: load_tiingo_metadata(s, k, p, t.date()),
     ("tiingo", "daily_prices"): lambda s, k, p, t: load_tiingo_daily(s, k, p),
     ("massive", "tickers"): lambda s, k, p, t: load_massive_tickers(s, k, p, t.date()),
+    ("massive", "delisted"): lambda s, k, p, t: load_massive_delisted(s, p),
     ("massive", "grouped_daily"): lambda s, k, p, t: load_massive_grouped_daily(s, k, p),
     ("massive", "splits"): lambda s, k, p, t: load_massive_actions(s, "splits", p),
     ("massive", "dividends"): lambda s, k, p, t: load_massive_actions(s, "dividends", p),
@@ -360,7 +497,12 @@ LOADERS: dict[tuple[str, str], Loader] = {
 }
 # Datasets that create or rename securities. Rebuilds replay them before everything else,
 # so symbol-keyed market data always resolves against the full security list.
-REFERENCE_DATASETS = [("sec", "company_tickers"), ("massive", "tickers"), ("tiingo", "metadata")]
+REFERENCE_DATASETS = [
+    ("sec", "company_tickers"),
+    ("massive", "tickers"),
+    ("massive", "delisted"),
+    ("tiingo", "metadata"),
+]
 # Market-wide datasets keyed by symbol: rows for unknown symbols are skipped at load time,
 # so they are replayed for securities discovered later (backfill_from_raw).
 SYMBOL_KEYED_DATASETS = [
@@ -413,18 +555,17 @@ def tracked(session: Session, provider: str, dataset: str, key: str) -> Generato
     session.commit()
 
 
-def backfill_from_raw(session: Session, store: RawStore | None, security_ids: set[int]) -> int:
-    """Load stored market-wide rows for newly discovered securities, without the network.
+def backfill_from_raw(session: Session, store: RawStore | None, symbols: set[str]) -> int:
+    """Reload stored market-wide rows for newly discovered symbols, without the network.
 
     Grouped daily bars, splits and dividends were filtered to known symbols when first
-    loaded; a security discovered later gets its rows from those same raw responses, so
-    the live database matches what a rebuild would produce.
+    loaded. When a symbol gains a (security, symbol) pairing (a new security, a delisted
+    listing, a rename) its rows are replayed from those same raw responses, and the
+    date-aware resolver assigns each to the right security, so the live database matches
+    what a rebuild would produce.
     """
-    if store is None or not security_ids:
+    if store is None or not symbols:
         return 0
-    symbols = set(
-        session.scalars(select(Security.ticker).where(Security.id.in_(security_ids))).all()
-    ) - {None}
     records = list(
         store.records(
             provider="massive",
@@ -447,17 +588,22 @@ def backfill_from_raw(session: Session, store: RawStore | None, security_ids: se
             loaded += LOADERS[(r.provider, r.dataset)](
                 session, r.key, {**payload, "results": rows}, r.fetched_at
             )
-    log.info("backfilled %d rows for %d new securities", loaded, len(symbols))
+    log.info("backfilled %d rows for %d newly paired symbols", loaded, len(symbols))
     return loaded
 
 
 @contextmanager
 def discovering(session: Session, store: RawStore | None) -> Generator[None]:
-    """Backfill stored market data for any security created inside the block."""
-    before = set(session.scalars(select(Security.id)))
+    """Backfill stored market data for symbols that gained a (security, symbol) pairing
+    inside the block: new securities, delisted listings and renames."""
+
+    def pairs() -> set[tuple[int, str]]:
+        return set(session.execute(select(TickerHistory.security_id, TickerHistory.ticker)).all())
+
+    before = pairs()
     yield
     session.flush()
-    backfill_from_raw(session, store, set(session.scalars(select(Security.id))) - before)
+    backfill_from_raw(session, store, {symbol for _, symbol in pairs() - before})
 
 
 def sync_tickers(session: Session, sec_provider: SecProvider) -> int:
@@ -514,12 +660,22 @@ def sync_reference_tickers(
     session: Session, massive_provider: MassiveProvider, market: str = "stocks"
 ) -> int:
     """Massive's full active ticker list for a market: add, enrich, then deactivate the
-    Massive-origin securities it no longer lists."""
+    Massive-origin securities it no longer lists. For stocks, also record securities
+    delisted within our market history, and backfill their stored bars."""
     with tracked(session, "massive", "tickers", market) as result:
         pages = massive_provider.fetch_tickers(market)
+        delisted = []
+        if market == "stocks":
+            # Delistings since our market history begins (Massive's free plan: 2 years).
+            first_bar = session.scalar(
+                select(func.min(DailyBar.date)).where(DailyBar.source == "massive")
+            )
+            delisted = massive_provider.fetch_delisted(first_bar or _today() - timedelta(days=730))
         today = _today()
         with discovering(session, massive_provider.raw_store):
             result["rows"] = sum(load_massive_tickers(session, market, p, today) for p in pages)
+            for page in delisted:
+                load_massive_delisted(session, page)
         deactivate_unseen_massive(session, market, today)
     return result["rows"]
 
