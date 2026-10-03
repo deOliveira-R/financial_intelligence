@@ -28,6 +28,7 @@ from fin_intel.models import (
     FiscalCalendar,
     Issuer,
     Security,
+    StatementItem,
     TickerHistory,
 )
 from fin_intel.raw import RawStore
@@ -36,7 +37,7 @@ from fin_intel.raw import RawStore
 TARGETS = {
     "fundamentals": (
         [("sec", "companyfacts")],
-        [Fact, FiscalCalendar, Filing, Concept],
+        [StatementItem, Fact, FiscalCalendar, Filing, Concept],
     ),
     "prices": (
         [
@@ -56,6 +57,7 @@ TARGETS = {
     "all": (
         list(LOADERS),
         [
+            StatementItem,
             Fact,
             FiscalCalendar,
             Filing,

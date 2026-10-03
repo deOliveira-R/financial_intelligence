@@ -352,3 +352,22 @@ class MarketBreadth(Base):
     eligible_50d: Mapped[int]
     above_200d: Mapped[int]
     eligible_200d: Mapped[int]
+
+
+class StatementItem(Base):
+    """Derived: a standard financial statement line for an issuer and period (statements.py).
+    `concept_id` is the XBRL concept the value came from."""
+
+    __tablename__ = "statement_items"
+
+    cik: Mapped[int] = mapped_column(ForeignKey("issuers.cik"), primary_key=True)
+    line_item: Mapped[str] = mapped_column(String(32), primary_key=True)
+    period_start: Mapped[date] = mapped_column(Date, primary_key=True)
+    period_end: Mapped[date] = mapped_column(Date, primary_key=True)
+    period_type: Mapped[str] = mapped_column(String(16))
+    fiscal_year: Mapped[int | None]
+    fiscal_period: Mapped[str | None] = mapped_column(String(8))
+    unit: Mapped[str] = mapped_column(String(64))
+    value: Mapped[float]
+    filed: Mapped[date | None] = mapped_column(Date)
+    concept_id: Mapped[int] = mapped_column(ForeignKey("concepts.id"))

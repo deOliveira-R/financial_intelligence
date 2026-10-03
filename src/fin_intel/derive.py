@@ -1,12 +1,14 @@
 """Derived layer: our inferences on top of reported data. Re-runnable at any time, offline.
 
 For each issuer: infer the fiscal calendar (periods.py), store it, label every fact with
-its own period type and fiscal year/period, and find each filing's primary period end.
+its own period type and fiscal year/period, find each filing's primary period end, and
+build standard statement lines (statements.py).
 """
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
+from fin_intel import statements
 from fin_intel.models import Concept, Fact, Filing, FiscalCalendar, Issuer
 from fin_intel.periods import FiscalSchedule, label
 
@@ -97,6 +99,8 @@ def derive_issuer(session: Session, cik: int) -> None:
             update(Filing),
             [{"id": i, "report_period_end": end} for i, end in report_ends.items()],
         )
+    session.flush()
+    statements.build_issuer(session, cik)
 
 
 def derive_all(session: Session) -> int:
