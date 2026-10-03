@@ -43,6 +43,12 @@ def available_on(series_id: str, period: date) -> date:
     return period + timedelta(days=SERIES[series_id][2])
 
 
+def due(series_id: str, latest: date | None, today: date) -> bool:
+    """Whether a newer week should be out: the week after `latest` ends 7 days later and is
+    published `lag` days after that."""
+    return latest is None or today >= available_on(series_id, latest + timedelta(days=7))
+
+
 def parse(series_id: str, payload: dict[str, Any]) -> tuple[dict[str, Any], list[dict]]:
     """(economic_series row, observations) from a seriesid response."""
     data = (payload.get("response") or {}).get("data") or []

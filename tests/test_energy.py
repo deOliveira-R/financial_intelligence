@@ -74,3 +74,12 @@ def test_timeseries_waits_for_the_wednesday_release(session):
     assert by_day[date(2026, 9, 29)] == 430000
     assert by_day[date(2026, 9, 30)] == 427320
     assert timeseries.parse(spec)  # transforms apply as to any series
+
+
+def test_due_after_the_next_release():
+    friday = date(2026, 9, 25)  # the latest week loaded
+    assert not energy.due("WCESTUS1", friday, date(2026, 9, 30))  # next week ends Oct 2
+    assert not energy.due("WCESTUS1", friday, date(2026, 10, 6))
+    assert energy.due("WCESTUS1", friday, date(2026, 10, 7))  # Wednesday release
+    assert not energy.due("NW2_EPG0_SWO_R48_BCF", friday, date(2026, 10, 7))  # Thursday
+    assert energy.due("WCESTUS1", None, date(2026, 10, 1))

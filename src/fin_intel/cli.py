@@ -294,12 +294,27 @@ def sync_eia(
     series: Annotated[list[str] | None, typer.Argument(help="EIA IDs or aliases")] = None,
 ) -> None:
     """Load EIA weekly energy data (inventories, production, refining, demand, gas storage);
-    default: every series in energy.py."""
+    default: every series in energy.py whose next weekly release is out."""
     from fin_intel import energy
+    from fin_intel.models import EconomicObservation
     from fin_intel.providers import EiaProvider
 
     eia = EiaProvider(raw_store=default_store())
-    ids = [energy.resolve(s) for s in series] if series else list(energy.SERIES)
+    if series:
+        ids = [energy.resolve(s) for s in series]
+    else:  # only series whose next weekly release is out (the shared key is rate-limited)
+        with session_factory()() as session:
+            latest = dict(
+                session.execute(
+                    select(EconomicObservation.series_id, func.max(EconomicObservation.date))
+                    .where(EconomicObservation.series_id.in_(list(energy.SERIES)))
+                    .group_by(EconomicObservation.series_id)
+                ).all()
+            )
+        ids = [i for i in energy.SERIES if energy.due(i, latest.get(i), date.today())]
+        if not ids:
+            typer.echo("EIA: every series is current")
+            return
     _run("sync-eia", ids, lambda s, i: ingest.sync_eia(s, eia, i))
 
 
