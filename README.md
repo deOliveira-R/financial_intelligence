@@ -55,7 +55,7 @@ bookkeeping  sync_runs (one per CLI command), sync_state (last outcome per item)
 | 7 | yfinance | Fallback prices, options chains | |
 | 8 | BLS / BEA / Treasury / EIA | Detailed US macro, yields, energy | |
 | 9 | Exchange crypto APIs + CoinGecko | Crypto OHLCV and metadata | |
-| 10 | FINRA / CFTC / OpenFIGI / Nasdaq Trader | Short volume, positioning, identifiers, listings | |
+| 10 | FINRA / CFTC / OpenFIGI / Nasdaq Trader | Short volume, positioning, identifiers, listings | ✅ CFTC COT, OpenFIGI |
 | 11 | Stooq | Long global index/FX history | |
 | 12 | ECB / IMF / OECD / World Bank | International macro, FX reference rates | |
 | 13 | FMP / Twelve Data | Gap-filling (statements, international) | |
@@ -98,6 +98,7 @@ uv run fin-intel derive                             # recompute fiscal labels af
 uv run fin-intel sync-insiders                      # Form 3/4/5 data sets + daily Form 4s
 uv run fin-intel sync-13f --files 4                 # 13F holdings + CUSIP mapping (OpenFIGI)
 uv run fin-intel sync-congress --since 2024         # House and Senate periodic transaction reports
+uv run fin-intel sync-cot                           # CFTC Commitments of Traders (26 markets, weekly)
 uv run fin-intel prune-raw --dry-run                # what retention would remove (then without --dry-run)
 ```
 
@@ -114,7 +115,8 @@ API endpoints:
 - `GET /fundamentals/{ticker}?concept=Revenues&period_type=annual&form=10-K&as_reported=false`
 - `GET /economic/{series_id}`
 - `GET /economic/{series_id}/observations?start=&end=`
-- `GET /timeseries?s=px:SPY|rsi:14&s=fred:T10Y2Y&start=&pit=true&format=json|csv`
+- `GET /timeseries?s=px:SPY|rsi:14&s=fred:T10Y2Y&s=cot:gold:managed_money:index&start=&pit=true&format=json|csv`
+- `GET /cot`: speculative positioning per market with its 3-year COT index; `/cot/{market}?group=commercial`
 - `GET /screener?where=pe<15&where=roic>=0.15&sort=-earnings_yield&preset=magic|deep_value|quality|cash_cows`
 - `GET /metrics/{ticker}`: valuation, quality and growth metrics as of the latest day
 - `GET /insiders/clusters?days=30&min_insiders=3`, `/insiders/{ticker}?code=P`

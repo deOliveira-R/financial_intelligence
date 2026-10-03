@@ -267,6 +267,35 @@ def sync_congress(
 
 
 @app.command()
+def sync_cot(
+    since: Annotated[
+        str | None, typer.Option(help="YYYY-MM-DD; default: 2006 on first run, else 4 weeks back")
+    ] = None,
+) -> None:
+    """Load CFTC Commitments of Traders (legacy, disaggregated and financial futures) for
+    the curated markets in cot.py. Recent weeks are re-fetched to pick up corrections."""
+    from fin_intel import cot
+    from fin_intel.models import CotPosition
+    from fin_intel.providers import CftcProvider
+
+    cftc = CftcProvider(raw_store=default_store())
+    with session_factory()() as session:
+        latest = session.scalar(select(func.max(CotPosition.report_date)))
+    start = (
+        date.fromisoformat(since)
+        if since
+        else latest - timedelta(weeks=4)
+        if latest
+        else date(2006, 1, 1)
+    )
+    _run(
+        "sync-cot",
+        list(cot.REPORTS),
+        lambda s, r: ingest.sync_cot(s, cftc, r, start),
+    )
+
+
+@app.command()
 def sync_prices(
     tickers: list[str],
     start: Annotated[str | None, typer.Option(help="YYYY-MM-DD; default: incremental")] = None,
@@ -407,6 +436,7 @@ def sync_weekly() -> None:
         ("SEC tickers", sync_tickers),
         ("Massive reference", lambda: sync_reference(otc=settings.market_otc)),
         ("institutional holdings (13F)", lambda: sync_13f(files=4)),
+        ("CFTC positioning", sync_cot),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
     _steps("sync-weekly", steps)

@@ -7,8 +7,8 @@ in [roadmap.md](roadmap.md).
 
 - **EIA weekly petroleum status:** crude and gasoline inventories, refinery utilization,
   production. EIA API v2, free key. Inventory surprises move oil and energy stocks.
-- **CFTC Commitments of Traders:** weekly futures positioning for crude, gold, copper,
-  Treasuries and S&P 500 (`publicreporting.cftc.gov`, Socrata API, free).
+- **More COT markets:** the curated list in `cot.py` covers 26; add any market by its
+  CFTC code. Options-combined reports exist too (futures-only for now).
 - **FRED release calendar:** upcoming CPI, payrolls and GDP release dates for event
   awareness (`fred/releases/dates`); FOMC meeting dates from the Fed.
 - **Longer price history:** rolling Tiingo backfill of the S&P 500 plus major ETFs within
@@ -34,6 +34,9 @@ Each needs a walk-forward backtest on point-in-time data with transaction costs.
 - **Liquidity:** Fed balance sheet minus reverse repo minus TGA vs SPY.
 - **Oil shocks:** `fred:DCOILWTICO|ret:21` vs airlines, energy and broad market (with EIA
   inventories once available).
+- **COT extremes:** managed money / leveraged funds at a 3-year index above 90 or below
+  10 (`cot:copper:managed_money:index`), against forward returns of the matching ETF
+  (CPER, USO, GLD, TLT, IWM). Commercials' index as a contrarian confirmation.
 - **Trend and momentum:** SMA/EMA crossovers and RSI on sector ETFs, with breadth confirmation.
 
 Infrastructure these need: a backtest module (signals, position sizing, costs, walk-forward

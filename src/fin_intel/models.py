@@ -524,3 +524,19 @@ class CongressTrade(Base):
     amount_min: Mapped[float | None] = mapped_column(Float)
     amount_max: Mapped[float | None] = mapped_column(Float)
     comment: Mapped[str | None] = mapped_column(Text)
+
+
+class CotPosition(Base):
+    """One trader group's futures positions in a market on a CFTC report date (cot.py)."""
+
+    __tablename__ = "cot_positions"
+
+    report: Mapped[str] = mapped_column(String(16), primary_key=True)
+    market_code: Mapped[str] = mapped_column(String(8), primary_key=True)
+    report_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    group: Mapped[str] = mapped_column(String(16), primary_key=True)
+    market_name: Mapped[str | None] = mapped_column(String(128))
+    open_interest: Mapped[float | None] = mapped_column(Float)
+    long: Mapped[float | None] = mapped_column(Float)
+    short: Mapped[float | None] = mapped_column(Float)
+    spread: Mapped[float | None] = mapped_column(Float)

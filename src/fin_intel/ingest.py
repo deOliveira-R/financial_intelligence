@@ -20,7 +20,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import congress, derive, insiders, thirteenf
+from fin_intel import congress, cot, derive, insiders, thirteenf
 from fin_intel.db import upsert
 from fin_intel.models import (
     Concept,
@@ -38,6 +38,7 @@ from fin_intel.models import (
     TickerHistory,
 )
 from fin_intel.providers import (
+    CftcProvider,
     FredProvider,
     HouseProvider,
     MassiveProvider,
@@ -547,6 +548,10 @@ LOADERS: dict[tuple[str, str], Loader] = {
         s, congress.parse_senate_search(p)
     ),
     ("senate", "ptr"): lambda s, k, p, t: congress.load_report(s, *congress.parse_senate_ptr(k, p)),
+    **{
+        ("cftc", report): (lambda r: lambda s, k, p, t: cot.load(s, r, p))(report)
+        for report in cot.REPORTS
+    },
 }
 # Datasets that create or rename securities. Rebuilds replay them before everything else,
 # so symbol-keyed market data always resolves against the full security list.
@@ -951,6 +956,29 @@ def sync_senate_ptr(session: Session, senate: SenateProvider, doc_id: str) -> in
         result["rows"] = LOADERS[("senate", "ptr")](
             session, doc_id, senate.fetch_ptr(doc_id), datetime.now(UTC)
         )
+    return result["rows"]
+
+
+# --- CFTC positioning -----------------------------------------------------------------------
+
+
+def sync_cot(session: Session, cftc: CftcProvider, report: str, since: date) -> int:
+    """A COT report's rows for the curated markets since `since`, page by page."""
+    if report == "legacy":
+        codes = [code for code, _, _ in cot.MARKETS.values()]
+    else:
+        family = next(f for f, r in cot.FAMILY_REPORT.items() if r == report)
+        codes = [code for code, fam, _ in cot.MARKETS.values() if fam == family]
+    with tracked(session, "cftc", report, since.isoformat()) as result:
+        rows, offset = 0, 0
+        while True:
+            session.commit()  # fetch-then-load
+            page = cftc.fetch_reports(report, cot.REPORTS[report], codes, since, offset)
+            rows += cot.load(session, report, page)
+            if len(page) < cftc.page_size:
+                break
+            offset += cftc.page_size
+        result["rows"] = rows
     return result["rows"]
 
 

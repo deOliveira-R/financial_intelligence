@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import congress, ingest, insiders, portfolio, screener, thirteenf, timeseries
+from fin_intel import congress, cot, ingest, insiders, portfolio, screener, thirteenf, timeseries
 from fin_intel.config import get_settings
 from fin_intel.db import get_session
 from fin_intel.fundamentals import Fact, derive_q4, latest_per_period, split_adjust
@@ -736,7 +736,7 @@ def congress_trades(
     session: SessionDep,
     member: str | None = Query(None, description="Part of a name, e.g. pelosi"),
     ticker: str | None = None,
-    since: date | None = Query(None, description="Transaction date on or after"),
+    since: Annotated[date | None, Query(description="Transaction date on or after")] = None,
     type: str | None = Query(None, description="purchase, sale or exchange"),
     limit: int = Query(200, le=2000),
 ) -> list[congress.Trade]:
@@ -753,6 +753,42 @@ def congress_popular(
 ) -> list[congress.Popular]:
     """Tickers traded by the most distinct members within the window."""
     return congress.most_traded(session, days)[:limit]
+
+
+# --- CFTC positioning ------------------------------------------------------------------------
+
+
+@api.get("/cot")
+def cot_summary(session: SessionDep) -> list[cot.Summary]:
+    """Speculative positioning per market at the latest report (managed money for
+    commodities, leveraged funds for financials), with its 3-year COT index (0-100)."""
+    return cot.summary(session)
+
+
+@api.get("/cot/{market}")
+def cot_market(
+    session: SessionDep, market: str, group: str = "managed_money", limit: int = Query(156)
+) -> list[dict]:
+    """A group's weekly positions in one market, newest first, e.g. /cot/gold, or
+    /cot/sp500?group=leveraged (groups: see cot.FIELDS)."""
+    try:
+        rows = cot.history(session, market, group)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    fields = {f: cot.values(rows, f) for f in ("net", "net_pct_oi", "index")}
+    out = [
+        {
+            "report_date": r.report_date,
+            "available_on": cot.available_on(r.report_date),
+            "long": r.long,
+            "short": r.short,
+            "spread": r.spread,
+            "open_interest": r.open_interest,
+            **{f: v[i] for f, v in fields.items()},
+        }
+        for i, r in enumerate(rows)
+    ]
+    return out[::-1][:limit]
 
 
 app.include_router(api)

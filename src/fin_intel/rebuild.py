@@ -26,6 +26,7 @@ from fin_intel.models import (
     CongressReport,
     CongressTrade,
     CorporateAction,
+    CotPosition,
     CusipMapping,
     DailyBar,
     EconomicObservation,
@@ -73,6 +74,10 @@ TARGETS = {
         [("house", "fd_index"), ("house", "ptr"), ("senate", "search"), ("senate", "ptr")],
         [CongressTrade, CongressReport],
     ),
+    "cot": (
+        [("cftc", "legacy"), ("cftc", "disaggregated"), ("cftc", "tff")],
+        [CotPosition],
+    ),
     "economic": (
         [("fred", "series"), ("fred", "observations"), ("fred", "vintages")],
         [EconomicVintage, EconomicObservation, EconomicSeries],
@@ -112,6 +117,7 @@ TARGETS = {
             CusipMapping,
             CongressTrade,
             CongressReport,
+            CotPosition,
         ],
     ),
 }

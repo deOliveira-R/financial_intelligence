@@ -6,6 +6,8 @@ A spec names one series:
     close:SPY              raw close          volume:SPY   raw volume
     fred:DGS10             a FRED series, as known on each date (see `pit`)
     breadth:pct_above_200d market internals for US-listed common stocks (see breadth.py)
+    cot:crude:managed_money:index  CFTC positioning: market:group[:field], field one of
+                           net (default), long, short, net_pct_oi, oi, index (see cot.py)
     px:CPER/px:GLD         ratio of two series      fred:DGS10-fred:DGS2   difference
     px:SPY|sma:200         transforms, applied left to right after any ratio/difference:
                            sma:N ema:N rsi:N macd ret:N diff:N vol:N z:N high:N low:N dd:N yoy
@@ -17,7 +19,8 @@ by D, from the series' revision history (ALFRED vintages). Monthly CPI appears o
 release date, as first printed, and changes on the days it was revised. Before a series'
 history begins (e.g. 2005 for daily Treasury yields) there's no value. With `pit=False`,
 today's revised values are carried forward from each observation date, which looks
-ahead by the publication lag and the later revisions.
+ahead by the publication lag and the later revisions. COT positions (Tuesday's) likewise
+appear on their Friday release, or on their report date with `pit=False`.
 """
 
 import re
@@ -38,7 +41,7 @@ from fin_intel.models import (
 )
 from fin_intel.prices import adjustments
 
-SOURCES = ("px", "close", "volume", "fred", "breadth")
+SOURCES = ("px", "close", "volume", "fred", "breadth", "cot")
 _OPERATOR = re.compile(rf"([/-])(?=(?:{'|'.join(SOURCES)}):)")
 
 
@@ -134,6 +137,8 @@ def _load(
     session: Session, term: tuple[str, str], days: list[date], pit: bool
 ) -> indicators.Series:
     source, ident = term
+    if source == "cot":
+        return _cot(session, ident.lower(), days, pit)
     if source == "breadth":
         return _breadth(session, ident.lower(), days)
     if source == "fred":
@@ -195,6 +200,19 @@ def _breadth(session: Session, field: str, days: list[date]) -> indicators.Serie
     if not by_date:
         raise SpecError("no breadth data; run fin-intel derive-breadth")
     return [by_date.get(d) for d in days]
+
+
+def _cot(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+    from fin_intel import cot
+
+    market, _, rest = ident.partition(":")
+    group, _, field = rest.partition(":")
+    if not group:
+        raise SpecError(f"cot:{ident}: expected cot:market:group[:field]")
+    try:
+        return cot.series_by_day(session, market, group, field or "net", days, pit)
+    except ValueError as exc:
+        raise SpecError(str(exc)) from None
 
 
 def _fred_latest(session: Session, series_id: str, days: list[date]) -> indicators.Series:
