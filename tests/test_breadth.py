@@ -97,9 +97,6 @@ def test_breadth_in_timeseries(session):
     breadth.compute(session)
     _, series = timeseries.build(session, ["breadth:ad_ratio", "breadth:NET_ADVANCES"])
     assert series["breadth:ad_ratio"] == [None, 1.0, 1.0]
-    assert series["breadth:NET_ADVANCES"] == [0, 0, 0] or series["breadth:NET_ADVANCES"][1:] == [
-        0,
-        0,
-    ]
+    assert series["breadth:NET_ADVANCES"] == [None, 0, 0]  # day one has no previous day
     with pytest.raises(timeseries.SpecError, match="unknown breadth field"):
         timeseries.build(session, ["breadth:nope"])
