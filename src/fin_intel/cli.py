@@ -12,7 +12,7 @@ from fin_intel import derive, ingest
 from fin_intel.config import get_settings
 from fin_intel.db import init_db, session_factory
 from fin_intel.ingest import SNAPSHOT_DATASETS
-from fin_intel.models import DailyBar, SyncRun, SyncState
+from fin_intel.models import CongressReport, DailyBar, SyncRun, SyncState
 from fin_intel.providers import (
     FredProvider,
     MassiveProvider,
@@ -215,6 +215,58 @@ def sync_13f(
 
 
 @app.command()
+def sync_congress(
+    since: Annotated[
+        int | None, typer.Option(help="First year of reports to load; default: 2 years back")
+    ] = None,
+    chamber: Annotated[str, typer.Option(help="house, senate or all")] = "all",
+) -> None:
+    """Load members of Congress's trades (Periodic Transaction Reports): each chamber's
+    filing index, then every electronic report not parsed yet."""
+    from fin_intel import congress
+    from fin_intel.providers import HouseProvider, SenateProvider
+
+    store = default_store()
+    today = date.today()
+    first = since or today.year - 2
+    if chamber in ("house", "all"):
+        house = HouseProvider(raw_store=store)
+        loaded = set(store.latest_hashes("house", "fd_index"))
+        # Past years' indexes are final; the current one grows daily.
+        years = [str(y) for y in range(first, today.year + 1) if str(y) not in loaded]
+        years = sorted(set(years) | {str(today.year)})
+        _run("sync-congress", years, lambda s, y: ingest.sync_house_index(s, house, int(y)))
+        with session_factory()() as session:
+            pending = {
+                r.doc_id: r.year or (r.filed.year if r.filed else today.year)
+                for r in congress.pending_reports(session, "house")
+                if (r.year or first) >= first
+            }
+        if pending:
+            _run(
+                "sync-congress",
+                list(pending),
+                lambda s, d: ingest.sync_house_ptr(s, house, d, pending[d]),
+            )
+    if chamber in ("senate", "all"):
+        senate = SenateProvider(raw_store=store)
+        with session_factory()() as session:
+            latest = session.scalar(
+                select(func.max(CongressReport.filed)).where(CongressReport.chamber == "senate")
+            )
+        start = latest - timedelta(days=14) if latest else date(first, 1, 1)
+        _run(
+            "sync-congress",
+            [start.isoformat()],
+            lambda s, d: ingest.sync_senate_index(s, senate, date.fromisoformat(d)),
+        )
+        with session_factory()() as session:
+            ids = [r.doc_id for r in congress.pending_reports(session, "senate")]
+        if ids:
+            _run("sync-congress", ids, lambda s, d: ingest.sync_senate_ptr(s, senate, d))
+
+
+@app.command()
 def sync_prices(
     tickers: list[str],
     start: Annotated[str | None, typer.Option(help="YYYY-MM-DD; default: incremental")] = None,
@@ -338,6 +390,7 @@ def sync_daily() -> None:
         ("fundamentals (SEC bulk, changed companies only)", sync_fundamentals_bulk),
         ("company metrics", derive_metrics_cmd),
         ("insider transactions", sync_insiders),
+        ("congressional trades", sync_congress),
         ("economic series", lambda: sync_economic(settings.fred_series_ids)),
     ]
     if settings.watchlist_tickers:

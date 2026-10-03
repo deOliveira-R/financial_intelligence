@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import ingest, insiders, portfolio, screener, thirteenf, timeseries
+from fin_intel import congress, ingest, insiders, portfolio, screener, thirteenf, timeseries
 from fin_intel.config import get_settings
 from fin_intel.db import get_session
 from fin_intel.fundamentals import Fact, derive_q4, latest_per_period, split_adjust
@@ -726,6 +726,33 @@ def holdings_security(session: SessionDep, ticker: str, limit: int = Query(25, l
             for p, name in rows
         ],
     }
+
+
+# --- congressional trades --------------------------------------------------------------------
+
+
+@api.get("/congress/trades")
+def congress_trades(
+    session: SessionDep,
+    member: str | None = Query(None, description="Part of a name, e.g. pelosi"),
+    ticker: str | None = None,
+    since: date | None = Query(None, description="Transaction date on or after"),
+    type: str | None = Query(None, description="purchase, sale or exchange"),
+    limit: int = Query(200, le=2000),
+) -> list[congress.Trade]:
+    """Members of Congress's reported trades (PTRs), newest transaction first. Amounts are
+    the reported range; `filed` minus `trans_date` is the disclosure lag (up to 45 days)."""
+    return congress.trades(
+        session, member=member, ticker=ticker, since=since, trans_type=type, limit=limit
+    )
+
+
+@api.get("/congress/popular")
+def congress_popular(
+    session: SessionDep, days: int = Query(90, le=730), limit: int = Query(50, le=500)
+) -> list[congress.Popular]:
+    """Tickers traded by the most distinct members within the window."""
+    return congress.most_traded(session, days)[:limit]
 
 
 app.include_router(api)

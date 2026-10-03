@@ -89,6 +89,21 @@ class Provider:
         resp = self._request(url, None, dataset=dataset, key=key, json_body=body)
         return resp.json()
 
+    def post_form(
+        self,
+        url: str,
+        form: dict[str, str],
+        *,
+        dataset: str,
+        key: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any:
+        """POST a form and return the JSON response (the form is recorded like a body)."""
+        resp = self._request(
+            url, None, dataset=dataset, key=key, form_body=form, extra_headers=headers
+        )
+        return resp.json()
+
     def _request(
         self,
         url: str,
@@ -97,6 +112,8 @@ class Provider:
         dataset: str,
         key: str | None,
         json_body: Any = None,
+        form_body: dict[str, str] | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         if not url.startswith("http"):
             url = self.base_url + url
@@ -104,20 +121,23 @@ class Provider:
         # Merge into any query already in the URL (pagination links carry a cursor):
         # httpx's `params=` would replace it instead.
         request_url = httpx.URL(url).copy_merge_params({**public_params, **self.auth_params()})
-        headers = self.headers()
+        headers = self.headers() | (extra_headers or {})
+        body = json_body if form_body is None else form_body
         for attempt in range(self.max_retries + 1):
             self.limiter.acquire()
             try:
-                if json_body is None:
-                    resp = self.client.get(request_url, headers=headers)
-                else:
+                if form_body is not None:
+                    resp = self.client.post(request_url, headers=headers, data=form_body)
+                elif json_body is not None:
                     resp = self.client.post(request_url, headers=headers, json=json_body)
+                else:
+                    resp = self.client.get(request_url, headers=headers)
             except httpx.TransportError as exc:
                 if attempt == self.max_retries:
                     raise ProviderError(f"{self.name}: {exc}") from exc
             else:
                 if self.raw_store:
-                    recorded = public_params if json_body is None else {"body": json_body}
+                    recorded = public_params if body is None else {"body": body}
                     self.raw_store.save(
                         self.name, dataset, key, recorded, resp.status_code, resp.content
                     )

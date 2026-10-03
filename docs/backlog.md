@@ -52,6 +52,21 @@ splits, performance stats), plus storing strategy runs for comparison.
 - **PostgreSQL:** SQLite holds the full fundamentals load (~20-25 GB, read-mostly, one
   writer); move when concurrency or size demands it.
 
+## Big players (phase D)
+
+- **Paper congressional reports:** about 12% of House PTRs (DocID 8/9) and some Senate
+  reports are scanned images; they're indexed but have no transactions. OCR would recover
+  them.
+- **Congress history:** PTRs go back to 2012; the default load is 2 years. Amendments
+  arrive as new reports, so an amended trade can appear twice.
+- **Congress signals:** purchases by several members, committee membership vs sector
+  (e.g. Armed Services and defense stocks), excess returns after disclosure date.
+- **13D/13G stakes:** activists crossing 5% (EDGAR full-text search or daily index).
+- **Famous-investor watchlist:** named 13F filers (Berkshire, Pershing Square, Scion,
+  Baupost, Appaloosa...) with alerts on new positions.
+- **Insider and 13F signal backtests:** cluster buys and "new position by N top managers"
+  vs forward returns.
+
 ## Portfolio
 
 - Fidelity transaction-history parser (holding periods, recent purchases, realized gains).

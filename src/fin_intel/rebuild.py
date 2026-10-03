@@ -23,6 +23,8 @@ from fin_intel.ingest import (
 from fin_intel.models import (
     CompanyMetrics,
     Concept,
+    CongressReport,
+    CongressTrade,
     CorporateAction,
     CusipMapping,
     DailyBar,
@@ -67,6 +69,10 @@ TARGETS = {
         [("sec", "13f_dataset"), ("openfigi", "mapping")],
         [InstitutionalPosition, InstitutionalFiler, CusipMapping],
     ),
+    "congress": (
+        [("house", "fd_index"), ("house", "ptr"), ("senate", "search"), ("senate", "ptr")],
+        [CongressTrade, CongressReport],
+    ),
     "economic": (
         [("fred", "series"), ("fred", "observations"), ("fred", "vintages")],
         [EconomicVintage, EconomicObservation, EconomicSeries],
@@ -104,6 +110,8 @@ TARGETS = {
             InstitutionalPosition,
             InstitutionalFiler,
             CusipMapping,
+            CongressTrade,
+            CongressReport,
         ],
     ),
 }

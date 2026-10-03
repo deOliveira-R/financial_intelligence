@@ -9,6 +9,7 @@ dependencies = [
     "fastapi>=0.115",
     "httpx>=0.28",
     "pydantic-settings>=2.6",
+    "pypdf>=6.19.0",
     "sqlalchemy>=2.0.36",
     "typer>=0.15",
     "uvicorn>=0.32",

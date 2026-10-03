@@ -116,3 +116,19 @@ def test_api_key_required_when_configured(client, monkeypatch):
     assert client.get("/securities/AAPL", headers={"X-API-Key": "wrong"}).status_code == 401
     assert client.get("/securities/AAPL", headers={"X-API-Key": "s3cret"}).status_code == 200
     assert client.get("/health").status_code == 200  # uptime checks stay open
+
+
+def test_congress_endpoints(client, session):
+    from pathlib import Path
+
+    from fin_intel import congress
+
+    pdf = (Path(__file__).parent / "fixtures" / "20034836.pdf").read_bytes()
+    congress.load_report(session, *congress.parse_house_ptr("20034836", pdf))
+    session.commit()
+    trades = client.get("/congress/trades", params={"member": "pelosi"}).json()
+    assert [t["ticker"] for t in trades] == ["INTC", "UBER"]
+    assert trades[0]["amount_min"] == 1_000_001 and trades[0]["filed"] == "2026-06-23"
+    assert client.get("/congress/trades", params={"ticker": "AAPL"}).json() == []
+    popular = client.get("/congress/popular", params={"days": 730}).json()
+    assert {p["ticker"] for p in popular} == {"INTC", "UBER"}

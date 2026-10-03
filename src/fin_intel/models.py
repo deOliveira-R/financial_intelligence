@@ -486,3 +486,41 @@ class CusipMapping(Base):
     ticker: Mapped[str | None] = mapped_column(String(32))
     security_type: Mapped[str | None] = mapped_column(String(64))
     security_id: Mapped[int | None] = mapped_column(ForeignKey("securities.id"))
+
+
+class CongressReport(Base):
+    """A member of Congress's Periodic Transaction Report (congress.py). `transactions` is
+    None until the report itself is parsed (paper filings never are)."""
+
+    __tablename__ = "congress_reports"
+
+    doc_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    chamber: Mapped[str] = mapped_column(String(8))  # house or senate
+    name: Mapped[str | None] = mapped_column(String(128), index=True)
+    state: Mapped[str | None] = mapped_column(String(8))  # House state and district
+    filed: Mapped[date | None] = mapped_column(Date, index=True)
+    year: Mapped[int | None]
+    electronic: Mapped[bool] = mapped_column(default=True)
+    transactions: Mapped[int | None]
+
+
+class CongressTrade(Base):
+    """One transaction in a PTR. Amounts are the reported range's bounds (dollars);
+    amount_max is None for the open-ended top range."""
+
+    __tablename__ = "congress_trades"
+
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    doc_id: Mapped[str] = mapped_column(String(64), index=True)
+    chamber: Mapped[str] = mapped_column(String(8))
+    owner: Mapped[str | None] = mapped_column(String(16))  # self, spouse, joint, child
+    ticker: Mapped[str | None] = mapped_column(String(16), index=True)
+    asset_name: Mapped[str | None] = mapped_column(String(256))
+    asset_type: Mapped[str | None] = mapped_column(String(64))
+    # purchase, sale, sale_partial or exchange
+    trans_type: Mapped[str | None] = mapped_column(String(16))
+    trans_date: Mapped[date] = mapped_column(Date, index=True)
+    notified: Mapped[date | None] = mapped_column(Date)
+    amount_min: Mapped[float | None] = mapped_column(Float)
+    amount_max: Mapped[float | None] = mapped_column(Float)
+    comment: Mapped[str | None] = mapped_column(Text)

@@ -1,4 +1,5 @@
 from fin_intel.providers.base import Provider
+from fin_intel.providers.congress import HouseProvider, SenateProvider
 from fin_intel.providers.errors import (
     NotConfiguredError,
     NotFoundError,
@@ -13,6 +14,7 @@ from fin_intel.providers.tiingo import TiingoProvider
 
 __all__ = [
     "FredProvider",
+    "HouseProvider",
     "MassiveProvider",
     "NotConfiguredError",
     "NotFoundError",
@@ -21,5 +23,6 @@ __all__ = [
     "ProviderError",
     "QuotaExceededError",
     "SecProvider",
+    "SenateProvider",
     "TiingoProvider",
 ]

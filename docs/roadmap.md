@@ -41,7 +41,9 @@ Done: the 53-series macro pack with ALFRED revision history, the point-in-time t
 - Screener endpoint.
 - Infrastructure: move to PostgreSQL on the VM; back up raw nightly and the database weekly.
 
-## Phase D: big players (goal 3)
+## Phase D: big players (goal 3): core done
+
+Done (2026-10-03): insider transactions (quarterly data sets plus daily Form 4s) with cluster-buy signals; 13F holdings for every filer, with quarter-over-quarter changes and CUSIPs mapped via OpenFIGI; congressional trades from House PTR PDFs and Senate eFD. Still to do: 13D/13G stakes, a famous-investor watchlist, signal backtests.
 
 - 13F holdings for a chosen list of managers (Berkshire, Scion, Pershing Square…), with quarter-over-quarter changes.
 - Form 4 insider transactions and cluster-buying signals; 13D/13G stakes.

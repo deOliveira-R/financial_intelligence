@@ -20,7 +20,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import derive, insiders, thirteenf
+from fin_intel import congress, derive, insiders, thirteenf
 from fin_intel.db import upsert
 from fin_intel.models import (
     Concept,
@@ -39,10 +39,13 @@ from fin_intel.models import (
 )
 from fin_intel.providers import (
     FredProvider,
+    HouseProvider,
     MassiveProvider,
+    NotFoundError,
     OpenFigiProvider,
     ProviderError,
     SecProvider,
+    SenateProvider,
     TiingoProvider,
     fred,
     massive,
@@ -538,6 +541,12 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("fred", "series"): lambda s, k, p, t: load_fred_series(s, p),
     ("fred", "observations"): lambda s, k, p, t: load_fred_observations(s, k, p),
     ("fred", "vintages"): lambda s, k, p, t: load_fred_vintages(s, k, p),
+    ("house", "fd_index"): lambda s, k, p, t: congress.load_index(s, congress.parse_house_index(p)),
+    ("house", "ptr"): lambda s, k, p, t: congress.load_report(s, *congress.parse_house_ptr(k, p)),
+    ("senate", "search"): lambda s, k, p, t: congress.load_index(
+        s, congress.parse_senate_search(p)
+    ),
+    ("senate", "ptr"): lambda s, k, p, t: congress.load_report(s, *congress.parse_senate_ptr(k, p)),
 }
 # Datasets that create or rename securities. Rebuilds replay them before everything else,
 # so symbol-keyed market data always resolves against the full security list.
@@ -555,7 +564,14 @@ SYMBOL_KEYED_DATASETS = [
     ("massive", "dividends"),
 ]
 # Datasets whose loaders take the raw body (bytes) rather than parsed JSON.
-BINARY_DATASETS = {("sec", "insider_dataset"), ("sec", "form4"), ("sec", "13f_dataset")}
+BINARY_DATASETS = {
+    ("sec", "insider_dataset"),
+    ("sec", "form4"),
+    ("sec", "13f_dataset"),
+    ("house", "fd_index"),
+    ("house", "ptr"),
+    ("senate", "ptr"),
+}
 # Datasets whose response only means something with its request (recorded as params).
 REQUEST_DATASETS = {("openfigi", "mapping")}
 # Datasets where each response is a full snapshot, so only the latest one matters.
@@ -564,6 +580,7 @@ SNAPSHOT_DATASETS = {
     ("massive", "grouped_daily"),  # one complete response per trading day
     ("fred", "series"),
     ("fred", "observations"),
+    ("house", "fd_index"),  # the year's complete index
 }
 
 
@@ -884,6 +901,57 @@ def sync_cusip_mappings(
     thirteenf.link_securities(session)
     session.commit()
     return done
+
+
+# --- congressional trades -------------------------------------------------------------------
+
+
+def sync_house_index(session: Session, house: HouseProvider, year: int) -> int:
+    """The year's filing index: which PTRs exist (each is then fetched on its own)."""
+    with tracked(session, "house", "fd_index", str(year)) as result:
+        session.commit()  # fetch-then-load
+        result["rows"] = LOADERS[("house", "fd_index")](
+            session, str(year), house.fetch_index(year), datetime.now(UTC)
+        )
+    return result["rows"]
+
+
+def sync_house_ptr(session: Session, house: HouseProvider, doc_id: str, year: int) -> int:
+    with tracked(session, "house", "ptr", doc_id) as result:
+        session.commit()
+        try:
+            body = house.fetch_ptr(doc_id, year)
+        except NotFoundError:
+            # Listed but never published (withdrawn): don't retry it every day.
+            congress.load_report(session, {"doc_id": doc_id, "chamber": "house"}, [])
+            result["rows"] = 0
+        else:
+            result["rows"] = LOADERS[("house", "ptr")](session, doc_id, body, datetime.now(UTC))
+    return result["rows"]
+
+
+def sync_senate_index(session: Session, senate: SenateProvider, since: date) -> int:
+    """Every PTR submitted since `since`, page by page."""
+    with tracked(session, "senate", "search", since.isoformat()) as result:
+        rows, start = 0, 0
+        while True:
+            session.commit()
+            page = senate.search_ptrs(since.strftime("%m/%d/%Y"), start)
+            rows += congress.load_index(session, congress.parse_senate_search(page))
+            start += senate.page_size
+            if start >= int(page.get("recordsFiltered") or 0):
+                break
+        result["rows"] = rows
+    return result["rows"]
+
+
+def sync_senate_ptr(session: Session, senate: SenateProvider, doc_id: str) -> int:
+    with tracked(session, "senate", "ptr", doc_id) as result:
+        session.commit()
+        result["rows"] = LOADERS[("senate", "ptr")](
+            session, doc_id, senate.fetch_ptr(doc_id), datetime.now(UTC)
+        )
+    return result["rows"]
 
 
 def sync_economic(session: Session, fred_provider: FredProvider, series_id: str) -> int:

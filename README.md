@@ -46,7 +46,7 @@ bookkeeping  sync_runs (one per CLI command), sync_state (last outcome per item)
 
 | Rank | Provider | Role | Status |
 |---|---|---|---|
-| 1 | SEC EDGAR | Fundamentals, ticker↔CIK, insiders (Form 4), 13F, filings | ✅ tickers + XBRL facts |
+| 1 | SEC EDGAR | Fundamentals, ticker↔CIK, insiders (Form 4), 13F, filings | ✅ tickers, XBRL facts (bulk), insiders, 13F |
 | 2 | FRED / ALFRED | Macro, rates, yield curve, FX, commodities | ✅ series + observations |
 | 3 | Tiingo | Adjusted daily price history | ✅ daily bars |
 | 4 | Massive (Polygon) | Whole-market daily bars, splits/dividends, reference data | ✅ grouped daily + splits + dividends + reference tickers |
@@ -60,6 +60,7 @@ bookkeeping  sync_runs (one per CLI command), sync_state (last outcome per item)
 | 12 | ECB / IMF / OECD / World Bank | International macro, FX reference rates | |
 | 13 | FMP / Twelve Data | Gap-filling (statements, international) | |
 | 14 | Alpha Vantage / EODHD | Occasional spot checks only | |
+| — | House Clerk / Senate eFD | Members of Congress's trades (PTRs) | ✅ electronic reports |
 
 ## Setup
 
@@ -94,6 +95,9 @@ uv run fin-intel rebuild market                     # securities, prices, action
 uv run fin-intel sync-fundamentals-bulk             # every tracked company from SEC's nightly file
 uv run fin-intel screen --preset magic              # or --where 'pe<15' --where 'roic>0.15' --sort -fcf_yield
 uv run fin-intel derive                             # recompute fiscal labels after a periods.py change
+uv run fin-intel sync-insiders                      # Form 3/4/5 data sets + daily Form 4s
+uv run fin-intel sync-13f --files 4                 # 13F holdings + CUSIP mapping (OpenFIGI)
+uv run fin-intel sync-congress --since 2024         # House and Senate periodic transaction reports
 uv run fin-intel prune-raw --dry-run                # what retention would remove (then without --dry-run)
 ```
 
@@ -112,6 +116,10 @@ API endpoints:
 - `GET /economic/{series_id}/observations?start=&end=`
 - `GET /timeseries?s=px:SPY|rsi:14&s=fred:T10Y2Y&start=&pit=true&format=json|csv`
 - `GET /screener?where=pe<15&where=roic>=0.15&sort=-earnings_yield&preset=magic|deep_value|quality|cash_cows`
+- `GET /metrics/{ticker}`: valuation, quality and growth metrics as of the latest day
+- `GET /insiders/clusters?days=30&min_insiders=3`, `/insiders/{ticker}?code=P`
+- `GET /holdings/managers?q=berkshire`, `/holdings/managers/{cik}?period=`, `/holdings/security/{ticker}`
+- `GET /congress/trades?member=pelosi&ticker=&since=&type=purchase`, `/congress/popular?days=90`
 - `GET /portfolio/accounts`, `/portfolio/positions`, `/portfolio/lots`, `/portfolio/realized?year=`, `/portfolio/harvest?min_loss=`, `/portfolio/context/{ticker}`, `/portfolio/replacements/{ticker}`
 
 ## Deployment
