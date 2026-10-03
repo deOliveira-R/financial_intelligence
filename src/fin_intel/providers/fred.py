@@ -25,6 +25,23 @@ class FredProvider(Provider):
     def fetch_series(self, series_id: str) -> Any:
         return self.get("/series", {"series_id": series_id}, dataset="series", key=series_id)
 
+    def fetch_series_release(self, series_id: str) -> Any:
+        """The release (publication) a series belongs to."""
+        return self.get(
+            "/series/release", {"series_id": series_id}, dataset="series_release", key=series_id
+        )
+
+    def fetch_release_dates(self, release_id: int, since: date) -> Any:
+        """A release's publication dates since `since`, including scheduled future ones."""
+        params = {
+            "release_id": release_id,
+            "realtime_start": since.isoformat(),
+            "realtime_end": "9999-12-31",
+            "include_release_dates_with_no_data": "true",
+            "limit": 10000,
+        }
+        return self.get("/release/dates", params, dataset="release_dates", key=str(release_id))
+
     def fetch_vintage_dates(self, series_id: str, since: date | None = None) -> list[date]:
         """Dates on which the series was published or revised (ALFRED), oldest first."""
         dates: list[date] = []

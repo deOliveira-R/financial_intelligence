@@ -30,6 +30,8 @@ from fin_intel.models import (
     CusipMapping,
     DailyBar,
     EconomicObservation,
+    EconomicRelease,
+    EconomicReleaseDate,
     EconomicSeries,
     EconomicVintage,
     Fact,
@@ -79,8 +81,22 @@ TARGETS = {
         [CotPosition],
     ),
     "economic": (
-        [("fred", "series"), ("fred", "observations"), ("fred", "vintages"), ("eia", "series")],
-        [EconomicVintage, EconomicObservation, EconomicSeries],
+        [
+            ("fred", "series"),
+            ("fred", "observations"),
+            ("fred", "vintages"),
+            ("eia", "series"),
+            ("fred", "series_release"),
+            ("fred", "release_dates"),
+            ("fed", "fomc_calendar"),
+        ],
+        [
+            EconomicVintage,
+            EconomicObservation,
+            EconomicSeries,
+            EconomicReleaseDate,
+            EconomicRelease,
+        ],
     ),
     # Securities and market data, without re-loading fundamentals (minutes, not hours).
     "market": (
@@ -111,6 +127,8 @@ TARGETS = {
             EconomicVintage,
             EconomicObservation,
             EconomicSeries,
+            EconomicReleaseDate,
+            EconomicRelease,
             InsiderTransaction,
             InstitutionalPosition,
             InstitutionalFiler,

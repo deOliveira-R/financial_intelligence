@@ -8,6 +8,7 @@ from fin_intel.providers.errors import (
     ProviderError,
     QuotaExceededError,
 )
+from fin_intel.providers.fed import FedProvider
 from fin_intel.providers.fred import FredProvider
 from fin_intel.providers.massive import MassiveProvider
 from fin_intel.providers.openfigi import OpenFigiProvider
@@ -17,6 +18,7 @@ from fin_intel.providers.tiingo import TiingoProvider
 __all__ = [
     "CftcProvider",
     "EiaProvider",
+    "FedProvider",
     "FredProvider",
     "HouseProvider",
     "MassiveProvider",

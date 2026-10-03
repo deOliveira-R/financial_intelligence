@@ -247,6 +247,26 @@ class EconomicSeries(Base):
     frequency: Mapped[str | None] = mapped_column(String(16))
     seasonal_adjustment: Mapped[str | None] = mapped_column(String(16))
     last_updated: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    release_id: Mapped[int | None] = mapped_column(ForeignKey("economic_releases.id"))
+
+
+class EconomicRelease(Base):
+    """A FRED release (e.g. Consumer Price Index): the publication a series comes out in."""
+
+    __tablename__ = "economic_releases"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    name: Mapped[str | None] = mapped_column(String(256))
+    link: Mapped[str | None] = mapped_column(String(512))
+
+
+class EconomicReleaseDate(Base):
+    """A release's publication date, past or scheduled."""
+
+    __tablename__ = "economic_release_dates"
+
+    release_id: Mapped[int] = mapped_column(ForeignKey("economic_releases.id"), primary_key=True)
+    date: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
 
 
 class EconomicObservation(Base):

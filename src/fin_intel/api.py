@@ -8,7 +8,17 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import congress, cot, ingest, insiders, portfolio, screener, thirteenf, timeseries
+from fin_intel import (
+    congress,
+    cot,
+    ingest,
+    insiders,
+    portfolio,
+    releases,
+    screener,
+    thirteenf,
+    timeseries,
+)
 from fin_intel.config import get_settings
 from fin_intel.db import get_session
 from fin_intel.fundamentals import Fact, derive_q4, latest_per_period, split_adjust
@@ -753,6 +763,21 @@ def congress_popular(
 ) -> list[congress.Popular]:
     """Tickers traded by the most distinct members within the window."""
     return congress.most_traded(session, days)[:limit]
+
+
+# --- economic calendar ----------------------------------------------------------------------
+
+
+@api.get("/calendar")
+def economic_calendar(
+    session: SessionDep,
+    days: int = Query(30, le=365),
+    start: date | None = None,
+    daily: bool = False,
+) -> list[releases.Event]:
+    """Scheduled economic releases (CPI, payrolls, GDP, FOMC decisions...) with the tracked
+    series each one updates; `daily=true` adds daily releases (rates, spreads, VIX)."""
+    return releases.upcoming(session, days, start, daily)
 
 
 # --- CFTC positioning ------------------------------------------------------------------------

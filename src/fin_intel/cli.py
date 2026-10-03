@@ -267,6 +267,29 @@ def sync_congress(
 
 
 @app.command()
+def sync_calendar() -> None:
+    """Load the economic release calendar for the tracked FRED series (plus FOMC)."""
+    from fin_intel.providers import FedProvider
+
+    store = default_store()
+    fred, fed = FredProvider(raw_store=store), FedProvider(raw_store=store)
+    _run("sync-calendar", ["all"], lambda s, _: ingest.sync_release_calendar(s, fred, fed))
+
+
+@app.command()
+def calendar(
+    days: Annotated[int, typer.Option(help="Days ahead")] = 14,
+    daily: Annotated[bool, typer.Option(help="Include daily releases (rates, VIX...)")] = False,
+) -> None:
+    """Upcoming economic releases and the tracked series each updates."""
+    from fin_intel import releases
+
+    with session_factory()() as session:
+        for e in releases.upcoming(session, days, daily=daily):
+            typer.echo(f"{e.date}  {e.release or e.release_id:<45} {' '.join(e.series)}")
+
+
+@app.command()
 def sync_eia(
     series: Annotated[list[str] | None, typer.Argument(help="EIA IDs or aliases")] = None,
 ) -> None:
@@ -452,6 +475,7 @@ def sync_weekly() -> None:
         ("Massive reference", lambda: sync_reference(otc=settings.market_otc)),
         ("institutional holdings (13F)", lambda: sync_13f(files=4)),
         ("CFTC positioning", sync_cot),
+        ("economic release calendar", sync_calendar),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
     _steps("sync-weekly", steps)

@@ -11,8 +11,8 @@ in [roadmap.md](roadmap.md).
   consensus isn't free, but changes vs the 5-year seasonal average are a usable proxy.
 - **More COT markets:** the curated list in `cot.py` covers 26; add any market by its
   CFTC code. Options-combined reports exist too (futures-only for now).
-- **FRED release calendar:** upcoming CPI, payrolls and GDP release dates for event
-  awareness (`fred/releases/dates`); FOMC meeting dates from the Fed.
+- **Release-day signals:** the calendar is loaded (`fin-intel calendar`); next is studying
+  returns and volatility around CPI, payrolls and FOMC days, and flagging positions into them.
 - **Longer price history:** rolling Tiingo backfill of the S&P 500 plus major ETFs within
   its 500 symbols/month (about two months); Stooq for long index and FX history.
 - **Intraday and real-time:** Alpaca's free IEX feed (minute bars since 2016, live stream).

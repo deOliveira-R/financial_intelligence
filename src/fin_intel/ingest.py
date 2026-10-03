@@ -20,7 +20,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import congress, cot, derive, energy, insiders, thirteenf
+from fin_intel import congress, cot, derive, energy, insiders, releases, thirteenf
 from fin_intel.db import upsert
 from fin_intel.models import (
     Concept,
@@ -40,6 +40,7 @@ from fin_intel.models import (
 from fin_intel.providers import (
     CftcProvider,
     EiaProvider,
+    FedProvider,
     FredProvider,
     HouseProvider,
     MassiveProvider,
@@ -556,6 +557,9 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ),
     ("senate", "ptr"): lambda s, k, p, t: congress.load_report(s, *congress.parse_senate_ptr(k, p)),
     ("eia", "series"): lambda s, k, p, t: load_eia_series(s, k, p),
+    ("fred", "series_release"): lambda s, k, p, t: releases.load_series_release(s, k, p),
+    ("fred", "release_dates"): lambda s, k, p, t: releases.load_release_dates(s, int(k), p),
+    ("fed", "fomc_calendar"): lambda s, k, p, t: releases.load_fomc(s, p),
     **{
         ("cftc", report): (lambda r: lambda s, k, p, t: cot.load(s, r, p))(report)
         for report in cot.REPORTS
@@ -584,6 +588,7 @@ BINARY_DATASETS = {
     ("house", "fd_index"),
     ("house", "ptr"),
     ("senate", "ptr"),
+    ("fed", "fomc_calendar"),
 }
 # Datasets whose response only means something with its request (recorded as params).
 REQUEST_DATASETS = {("openfigi", "mapping")}
@@ -595,6 +600,9 @@ SNAPSHOT_DATASETS = {
     ("fred", "observations"),
     ("house", "fd_index"),  # the year's complete index
     ("eia", "series"),  # full history in every response
+    ("fred", "series_release"),
+    ("fred", "release_dates"),
+    ("fed", "fomc_calendar"),
 }
 
 
@@ -965,6 +973,41 @@ def sync_senate_ptr(session: Session, senate: SenateProvider, doc_id: str) -> in
         result["rows"] = LOADERS[("senate", "ptr")](
             session, doc_id, senate.fetch_ptr(doc_id), datetime.now(UTC)
         )
+    return result["rows"]
+
+
+def sync_release_calendar(
+    session: Session, fred_provider: FredProvider, fed_provider: FedProvider
+) -> int:
+    """Which release each tracked FRED series comes out in (looked up once per series),
+    then every such release's dates (past year plus the published schedule), and the
+    FOMC meeting calendar."""
+    with tracked(session, "fred", "release_dates", "all") as result:
+        session.commit()
+        releases.load_fomc(session, fed_provider.fetch_fomc_calendar())
+        unmapped = session.scalars(
+            select(EconomicSeries.id).where(
+                EconomicSeries.source == "fred", EconomicSeries.release_id.is_(None)
+            )
+        ).all()
+        for series_id in unmapped:
+            session.commit()  # fetch-then-load
+            releases.load_series_release(
+                session, series_id, fred_provider.fetch_series_release(series_id)
+            )
+        ids = set(
+            session.scalars(
+                select(EconomicSeries.release_id).where(EconomicSeries.release_id.is_not(None))
+            )
+        )
+        since = _today() - timedelta(days=releases.HISTORY_DAYS)
+        rows = 0
+        for release_id in sorted(ids):
+            session.commit()
+            rows += releases.load_release_dates(
+                session, release_id, fred_provider.fetch_release_dates(release_id, since)
+            )
+        result["rows"] = rows
     return result["rows"]
 
 
