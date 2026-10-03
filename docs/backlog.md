@@ -48,6 +48,10 @@ walk-forward out-of-sample splits, and storing runs for comparison.
 
 ## Fundamentals and screening
 
+- **ADR ratios:** an ADR can represent several ordinary shares (or a fraction), while
+  financials report per ordinary share, so ADR market caps can be off by that ratio. Fix
+  with each ADR's ratio (Massive ticker details or depositary filings). Financials in
+  currencies without a FRED rate (ARS, ILS, TRY, COP...) get no valuation metrics.
 - **Multi-class share counts:** companies reporting EPS and shares per class (Berkshire,
   Greif) get no market cap. Per-class counts are dimensioned XBRL facts, which SEC's
   company facts omit; the filings' instance documents have them.

@@ -8,6 +8,10 @@ was known that day, so the table accumulates a point-in-time history for backtes
   consecutive and span about a year, otherwise the latest fiscal year (annual-only
   filers, e.g. foreign companies filing 20-F).
 - Balances: the latest balance sheet; growth and scores compare with a year earlier.
+- Currency: foreign filers' financials (e.g. a 20-F in DKK) are converted to US dollars
+  at the latest exchange rate (fx.py), so ratios against the US price are like for like.
+  Periods reported in another currency (before a switch) are dropped. Without a rate,
+  market-cap-based metrics are left empty.
 - Market cap: price x shares outstanding (cover-page count, else diluted weighted shares),
   kept only if consistent with price / EPS. Multi-class companies whose count, EPS and
   price refer to different classes (BRK-A/BRK-B), or that report per class only (Greif),
@@ -21,6 +25,7 @@ from datetime import date, timedelta
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from fin_intel import fx
 from fin_intel.db import upsert
 from fin_intel.models import CompanyMetrics, DailyBar, Security, StatementItem
 
@@ -125,32 +130,37 @@ def compute(session: Session, as_of: date | None = None) -> int:
     as_of = as_of or date.today()
     primaries = primary_securities(session)
     prices = _latest_closes(session, [s.id for s in primaries.values()])
-    by_issuer: dict[int, dict[str, list[Item]]] = {}
-    for cik, line_item, start, end, fp, value in session.execute(
+    rates = fx.usd_rates(session)
+    by_issuer: dict[int, list[tuple[str, str, Item]]] = {}
+    for cik, line_item, unit, start, end, fp, value in session.execute(
         select(
             StatementItem.cik,
             StatementItem.line_item,
+            StatementItem.unit,
             StatementItem.period_start,
             StatementItem.period_end,
             StatementItem.fiscal_period,
             StatementItem.value,
         ).where(StatementItem.cik.in_(list(primaries)))
     ):
-        by_issuer.setdefault(cik, {}).setdefault(line_item, []).append(Item(start, end, fp, value))
+        by_issuer.setdefault(cik, []).append((line_item, unit, Item(start, end, fp, value)))
 
     records = []
     for cik, security in primaries.items():
-        items = by_issuer.get(cik)
-        if not items or security.id not in prices:
+        rows = by_issuer.get(cik)
+        if not rows or security.id not in prices:
             continue
-        row = _issuer_metrics(items, prices[security.id][0], as_of)
+        currency, items = in_dollars(rows, rates)
+        price = prices[security.id][0]
+        row = _issuer_metrics(items, price, as_of, valued=currency in rates)
         if row is not None:
             records.append(
                 {
                     "security_id": security.id,
                     "cik": cik,
                     "as_of": as_of,
-                    "price": prices[security.id][0],
+                    "price": price,
+                    "currency": currency,
                     **row,
                 }
             )
@@ -160,7 +170,36 @@ def compute(session: Session, as_of: date | None = None) -> int:
     return len(records)
 
 
-def _issuer_metrics(items: dict[str, list[Item]], price: float, as_of: date) -> dict | None:
+def in_dollars(
+    rows: list[tuple[str, str, Item]], rates: dict[str, float]
+) -> tuple[str | None, dict[str, list[Item]]]:
+    """An issuer's items by line item, in US dollars when a rate exists. The reporting
+    currency is that of its latest revenue, net income or assets; monetary items in any
+    other currency (periods before a currency switch) are dropped."""
+    monetary = [
+        (item.period_end, unit)
+        for line_item, unit, item in rows
+        if line_item in ("revenue", "net_income", "total_assets") and "/" not in unit
+    ]
+    currency = max(monetary)[1] if monetary else None
+    rate = rates.get(currency or "", 1.0)
+    out: dict[str, list[Item]] = {}
+    for line_item, unit, item in rows:
+        base, _, per = unit.partition("/")
+        if base == currency:  # amounts and per-share amounts
+            item = Item(item.period_start, item.period_end, item.fiscal_period, item.value * rate)
+        elif len(base) == 3 and base.isupper() and per in ("", "shares"):
+            continue  # another currency
+        out.setdefault(line_item, []).append(item)
+    return currency, out
+
+
+def _issuer_metrics(
+    items: dict[str, list[Item]], price: float, as_of: date, valued: bool = True
+) -> dict | None:
+    """Metrics from an issuer's items (in US dollars). Without `valued` (no exchange rate
+    for its currency) market-cap-based metrics are left empty."""
+
     # Values must belong to the period being described: a years-old share count or debt
     # balance (e.g. a company that now reports only per share class) is ignored rather
     # than mixed with today's price.
@@ -205,7 +244,7 @@ def _issuer_metrics(items: dict[str, list[Item]], price: float, as_of: date) -> 
     current_assets, current_liabilities = bal("current_assets"), bal("current_liabilities")
     shares = bal("shares_outstanding") or ttm_last(items.get("shares_diluted", []))
 
-    market_cap = price * shares if shares and _consistent(shares, price, items) else None
+    market_cap = price * shares if valued and shares and _consistent(shares, price, items) else None
     ev = None if market_cap is None else market_cap + debt + leases - cash
     ebitda = None if ebit is None else ebit + (depreciation or 0.0)
     tax_rate = min(max(_div(tax, pretax) or 0.21, 0.0), 0.5)

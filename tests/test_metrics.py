@@ -145,3 +145,52 @@ def test_compute_picks_the_primary_security(session):
     assert metrics.compute(session) == 1
     (row,) = session.query(CompanyMetrics).all()
     assert row.security_id == common.id and row.market_cap == 100e6 and row.pe == pytest.approx(10)
+
+
+def test_foreign_filers_are_converted_to_dollars():
+    def row(line_item, unit, end, value, fp="FY"):
+        return (line_item, unit, Item(D(end) - timedelta(days=364), D(end), fp, value))
+
+    rows = [
+        row("revenue", "DKK", "2025-12-31", 700.0),
+        row("net_income", "DKK", "2025-12-31", 70.0),
+        row("eps_diluted", "DKK/shares", "2025-12-31", 7.0),
+        row("shares_outstanding", "shares", "2025-12-31", 10.0),
+        row("revenue", "EUR", "2020-12-31", 50.0),  # before a switch to DKK: dropped
+    ]
+    currency, items = metrics.in_dollars(rows, {"DKK": 0.15, "USD": 1.0})
+    assert currency == "DKK"
+    assert [i.value for i in items["revenue"]] == [pytest.approx(105.0)]
+    assert items["eps_diluted"][0].value == pytest.approx(1.05)
+    assert items["shares_outstanding"][0].value == 10.0  # counts aren't money
+
+    # Without a rate, amounts stay as reported and valuation is skipped.
+    currency, raw = metrics.in_dollars(rows, {"USD": 1.0})
+    assert currency == "DKK" and raw["revenue"][0].value == 700.0
+    m = _issuer_metrics(raw, 20.0, D("2026-03-01"), valued=False)
+    assert m is not None and m["market_cap"] is None and m["pe"] is None
+    assert m["net_margin"] == pytest.approx(0.1)  # ratios within the statements still work
+
+
+def test_usd_rates_use_each_series_latest_value(session):
+    from fin_intel import fx
+    from fin_intel.config import get_settings
+    from fin_intel.models import EconomicObservation, EconomicSeries
+
+    for sid in ("DEXCHUS", "DEXUSEU"):
+        session.add(EconomicSeries(id=sid, source="fred"))
+    session.flush()
+    session.add_all(
+        [
+            EconomicObservation(series_id="DEXCHUS", date=D("2026-09-30"), value=7.0),
+            EconomicObservation(series_id="DEXCHUS", date=D("2026-10-01"), value=None),
+            EconomicObservation(series_id="DEXCHUS", date=D("2026-09-29"), value=7.2),
+            EconomicObservation(series_id="DEXUSEU", date=D("2026-10-01"), value=1.1),
+        ]
+    )
+    session.flush()
+    rates = fx.usd_rates(session)
+    assert rates["CNY"] == pytest.approx(1 / 7.0)  # missing latest day skipped
+    assert rates["EUR"] == pytest.approx(1.1)  # quoted as dollars per euro
+    assert rates["USD"] == 1.0 and "BRL" not in rates
+    assert "DEXBZUS" in get_settings().fred_series_ids  # synced with the macro pack

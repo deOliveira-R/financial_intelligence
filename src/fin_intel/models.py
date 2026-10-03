@@ -406,6 +406,9 @@ class CompanyMetrics(Base):
     cik: Mapped[int] = mapped_column(ForeignKey("issuers.cik"))
     price: Mapped[float] = mapped_column(Float)
     period_end: Mapped[date] = mapped_column(Date)  # latest financials used
+    # The financials' reporting currency; amounts are converted to US dollars at the day's
+    # rate (valuation needs a rate: without one, market-cap metrics are left empty).
+    currency: Mapped[str | None] = mapped_column(String(3))
     market_cap: Mapped[float | None] = mapped_column(Float)
     enterprise_value: Mapped[float | None] = mapped_column(Float)
     revenue_ttm: Mapped[float | None] = mapped_column(Float)

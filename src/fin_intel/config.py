@@ -28,9 +28,13 @@ class Settings(BaseSettings):
 
     @property
     def fred_series_ids(self) -> list[str]:
+        """The configured list (default: the macro pack), plus the exchange rates that
+        foreign filers' metrics need."""
+        from fin_intel import fx
         from fin_intel.macro import MACRO_SERIES
 
-        return _split(self.fred_series) or list(MACRO_SERIES)
+        ids = _split(self.fred_series) or list(MACRO_SERIES)
+        return ids + [s for s, _ in fx.SERIES.values() if s not in ids]
 
 
 def _split(value: str) -> list[str]:

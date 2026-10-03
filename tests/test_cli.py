@@ -76,7 +76,7 @@ def test_failed_item_marks_run_partial(db_file):
 def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch):
     import typer
 
-    from fin_intel import cli
+    from fin_intel import cli, fx
 
     calls = []
 
@@ -111,7 +111,7 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
         "metrics",
         "insiders",
         "congress",
-        ("fred", ["GDP"]),
+        ("fred", ["GDP", *(series for series, _ in fx.SERIES.values())]),  # plus FX rates
         "eia",
         ("prices", ["AAPL", "MSFT"]),
     ]
