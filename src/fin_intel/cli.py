@@ -544,12 +544,33 @@ def derive_breadth_cmd() -> None:
 
 
 @app.command("derive-metrics")
-def derive_metrics_cmd() -> None:
-    """Compute today's company metrics from statements and latest prices (no network)."""
+def derive_metrics_cmd(
+    as_of: Annotated[str | None, typer.Option(help="YYYY-MM-DD; default: today")] = None,
+) -> None:
+    """Compute company metrics from statements and prices (no network), as of today or,
+    point in time, a past day."""
     from fin_intel import metrics
 
+    day = date.fromisoformat(as_of) if as_of else None
     with session_factory()() as session:
-        typer.echo(f"metrics: {metrics.compute(session)} companies")
+        typer.echo(f"metrics: {metrics.compute(session, day)} companies")
+
+
+@app.command("backfill-metrics")
+def backfill_metrics_cmd(
+    start: Annotated[str, typer.Option(help="YYYY-MM-DD")],
+    end: Annotated[str | None, typer.Option(help="YYYY-MM-DD; default: last month end")] = None,
+) -> None:
+    """Point-in-time metrics on each month's last trading day (for screen backtests)."""
+    from fin_intel import metrics, timeseries
+
+    with session_factory()() as session:
+        days = timeseries.calendar(
+            session, date.fromisoformat(start), date.fromisoformat(end) if end else None
+        )
+        month_ends = [d for d, nxt in zip(days, days[1:], strict=False) if d.month != nxt.month]
+        for day in month_ends:
+            typer.echo(f"{day}: {metrics.compute(session, day)} companies")
 
 
 @app.command("derive")
@@ -744,6 +765,47 @@ def event_study_cmd(
             f"{h.horizon:>7}d{h.n:>7}{h.mean_excess:>+9.2%}{h.median_excess:>+9.2%}"
             f"{h.hit_rate:>7.0%}{h.t_stat or 0:>7.1f}{h.mean_return:>+9.2%}"
         )
+
+
+@app.command("screen-backtest")
+def screen_backtest_cmd(
+    preset: Annotated[
+        str | None, typer.Option(help="magic, deep_value, quality, cash_cows")
+    ] = None,
+    where: Annotated[list[str] | None, typer.Option("--where", "-w")] = None,
+    sort: Annotated[str | None, typer.Option(help="metric, '-' for descending")] = None,
+    rank: Annotated[str | None, typer.Option(help="'magic'")] = None,
+    top: Annotated[int, typer.Option(help="Names held each period")] = 20,
+    periods: Annotated[bool, typer.Option(help="Show each period's picks and returns")] = False,
+) -> None:
+    """Backtest a screen on point-in-time metrics (run backfill-metrics first): its top
+    names vs SPY and vs the whole universe, 3, 6 and 12 months after each date."""
+    from fin_intel import screener, screentest
+
+    with session_factory()() as session:
+        try:
+            r = screentest.run(session, preset, where, rank, sort, top)
+        except screener.ScreenError as exc:
+            raise typer.BadParameter(str(exc)) from None
+
+    def pct(v: float | None) -> str:
+        return "—" if v is None else f"{v:+.1%}"
+
+    typer.echo(f"{r.screen}: top {r.top}, {len(r.periods)} rebalance dates")
+    typer.echo(f"{'horizon':>8}{'periods':>9}{'return':>9}{'vs univ':>9}{'vs SPY':>9}{'beat':>7}")
+    for s in r.summary:
+        beat = "—" if s.beat_universe is None else f"{s.beat_universe:.0%}"
+        typer.echo(
+            f"{s.horizon:>7}d{s.periods:>9}{pct(s.mean_return):>9}{pct(s.vs_universe):>9}"
+            f"{pct(s.vs_spy):>9}{beat:>7}"
+        )
+    if periods:
+        h = screentest.HORIZONS[0]
+        for p in r.periods:
+            typer.echo(
+                f"{p.as_of} {pct(p.returns[h]):>8} univ {pct(p.universe[h]):>8} "
+                f"SPY {pct(p.spy[h]):>8}  {' '.join(p.picks[:12])}"
+            )
 
 
 @app.command("screen")

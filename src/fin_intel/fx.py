@@ -2,6 +2,8 @@
 filers' financials (e.g. a 20-F in DKK or CNY) into the currency their US listing trades in.
 """
 
+from datetime import date
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -34,8 +36,8 @@ SERIES: dict[str, tuple[str, bool]] = {
 PEGGED = {"USD": 1.0, "AED": 1 / 3.6725, "SAR": 1 / 3.75, "BHD": 1 / 0.376}
 
 
-def usd_rates(session: Session) -> dict[str, float]:
-    """US dollars per unit of each currency, at the latest available rate."""
+def usd_rates(session: Session, as_of: date | None = None) -> dict[str, float]:
+    """US dollars per unit of each currency, at the latest rate (on or before `as_of`)."""
     rates = dict(PEGGED)
     ids = {series_id: (currency, direct) for currency, (series_id, direct) in SERIES.items()}
     latest = (
@@ -43,6 +45,7 @@ def usd_rates(session: Session) -> dict[str, float]:
         .where(
             EconomicObservation.series_id.in_(list(ids)),
             EconomicObservation.value.is_not(None),
+            EconomicObservation.date <= (as_of or date.max),
         )
         .group_by(EconomicObservation.series_id)
         .subquery()

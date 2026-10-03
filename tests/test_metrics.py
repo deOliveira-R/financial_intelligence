@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
@@ -194,3 +195,70 @@ def test_usd_rates_use_each_series_latest_value(session):
     assert rates["EUR"] == pytest.approx(1.1)  # quoted as dollars per euro
     assert rates["USD"] == 1.0 and "BRL" not in rates
     assert "DEXBZUS" in get_settings().fred_series_ids  # synced with the macro pack
+
+
+def test_split_factor_runs_both_ways():
+    splits = [(D("2026-06-10"), 4.0)]
+    assert metrics.split_factor(splits, D("2026-05-01"), D("2026-07-01")) == 4.0
+    assert metrics.split_factor(splits, D("2026-07-01"), D("2026-05-01")) == 0.25
+    assert metrics.split_factor(splits, D("2026-06-10"), D("2026-07-01")) == 1.0  # same day
+
+
+def test_split_adjusted_matches_the_days_price():
+    splits = [(D("2026-06-10"), 4.0)]
+    shares = Item(D("2026-03-31"), D("2026-03-31"), "Q1", 1e9, filed=D("2026-05-01"))
+    eps = Item(D("2026-01-01"), D("2026-03-31"), "Q1", 2.0, filed=D("2026-05-01"))
+    out = metrics.split_adjusted(
+        {"shares_outstanding": [shares], "eps_diluted": [eps], "revenue": []},
+        splits,
+        D("2026-07-01"),
+    )
+    assert out["shares_outstanding"][0].value == 4e9 and out["eps_diluted"][0].value == 0.5
+    # A value restated after the split, viewed from before it, goes back to old terms.
+    restated = replace(shares, value=4e9, filed=D("2026-08-01"))
+    back = metrics.split_adjusted({"shares_outstanding": [restated]}, splits, D("2026-06-01"))
+    assert back["shares_outstanding"][0].value == 1e9
+
+
+def test_historical_compute_uses_what_was_known_then(session):
+    session.add_all([Issuer(cik=1, name="Co"), Concept(id=1, taxonomy="us-gaap", name="X")])
+    session.commit()
+    gone = Security(ticker=None, cik=1, security_type="CS", mic="XNYS", origin="massive")
+    gone.active = False  # delisted since: still part of the past universe
+    session.add(gone)
+    session.flush()
+    as_of = D("2025-06-30")
+    session.add(
+        DailyBar(security_id=gone.id, date=D("2025-06-27"), source="massive", close=20.0, volume=1)
+    )
+    session.add(
+        DailyBar(security_id=gone.id, date=D("2025-09-30"), source="massive", close=99.0, volume=1)
+    )
+
+    def add(item, end, value, first_filed, start=None, ptype="annual"):
+        session.add(
+            StatementItem(
+                cik=1,
+                line_item=item,
+                period_start=start or end,
+                period_end=end,
+                period_type=ptype,
+                fiscal_period="FY",
+                unit="USD",
+                value=value,
+                concept_id=1,
+                filed=D("2026-02-15"),
+                first_filed=first_filed,
+            )
+        )
+
+    add("revenue", D("2024-12-31"), 100e6, D("2025-02-15"), D("2024-01-01"))
+    add("net_income", D("2024-12-31"), 10e6, D("2025-02-15"), D("2024-01-01"))
+    add("shares_outstanding", D("2024-12-31"), 5e6, D("2025-02-15"), ptype="instant")
+    add("net_income", D("2025-12-31"), 99e6, D("2026-02-15"), D("2025-01-01"))  # not yet known
+    session.commit()
+
+    assert metrics.compute(session, as_of) == 1
+    (row,) = session.query(CompanyMetrics).all()
+    assert row.as_of == as_of and row.price == 20.0  # that day's close, not later ones
+    assert row.net_income_ttm == 10e6 and row.pe == pytest.approx(10)

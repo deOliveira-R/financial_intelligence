@@ -102,6 +102,7 @@ def screen(
     limit: int = 50,
     sector: list[str] | None = None,
     exclude_sectors: list[str] | None = None,
+    as_of: date | None = None,
 ) -> tuple[date | None, list[dict]]:
     """Latest metrics matching every filter, sorted or ranked. Returns (as_of, rows)."""
     filters = list(filters or [])
@@ -118,7 +119,8 @@ def screen(
     if rank not in (None, "magic"):
         raise ScreenError(f"unknown rank {rank!r}; only 'magic'")
 
-    as_of = session.scalar(select(func.max(CompanyMetrics.as_of)))
+    if as_of is None:
+        as_of = session.scalar(select(func.max(CompanyMetrics.as_of)))
     if as_of is None:
         return None, []
     stmt = (
@@ -143,6 +145,7 @@ def screen(
         {
             "ticker": ticker,
             "name": name,
+            "security_id": m.security_id,
             "sector": sectors.sector(sic),
             "currency": m.currency,
             **{c: getattr(m, c) for c in ("as_of", "period_end", *NUMERIC)},

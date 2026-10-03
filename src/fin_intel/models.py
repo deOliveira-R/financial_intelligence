@@ -399,6 +399,8 @@ class StatementItem(Base):
     unit: Mapped[str] = mapped_column(String(64))
     value: Mapped[float]
     filed: Mapped[date | None] = mapped_column(Date)
+    # When the figure was first public (later filings repeat it as a comparative).
+    first_filed: Mapped[date | None] = mapped_column(Date)
     concept_id: Mapped[int] = mapped_column(ForeignKey("concepts.id"))
     derived: Mapped[bool] = mapped_column(default=False, server_default=false())
 

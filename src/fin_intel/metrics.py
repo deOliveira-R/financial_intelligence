@@ -12,6 +12,12 @@ was known that day, so the table accumulates a point-in-time history for backtes
   at the latest exchange rate (fx.py), so ratios against the US price are like for like.
   Periods reported in another currency (before a switch) are dropped. Without a rate,
   market-cap-based metrics are left empty.
+- Point in time: metrics for a past `as_of` use only figures first filed by then
+  (`first_filed`; a 10-K's comparative column doesn't make last year's numbers new), the
+  close and exchange rates of that day, and the listings trading then, including ones
+  delisted since. Restated values replace the original ones, a small look-ahead.
+- Splits: share counts and per-share figures are expressed as of their filing; splits
+  between that filing and `as_of` are applied so they match the day's price.
 - Market cap: price x shares outstanding (cover-page count, else diluted weighted shares),
   kept only if consistent with price / EPS. Multi-class companies whose count, EPS and
   price refer to different classes (BRK-A/BRK-B), or that report per class only (Greif),
@@ -19,7 +25,7 @@ was known that day, so the table accumulates a point-in-time history for backtes
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
 from sqlalchemy import delete, func, select
@@ -27,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from fin_intel import fx
 from fin_intel.db import upsert
-from fin_intel.models import CompanyMetrics, DailyBar, Security, StatementItem
+from fin_intel.models import CompanyMetrics, CorporateAction, DailyBar, Security, StatementItem
 
 STALE_AFTER = timedelta(days=550)  # newest financials older than this: skip (likely gone)
 CURRENT_WINDOW = timedelta(days=400)  # inputs must be this close to the latest financials
@@ -42,6 +48,7 @@ class Item:
     period_end: date
     fiscal_period: str | None
     value: float
+    filed: date | None = None  # the filing this value is from (latest restatement)
 
 
 def _ttm(items: list[Item], as_of_end: date | None = None) -> tuple[float, date] | None:
@@ -78,39 +85,45 @@ def _latest_instant(
     return (rows[-1].value, rows[-1].period_end) if rows else None
 
 
-def primary_securities(session: Session) -> dict[int, Security]:
+def primary_securities(session: Session, as_of: date | None = None) -> dict[int, Security]:
     """Per issuer, its main listed share: common stock (or ADR) on a major exchange, the
-    one with the highest recent dollar volume when there are several."""
-    since = date.today() - timedelta(days=30)
+    one with the highest recent dollar volume when there are several. For a past `as_of`,
+    the listings trading then (with a bar in the month before), active now or not."""
+    historical = as_of is not None and as_of < date.today()
+    end = as_of or date.today()
     volume = dict(
         session.execute(
             select(DailyBar.security_id, func.avg(DailyBar.close * DailyBar.volume))
-            .where(DailyBar.date >= since)
+            .where(DailyBar.date > end - timedelta(days=30), DailyBar.date <= end)
             .group_by(DailyBar.security_id)
         ).all()
     )
+    conditions = [
+        Security.cik.is_not(None),
+        Security.security_type.in_(PRIMARY_TYPES),
+        Security.mic.in_(PRIMARY_MICS),
+    ]
+    if not historical:
+        conditions.append(Security.active)
     out: dict[int, Security] = {}
-    for s in session.scalars(
-        select(Security).where(
-            Security.cik.is_not(None),
-            Security.active,
-            Security.security_type.in_(PRIMARY_TYPES),
-            Security.mic.in_(PRIMARY_MICS),
-        )
-    ):
+    for s in session.scalars(select(Security).where(*conditions)):
+        if historical and s.id not in volume:
+            continue
         current = out.get(s.cik)
         if current is None or volume.get(s.id, 0) > volume.get(current.id, 0):
             out[s.cik] = s
     return out
 
 
-def _latest_closes(session: Session, ids: list[int]) -> dict[int, tuple[float, date]]:
-    latest = (
-        select(DailyBar.security_id, func.max(DailyBar.date).label("d"))
-        .where(DailyBar.security_id.in_(ids))
-        .group_by(DailyBar.security_id)
-        .subquery()
+def _latest_closes(
+    session: Session, ids: list[int], as_of: date | None = None
+) -> dict[int, tuple[float, date]]:
+    stmt = select(DailyBar.security_id, func.max(DailyBar.date).label("d")).where(
+        DailyBar.security_id.in_(ids)
     )
+    if as_of is not None:
+        stmt = stmt.where(DailyBar.date <= as_of, DailyBar.date > as_of - timedelta(days=10))
+    latest = stmt.group_by(DailyBar.security_id).subquery()
     rows = session.execute(
         select(DailyBar.security_id, DailyBar.date, DailyBar.close).join(
             latest, (latest.c.security_id == DailyBar.security_id) & (latest.c.d == DailyBar.date)
@@ -126,14 +139,19 @@ def _div(a: float | None, b: float | None) -> float | None:
 
 
 def compute(session: Session, as_of: date | None = None) -> int:
-    """Compute today's metrics for every issuer with a primary security and fresh
-    financials; returns rows written."""
+    """Compute metrics as of a day (default today) for every issuer with a primary
+    security and fresh financials, from what was known that day; returns rows written."""
+    historical = as_of is not None and as_of < date.today()
     as_of = as_of or date.today()
-    primaries = primary_securities(session)
-    prices = _latest_closes(session, [s.id for s in primaries.values()])
-    rates = fx.usd_rates(session)
+    primaries = primary_securities(session, as_of if historical else None)
+    prices = _latest_closes(
+        session, [s.id for s in primaries.values()], as_of if historical else None
+    )
+    rates = fx.usd_rates(session, as_of if historical else None)
+    splits = _splits(session, [s.id for s in primaries.values()])
+    known = func.coalesce(StatementItem.first_filed, StatementItem.filed)
     by_issuer: dict[int, list[tuple[str, str, Item]]] = {}
-    for cik, line_item, unit, start, end, fp, value in session.execute(
+    for cik, line_item, unit, start, end, fp, value, filed in session.execute(
         select(
             StatementItem.cik,
             StatementItem.line_item,
@@ -142,9 +160,11 @@ def compute(session: Session, as_of: date | None = None) -> int:
             StatementItem.period_end,
             StatementItem.fiscal_period,
             StatementItem.value,
-        ).where(StatementItem.cik.in_(list(primaries)))
+            StatementItem.filed,
+        ).where(StatementItem.cik.in_(list(primaries)), known.is_(None) | (known <= as_of))
     ):
-        by_issuer.setdefault(cik, []).append((line_item, unit, Item(start, end, fp, value)))
+        item = Item(start, end, fp, value, filed)
+        by_issuer.setdefault(cik, []).append((line_item, unit, item))
 
     records = []
     for cik, security in primaries.items():
@@ -152,6 +172,7 @@ def compute(session: Session, as_of: date | None = None) -> int:
         if not rows or security.id not in prices:
             continue
         currency, items = in_dollars(rows, rates)
+        items = split_adjusted(items, splits.get(security.id, []), as_of)
         price = prices[security.id][0]
         row = _issuer_metrics(
             items,
@@ -194,11 +215,54 @@ def in_dollars(
     for line_item, unit, item in rows:
         base, _, per = unit.partition("/")
         if base == currency:  # amounts and per-share amounts
-            item = Item(item.period_start, item.period_end, item.fiscal_period, item.value * rate)
+            item = replace(item, value=item.value * rate)
         elif len(base) == 3 and base.isupper() and per in ("", "shares"):
             continue  # another currency
         out.setdefault(line_item, []).append(item)
     return currency, out
+
+
+SHARE_ITEMS = ("shares_outstanding", "shares_diluted")
+PER_SHARE_ITEMS = ("eps_diluted", "eps_basic")
+
+
+def _splits(session: Session, ids: list[int]) -> dict[int, list[tuple[date, float]]]:
+    """Each security's splits (ex-date, new shares per old), one per date across sources."""
+    out: dict[int, dict[date, float]] = {}
+    for sid, ex_date, ratio in session.execute(
+        select(CorporateAction.security_id, CorporateAction.ex_date, CorporateAction.value).where(
+            CorporateAction.security_id.in_(ids), CorporateAction.action == "split"
+        )
+    ):
+        if ratio:
+            out.setdefault(sid, {})[ex_date] = ratio
+    return {sid: sorted(by_date.items()) for sid, by_date in out.items()}
+
+
+def split_factor(splits: list[tuple[date, float]], since: date, until: date) -> float:
+    """Shares at `until` per share at `since`: the product of splits in between (inverted
+    when `until` comes first)."""
+    lo, hi = sorted((since, until))
+    factor = math.prod(r for d, r in splits if lo < d <= hi)
+    return factor if until >= since else 1 / factor
+
+
+def split_adjusted(
+    items: dict[str, list[Item]], splits: list[tuple[date, float]], as_of: date
+) -> dict[str, list[Item]]:
+    """Share counts and per-share figures restated into the share terms of `as_of`. Each
+    value is in the terms of the filing it came from (later filings restate for splits)."""
+    if not splits:
+        return items
+    out = dict(items)
+    for name in (*SHARE_ITEMS, *PER_SHARE_ITEMS):
+        adjusted = []
+        for i in items.get(name, []):
+            f = split_factor(splits, i.filed or i.period_end, as_of)
+            adjusted.append(replace(i, value=i.value * f if name in SHARE_ITEMS else i.value / f))
+        if adjusted:
+            out[name] = adjusted
+    return out
 
 
 def _adr_shares(security: Security, as_of: date) -> float | None:

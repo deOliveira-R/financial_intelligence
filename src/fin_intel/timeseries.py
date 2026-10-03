@@ -159,9 +159,16 @@ def _price(session: Session, ticker: str, days: list[date], field: str) -> indic
     security = get_security(session, ticker)
     if security is None:
         raise SpecError(f"unknown ticker {ticker}")
-    bars = session.scalars(select(DailyBar).where(DailyBar.security_id == security.id)).all()
+    return security_prices(session, security.id, days, field, label=ticker)
+
+
+def security_prices(
+    session: Session, security_id: int, days: list[date], field: str = "px", label: str = ""
+) -> indicators.Series:
+    """`_price` by security id (also reaches delisted securities, which have no ticker)."""
+    bars = session.scalars(select(DailyBar).where(DailyBar.security_id == security_id)).all()
     if not bars:
-        raise SpecError(f"no prices for {ticker}")
+        raise SpecError(f"no prices for {label or security_id}")
     first_date: dict[str, date] = {}
     for b in bars:
         first_date[b.source] = min(first_date.get(b.source, b.date), b.date)
@@ -178,7 +185,7 @@ def _price(session: Session, ticker: str, days: list[date], field: str) -> indic
                 CorporateAction.action,
                 CorporateAction.value,
                 CorporateAction.source,
-            ).where(CorporateAction.security_id == security.id)
+            ).where(CorporateAction.security_id == security_id)
         ):
             key = (ex_date, action)
             if src in rank and (key not in actions or rank[src] < actions[key][0]):

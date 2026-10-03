@@ -288,6 +288,7 @@ class _Value:
     filed: date | None
     concept_id: int
     derived: bool = False  # computed from other periods (e.g. Q2 = six months - Q1)
+    first_filed: date | None = None  # when the period's figure first became public
 
 
 def build_issuer(session: Session, cik: int) -> int:
@@ -314,11 +315,16 @@ def build_issuer(session: Session, cik: int) -> int:
         .where(Fact.cik == cik, Fact.concept_id.in_(list(by_concept)))
     ).all()
 
-    # Latest filed value per (concept, unit, period): restatements win.
+    # Latest filed value per (concept, unit, period): restatements win. The first filing
+    # date is kept too: later filings repeat a period as a comparative (each 10-K re-reports
+    # the prior year), and a backtest must date the figure from when it was first public.
     latest: dict[tuple, _Value] = {}
+    first: dict[tuple, date | None] = {}
     for r in sorted(rows, key=lambda r: r.filed or date.min):
         ptype = period_type(r.period_start, r.period_end, r.instant)
-        latest[(r.concept_id, r.unit, r.period_start, r.period_end)] = _Value(
+        key = (r.concept_id, r.unit, r.period_start, r.period_end)
+        first.setdefault(key, r.filed)
+        latest[key] = _Value(
             r.period_start,
             r.period_end,
             ptype,
@@ -328,6 +334,7 @@ def build_issuer(session: Session, cik: int) -> int:
             r.value,
             r.filed,
             r.concept_id,
+            first_filed=first[key],
         )
 
     # Per line item and period, the highest-priority concept with a value.
@@ -360,6 +367,7 @@ def build_issuer(session: Session, cik: int) -> int:
             "unit": v.unit,
             "value": v.value,
             "filed": v.filed,
+            "first_filed": v.first_filed,
             "concept_id": v.concept_id,
             "derived": v.derived,
         }
@@ -427,9 +435,11 @@ def _standalone_quarters(values: list[_Value]) -> list[_Value]:
                 continue
             if n - 1 in cumulative:
                 before, prev_end = cumulative[n - 1].value, cumulative[n - 1].period_end
+                parts = [cumulative[n - 1]]
             elif all(k in quarters for k in range(1, n)):
                 before = sum(quarters[k].value for k in range(1, n))
                 prev_end = quarters[n - 1].period_end
+                parts = [quarters[k] for k in range(1, n)]
             else:
                 continue
             start = prev_end + timedelta(days=1)
@@ -442,6 +452,9 @@ def _standalone_quarters(values: list[_Value]) -> list[_Value]:
                 fiscal_period=f"Q{n}",
                 value=ytd.value - before,
                 derived=True,
+                first_filed=max(
+                    (p.first_filed for p in (ytd, *parts) if p.first_filed), default=None
+                ),
             )
         out += quarters.values()
     return out

@@ -270,3 +270,48 @@ def test_quarters_derived_from_year_to_date_cash_flows(session):
         ("Q3", 27.9, True),
         ("Q4", 29.7, True),
     ]
+
+
+def test_first_filed_dates_figures_from_their_first_report(session):
+    rev = ("us-gaap", "Revenues")
+    ingest.load_company_facts(
+        session,
+        7,
+        payload(
+            7,
+            {
+                rev: (
+                    "USD",
+                    [
+                        # FY2024 first in the 2024 10-K, then repeated as a comparative.
+                        fact(
+                            "2024-01-01", "2024-12-31", 100.0, "K24", 2024, "FY", filed="2025-02-20"
+                        ),
+                        fact(
+                            "2024-01-01", "2024-12-31", 100.0, "K25", 2025, "FY", filed="2026-02-19"
+                        ),
+                        fact(
+                            "2025-01-01", "2025-12-31", 120.0, "K25", 2025, "FY", filed="2026-02-19"
+                        ),
+                        # Nine months (10-Q) then the full year: Q4 is derived from both.
+                        fact(
+                            "2025-01-01",
+                            "2025-09-30",
+                            85.0,
+                            "Q325",
+                            2025,
+                            "Q3",
+                            "10-Q",
+                            "2025-11-05",
+                        ),
+                    ],
+                )
+            },
+        ),
+    )
+    rows = {
+        (r.fiscal_year, r.fiscal_period): (r.filed, r.first_filed)
+        for r in session.scalars(select(StatementItem).where(StatementItem.cik == 7))
+    }
+    assert rows[(2024, "FY")] == (date(2026, 2, 19), date(2025, 2, 20))
+    assert rows[(2025, "Q4")][1] == date(2026, 2, 19)  # needs the annual report
