@@ -9,7 +9,10 @@ The backend exists to do four things well:
 
 Status as of 2026-10-03: the platform runs on an Oracle Cloud VM with daily syncs and nightly verified backups. Data held: a security master (31k securities, typed, with FIGIs), 2 years of market-wide daily bars (Massive) and deep history for a watchlist (Tiingo), 2 years of splits and dividends, SEC fundamentals for 10 companies, and 5 FRED series.
 
-## Phase A: portfolio (goal 1)
+## Phase A: portfolio (goal 1): core done
+
+Done: accounts, the tax-lot engine, harvesting with wash-sale checks, position context and replacements, Fidelity positions import (2026-10-03). Waiting on exports: Fidelity transaction history (holding periods, recent purchases) and Vanguard 401(k).
+
 
 Brokers: Fidelity (taxable and other accounts) and Vanguard (401(k)).
 
@@ -19,7 +22,10 @@ Brokers: Fidelity (taxable and other accounts) and Vanguard (401(k)).
 - Position context for "buy more?": return vs SPY, drawdown from high, 52-week range, 200-day average.
 - Importers: generic CSV first, then Fidelity and Vanguard parsers written against real exports.
 
-## Phase B: trading indicators (goal 4)
+## Phase B: trading indicators (goal 4): core done
+
+Done: the 53-series macro pack with ALFRED revision history, the point-in-time time-series engine and indicators, market breadth, delisted securities (2026-10-03). Still to do: EIA inventories, CFTC positioning, the FRED release calendar.
+
 
 - Macro pack: ~40 FRED series across oil, inflation (CPI, PCE, breakevens), rates and curve, industrial activity, dollar, term premium, credit spreads, VIX, Fed liquidity. Plus EIA inventories and CFTC positioning.
 - **Point-in-time data:** release dates and ALFRED vintages, so backtests only see values that were published at the time.

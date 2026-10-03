@@ -30,7 +30,12 @@ bookkeeping  sync_runs (one per CLI command), sync_state (last outcome per item)
 - **Fiscal periods come from each fact's own dates.** SEC's `fy`/`fp` describe the filing, not the value, and are sometimes mis-tagged. `periods.py` classifies each fact by duration (`annual`, `quarter`, `half`, `nine_months`, `instant`, `other`). It assigns fiscal year/period from the issuer's fiscal calendar, which is inferred from annual and transition (10-KT) filings. It handles 52/53-week years, fiscal years named after the prior calendar year, and fiscal year end changes (the stub period between regimes is `fiscal_period = "T"`).
 - **`/fundamentals` returns consistent series.** Share counts and per-share values filed before a split are restated using `corporate_actions` (needs `sync-prices` for that ticker). Missing Q4s are derived as FY − 9M for monetary flows (`derived: true`). All units are returned unless `unit` is given. `split_adjusted=false`, `fill_q4=false` and `as_reported=true` turn these off.
 - **Two security masters.** SEC's ticker list is the authority for companies and CIKs. Massive's reference tickers (`sync-reference`) give every security a type (`CS`, `ETF`, `PFD`, `WARRANT`, `UNIT`, `ADRC`, …), composite and share-class FIGIs, and a primary exchange (MIC). They also add the ~5,500 ETFs, funds and notes SEC doesn't list. `origin` records which list created a security (`sec`, `massive`, `massive-otc`, `tiingo`), and each list only deactivates its own. When SEC lists a ticker, SEC claims that security. On CIK disagreements (e.g. preferreds issued by a subsidiary) SEC's CIK is kept.
-- **Ticker changes.** SEC side: a rename (FB → META) keeps the security and its history, and the old symbol still resolves. Massive side: the composite FIGI identifies renames (same FIGI, new symbol) and reuse (same symbol, new FIGI). A reused ticker always gets a new security. Delisted securities become `active: false`.
+- **Ticker changes.** SEC side: a rename (FB → META) keeps the security and its history, and the old symbol still resolves. Massive side: the composite FIGI identifies renames (same FIGI, new symbol) and reuse (same symbol, new FIGI). A reused ticker always gets a new security.
+- **Delisted securities (no survivorship bias).** `sync-reference` also imports tickers delisted within our market history (origin `massive-delisted`, `ticker` NULL, old symbol in `ticker_history` through `delisted_on`). Market-wide rows are assigned to the security that held the symbol *on that date* (`SymbolResolver`), so a reused symbol's old history stays with the old company. On 2024-10-04, 4,887 listed stocks traded; without delisted securities we saw 4,162.
+- **Portfolio** (`portfolio.py`). Accounts, broker transactions and position snapshots. Tax lots are rebuilt from transactions on every request (FIFO; long-term after more than one year). Harvesting candidates come from taxable accounts, checked against purchases in any account within 30 days. Accounts without history are reported from the broker's snapshot (`basis_source: "broker"`). Replacement ETFs are ranked by tracking error, which keeps leveraged funds out. Fidelity positions import directly (`--format fidelity`).
+- **Macro pack with point-in-time history** (`macro.py`). 53 FRED series across energy, inflation, rates, activity, labor, dollar, risk and liquidity, each stored with its full revision history (ALFRED vintages, `economic_vintages`).
+- **Research time series** (`timeseries.py`, `indicators.py`). Specs such as `px:SPY|sma:200`, `px:CPER/px:GLD|z:252`, `fred:DGS10-fred:DGS2` or `breadth:pct_above_200d` are evaluated on SPY's trading calendar. Every transform is causal. FRED values are point-in-time by default: each appears on its publication date as first printed (August CPI shows up on its Sep 11 release) and changes when revised.
+- **Market breadth** (`breadth.py`). Daily internals for NYSE/Nasdaq/NYSE American common stocks: advancers/decliners, the A/D line, up/down volume, new 52-week highs and lows, and the share of stocks above their 50- and 200-day averages. It's split-adjusted, includes delisted stocks, and is recomputed nightly (~20s).
 - **Order independence.** Market-wide feeds are keyed by symbol, so rows for unknown symbols are skipped at load time. When a reference sync discovers new securities, their stored Massive bars and actions are loaded from raw (no network). Rebuilds replay reference data first. Either way the result doesn't depend on the order syncs ran in, and a full rebuild reproduces the live database exactly.
 - **Rate limits and quotas** hold across processes: limiters are seeded from recorded calls, and Tiingo's 500-symbols-per-month cap is checked before calling. `QuotaExceededError` (including Tiingo's HTTP-200 plain-text messages) stops a batch and records the skipped items in `sync_runs`.
 - **Fetch, then load.** The raw store commits each response in its own transaction, so it survives a failed load. Syncs therefore fetch everything an item needs before writing, so they never hold SQLite's write lock during a fetch. SQLite runs in WAL mode so the API can read during syncs.
@@ -72,11 +77,15 @@ Run everything through `uv run …`; there's no need to activate the venv.
 uv run fin-intel sync-tickers                       # ~10k SEC tickers + CIKs
 uv run fin-intel sync-fundamentals AAPL MSFT        # SEC XBRL facts
 uv run fin-intel sync-prices AAPL MSFT              # Tiingo daily bars (incremental)
-uv run fin-intel sync-economic GDP CPIAUCSL DGS10   # FRED series
+uv run fin-intel sync-economic                      # FRED macro pack with revision history
 uv run fin-intel sync-reference                     # Massive: ETFs, types, FIGIs (weekly; --otc for OTC)
 uv run fin-intel sync-market-daily --since 2026-09-01   # Massive: every US stock, 1 call/day
 uv run fin-intel sync-actions --since 2024-10-01    # Massive: market-wide splits and dividends
-uv run fin-intel sync-daily                         # scheduled bundle: market bars, actions, FRED, watchlist
+uv run fin-intel sync-daily                         # scheduled bundle: market bars, actions, breadth, FRED, watchlist
+uv run fin-intel timeseries 'px:SPY|sma:200' 'breadth:pct_above_200d' 'fred:T10Y2Y' --csv out.csv
+uv run fin-intel derive-breadth                     # recompute market breadth (no network)
+uv run fin-intel portfolio import-positions FILE --format fidelity
+uv run fin-intel portfolio positions | harvest | realized --year 2026
 uv run fin-intel sync-weekly                        # scheduled bundle: security lists, fundamentals, retention
 uv run fin-intel serve                              # http://127.0.0.1:8000/docs
 uv run fin-intel rebuild fundamentals               # re-load from raw/ after a parser change
@@ -97,6 +106,8 @@ API endpoints:
 - `GET /fundamentals/{ticker}?concept=Revenues&period_type=annual&form=10-K&as_reported=false`
 - `GET /economic/{series_id}`
 - `GET /economic/{series_id}/observations?start=&end=`
+- `GET /timeseries?s=px:SPY|rsi:14&s=fred:T10Y2Y&start=&pit=true&format=json|csv`
+- `GET /portfolio/accounts`, `/portfolio/positions`, `/portfolio/lots`, `/portfolio/realized?year=`, `/portfolio/harvest?min_loss=`, `/portfolio/context/{ticker}`, `/portfolio/replacements/{ticker}`
 
 ## Deployment
 
