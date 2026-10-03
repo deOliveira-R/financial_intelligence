@@ -371,3 +371,48 @@ class StatementItem(Base):
     value: Mapped[float]
     filed: Mapped[date | None] = mapped_column(Date)
     concept_id: Mapped[int] = mapped_column(ForeignKey("concepts.id"))
+
+
+class CompanyMetrics(Base):
+    """Derived: screening metrics for an issuer's primary security, as computed on `as_of`
+    from what was known that day (metrics.py). One row per security per day."""
+
+    __tablename__ = "company_metrics"
+
+    security_id: Mapped[int] = mapped_column(ForeignKey("securities.id"), primary_key=True)
+    as_of: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    cik: Mapped[int] = mapped_column(ForeignKey("issuers.cik"))
+    price: Mapped[float] = mapped_column(Float)
+    period_end: Mapped[date] = mapped_column(Date)  # latest financials used
+    market_cap: Mapped[float | None] = mapped_column(Float)
+    enterprise_value: Mapped[float | None] = mapped_column(Float)
+    revenue_ttm: Mapped[float | None] = mapped_column(Float)
+    net_income_ttm: Mapped[float | None] = mapped_column(Float)
+    ebit_ttm: Mapped[float | None] = mapped_column(Float)
+    fcf_ttm: Mapped[float | None] = mapped_column(Float)
+    pe: Mapped[float | None] = mapped_column(Float)
+    ev_ebit: Mapped[float | None] = mapped_column(Float)
+    ev_ebitda: Mapped[float | None] = mapped_column(Float)
+    ev_sales: Mapped[float | None] = mapped_column(Float)
+    p_fcf: Mapped[float | None] = mapped_column(Float)
+    p_b: Mapped[float | None] = mapped_column(Float)
+    earnings_yield: Mapped[float | None] = mapped_column(Float)
+    fcf_yield: Mapped[float | None] = mapped_column(Float)
+    dividend_yield: Mapped[float | None] = mapped_column(Float)
+    shareholder_yield: Mapped[float | None] = mapped_column(Float)
+    gross_margin: Mapped[float | None] = mapped_column(Float)
+    operating_margin: Mapped[float | None] = mapped_column(Float)
+    net_margin: Mapped[float | None] = mapped_column(Float)
+    roe: Mapped[float | None] = mapped_column(Float)
+    roic: Mapped[float | None] = mapped_column(Float)
+    debt_to_equity: Mapped[float | None] = mapped_column(Float)
+    net_debt_to_ebitda: Mapped[float | None] = mapped_column(Float)
+    current_ratio: Mapped[float | None] = mapped_column(Float)
+    interest_coverage: Mapped[float | None] = mapped_column(Float)
+    revenue_growth: Mapped[float | None] = mapped_column(Float)
+    earnings_growth: Mapped[float | None] = mapped_column(Float)
+    ebit_growth: Mapped[float | None] = mapped_column(Float)
+    operating_margin_5y: Mapped[float | None] = mapped_column(Float)
+    operating_margin_vs_5y: Mapped[float | None] = mapped_column(Float)
+    altman_z: Mapped[float | None] = mapped_column(Float)
+    piotroski_f: Mapped[int | None]
