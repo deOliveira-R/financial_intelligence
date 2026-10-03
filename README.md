@@ -93,7 +93,9 @@ uv run fin-intel serve                              # http://127.0.0.1:8000/docs
 uv run fin-intel rebuild fundamentals               # re-load from raw/ after a parser change
 uv run fin-intel rebuild market                     # securities, prices, actions (minutes)
 uv run fin-intel sync-fundamentals-bulk             # every tracked company from SEC's nightly file
-uv run fin-intel screen --preset magic              # or --where 'pe<15' --where 'roic>0.15' --sort -fcf_yield
+uv run fin-intel screen --preset magic              # or --where 'pe<15' --where 'roic>0.15' --sort -fcf_yield --exclude-sector finance
+uv run fin-intel sync-sic                           # SIC codes (sectors) for listed issuers
+uv run fin-intel sync-adr-shares                    # ADRs' depositary share counts (for market caps)
 uv run fin-intel derive                             # recompute fiscal labels after a periods.py change
 uv run fin-intel sync-insiders                      # Form 3/4/5 data sets + daily Form 4s
 uv run fin-intel sync-13f --files 4                 # 13F holdings + CUSIP mapping (OpenFIGI)
@@ -124,7 +126,7 @@ API endpoints:
 - `GET /events/{insiders|congress|13f}?member=&min_amount=&cik=`: event study, excess returns after disclosures
 - `GET /calendar?days=30&daily=false`: scheduled releases (CPI, payrolls, GDP, FOMC decisions) and the series they update
 - `GET /cot`: speculative positioning per market with its 3-year COT index; `/cot/{market}?group=commercial`
-- `GET /screener?where=pe<15&where=roic>=0.15&sort=-earnings_yield&preset=magic|deep_value|quality|cash_cows`
+- `GET /screener?where=pe<15&where=roic>=0.15&sort=-earnings_yield&preset=magic|deep_value|quality|cash_cows&sector=&exclude_sector=finance`
 - `GET /metrics/{ticker}`: valuation, quality and growth metrics as of the latest day
 - `GET /insiders/clusters?days=30&min_insiders=3`, `/insiders/{ticker}?code=P`
 - `GET /holdings/managers?q=berkshire`, `/holdings/managers/{cik}?period=`, `/holdings/security/{ticker}`

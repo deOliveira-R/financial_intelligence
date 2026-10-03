@@ -374,6 +374,18 @@ def _mark_delisted(security: Security, delisted_on: date) -> None:
         security.active = False
 
 
+def load_submissions(session: Session, cik: int, payload: Any) -> int:
+    """A filer's SIC code and category (SEC submissions)."""
+    issuer = session.get(Issuer, cik)
+    if issuer is None:
+        return 0
+    sic = str(payload.get("sic") or "").strip()
+    issuer.sic = int(sic) if sic.isdigit() else None
+    issuer.sic_description = payload.get("sicDescription") or None
+    issuer.filer_category = payload.get("category") or ""  # "" marks it looked up
+    return 1
+
+
 def load_massive_ticker_details(session: Session, ticker: str, payload: Any, today: date) -> int:
     """A listing's shares outstanding (for an ADR, in depositary shares)."""
     info = payload.get("results") or {}
@@ -549,6 +561,7 @@ Loader = Callable[[Session, Any, Any, datetime], int]
 LOADERS: dict[tuple[str, str], Loader] = {
     ("sec", "company_tickers"): lambda s, k, p, t: load_company_tickers(s, p, t.date()),
     ("sec", "companyfacts"): lambda s, k, p, t: load_company_facts(s, int(k), p),
+    ("sec", "submissions"): lambda s, k, p, t: load_submissions(s, int(k), p),
     ("tiingo", "metadata"): lambda s, k, p, t: load_tiingo_metadata(s, k, p, t.date()),
     ("tiingo", "daily_prices"): lambda s, k, p, t: load_tiingo_daily(s, k, p),
     ("massive", "tickers"): lambda s, k, p, t: load_massive_tickers(s, k, p, t.date()),
@@ -615,6 +628,7 @@ SNAPSHOT_DATASETS = {
     ("sec", "companyfacts"),
     ("massive", "grouped_daily"),  # one complete response per trading day
     ("massive", "ticker_details"),
+    ("sec", "submissions"),
     ("fred", "series"),
     ("fred", "observations"),
     ("house", "fd_index"),  # the year's complete index
@@ -832,6 +846,21 @@ def sync_reference_tickers(
             for page in delisted:
                 load_massive_delisted(session, page)
         deactivate_unseen_massive(session, market, today)
+    return result["rows"]
+
+
+def issuers_without_sic(session: Session) -> list[int]:
+    """Issuers of primary listings whose SEC profile hasn't been looked up yet."""
+    from fin_intel import metrics
+
+    looked_up = set(session.scalars(select(Issuer.cik).where(Issuer.filer_category.is_not(None))))
+    return sorted(cik for cik in metrics.primary_securities(session) if cik not in looked_up)
+
+
+def sync_submissions(session: Session, sec_provider: SecProvider, cik: int) -> int:
+    with tracked(session, "sec", "submissions", str(cik)) as result:
+        session.commit()  # fetch-then-load
+        result["rows"] = load_submissions(session, cik, sec_provider.fetch_submissions(cik))
     return result["rows"]
 
 

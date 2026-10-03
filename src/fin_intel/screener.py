@@ -6,7 +6,9 @@ Filters are `metric<op>value` strings, e.g. "pe<15", "roic>=0.15", "market_cap>1
 
 Presets bundle sensible filters. Each excludes companies whose operating margin is far
 above its 5-year average: a cyclical at peak earnings looks cheapest right before its
-earnings fall (shipping, commodities).
+earnings fall (shipping, commodities). Sectors (sectors.py, from SIC codes) can be
+included or excluded; the magic formula leaves out financials and utilities, as
+Greenblatt does.
 """
 
 import operator
@@ -14,15 +16,16 @@ import re
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from fin_intel.models import CompanyMetrics, Security
+from fin_intel import sectors
+from fin_intel.models import CompanyMetrics, Issuer, Security
 
 NUMERIC = [
     c.name
     for c in CompanyMetrics.__table__.columns
-    if c.name not in ("security_id", "as_of", "cik", "period_end")
+    if c.name not in ("security_id", "as_of", "cik", "period_end", "currency")
 ]
 OPS = {"<=": operator.le, ">=": operator.ge, "<": operator.lt, ">": operator.gt, "=": operator.eq}
 _FILTER = re.compile(r"^\s*([a-z_0-9]+)\s*(<=|>=|<|>|=)\s*(-?[0-9.]+(?:e-?[0-9]+)?)\s*$")
@@ -32,6 +35,7 @@ PRESETS: dict[str, dict] = {
     "magic": {
         "filters": ["market_cap>=1e9", "earnings_yield>0", "roic>0", NOT_AT_PEAK],
         "rank": "magic",
+        "exclude_sectors": ["finance", "utilities"],
     },
     "deep_value": {
         "filters": [
@@ -63,6 +67,7 @@ PRESETS: dict[str, dict] = {
             NOT_AT_PEAK,
         ],
         "sort": "-fcf_yield",
+        "exclude_sectors": ["finance"],
     },
 }
 
@@ -95,15 +100,20 @@ def screen(
     rank: str | None = None,
     preset: str | None = None,
     limit: int = 50,
+    sector: list[str] | None = None,
+    exclude_sectors: list[str] | None = None,
 ) -> tuple[date | None, list[dict]]:
     """Latest metrics matching every filter, sorted or ranked. Returns (as_of, rows)."""
     filters = list(filters or [])
+    exclude = list(exclude_sectors or [])
     if preset:
         if preset not in PRESETS:
             raise ScreenError(f"unknown preset {preset!r}; one of {', '.join(PRESETS)}")
         filters = PRESETS[preset]["filters"] + filters
         sort = sort or PRESETS[preset].get("sort")
         rank = rank or PRESETS[preset].get("rank")
+        preset_excludes = PRESETS[preset].get("exclude_sectors", [])
+        exclude += [s for s in preset_excludes if s not in (sector or [])]
     parsed = [parse_filter(f) for f in filters]
     if rank not in (None, "magic"):
         raise ScreenError(f"unknown rank {rank!r}; only 'magic'")
@@ -112,10 +122,20 @@ def screen(
     if as_of is None:
         return None, []
     stmt = (
-        select(CompanyMetrics, Security.ticker, Security.name)
+        select(CompanyMetrics, Security.ticker, Security.name, Issuer.sic)
         .join(Security, Security.id == CompanyMetrics.security_id)
+        .join(Issuer, Issuer.cik == CompanyMetrics.cik)
         .where(CompanyMetrics.as_of == as_of)
     )
+    try:
+        include_ranges = [r for s in sector or [] for r in sectors.codes(s)]
+        exclude_ranges = [r for s in exclude for r in sectors.codes(s)]
+    except ValueError as exc:
+        raise ScreenError(str(exc)) from None
+    if include_ranges:
+        stmt = stmt.where(or_(*(Issuer.sic.between(lo, hi) for lo, hi in include_ranges)))
+    for lo, hi in exclude_ranges:  # companies without a SIC code stay in
+        stmt = stmt.where(Issuer.sic.is_(None) | ~Issuer.sic.between(lo, hi))
     for f in parsed:
         column = getattr(CompanyMetrics, f.metric)
         stmt = stmt.where(column.is_not(None), OPS[f.op](column, f.value))
@@ -123,9 +143,11 @@ def screen(
         {
             "ticker": ticker,
             "name": name,
+            "sector": sectors.sector(sic),
+            "currency": m.currency,
             **{c: getattr(m, c) for c in ("as_of", "period_end", *NUMERIC)},
         }
-        for m, ticker, name in session.execute(stmt)
+        for m, ticker, name, sic in session.execute(stmt)
     ]
 
     if rank == "magic":

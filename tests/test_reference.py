@@ -164,3 +164,23 @@ def test_market_data_synced_before_discovery_is_backfilled(session, raw_store):
     assert live == ([(date(2026, 9, 29), 150.0)], [(date(2026, 9, 22), 0.5)])
     rebuild(session, raw_store, "all")
     assert rows() == live
+
+
+@respx.mock
+def test_submissions_set_sic_codes(session, raw_store):
+    from fin_intel.models import Issuer
+    from fin_intel.providers import SecProvider
+
+    session.add(Issuer(cik=1109357, name="Exelon"))
+    session.commit()
+    respx.get("https://data.sec.gov/submissions/CIK0001109357.json").respond(
+        json={
+            "sic": "4931",
+            "sicDescription": "Electric & Other Services Combined",
+            "category": "Large accelerated filer",
+            "filings": {},
+        }
+    )
+    assert ingest.sync_submissions(session, SecProvider(raw_store=raw_store), 1109357) == 1
+    exelon = session.get(Issuer, 1109357)
+    assert (exelon.sic, exelon.filer_category) == (4931, "Large accelerated filer")

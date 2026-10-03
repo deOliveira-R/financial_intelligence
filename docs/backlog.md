@@ -19,8 +19,7 @@ in [roadmap.md](roadmap.md).
 - **Market structure:** FINRA short volume, SEC fails-to-deliver.
 - **ETF holdings:** SEC N-PORT filings.
 - **Options:** yfinance or delayed CBOE chains, with Greeks computed ourselves.
-- **Sector and industry classification:** SIC codes from SEC submissions, for peer
-  comparisons and sector breadth.
+- **Sector breadth:** SIC codes are loaded; breadth per sector (% above 200-day) is next.
 
 ## Trading strategy prototypes (phase B data)
 
@@ -59,7 +58,8 @@ walk-forward out-of-sample splits, and storing runs for comparison.
   report no operating income, so EV/EBIT and ROIC don't apply).
 - **Historical point-in-time metrics:** backfill company_metrics for past dates from
   statement filing dates and historical prices, for screening backtests.
-- **Sector/industry:** SIC codes (SEC submissions) for peer-relative valuation.
+- **Peer-relative valuation:** SIC codes are loaded (`sectors.py` groups them by SIC
+  division); next is comparing each company with its industry's median multiples.
 - **PostgreSQL:** SQLite holds the full fundamentals load (~20-25 GB, read-mostly, one
   writer); move when concurrency or size demands it.
 

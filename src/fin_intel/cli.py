@@ -267,6 +267,17 @@ def sync_congress(
 
 
 @app.command()
+def sync_sic() -> None:
+    """Look up SIC codes (industry) of issuers with a primary listing that lack one (SEC
+    submissions, one request each; later runs only fetch new issuers)."""
+    sec = SecProvider(raw_store=default_store())
+    with session_factory()() as session:
+        ciks = [str(c) for c in ingest.issuers_without_sic(session)]
+    if ciks:
+        _run("sync-sic", ciks, lambda s, c: ingest.sync_submissions(s, sec, int(c)))
+
+
+@app.command()
 def sync_adr_shares(
     limit: Annotated[int, typer.Option(help="Most ADRs to refresh this run")] = 150,
 ) -> None:
@@ -504,6 +515,7 @@ def sync_weekly() -> None:
         ("institutional holdings (13F)", lambda: sync_13f(files=4)),
         ("CFTC positioning", sync_cot),
         ("ADR share counts", sync_adr_shares),
+        ("SIC codes of new issuers", sync_sic),
         ("economic release calendar", sync_calendar),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
@@ -746,13 +758,17 @@ def screen_cmd(
     show: Annotated[
         str, typer.Option(help="Comma-separated metrics to display")
     ] = "market_cap,pe,ev_ebit,p_fcf,roic,operating_margin,revenue_growth,piotroski_f",
+    sector: Annotated[list[str] | None, typer.Option(help="Only these sectors")] = None,
+    exclude_sector: Annotated[list[str] | None, typer.Option(help="Leave out sectors")] = None,
 ) -> None:
-    """Screen the market on company metrics (see screener.py)."""
+    """Screen the market on company metrics (see screener.py; sectors in sectors.py)."""
     from fin_intel import screener
 
     with session_factory()() as session:
         try:
-            as_of, rows = screener.screen(session, where, sort, rank, preset, limit)
+            as_of, rows = screener.screen(
+                session, where, sort, rank, preset, limit, sector, exclude_sector
+            )
         except screener.ScreenError as exc:
             raise typer.BadParameter(str(exc)) from None
     columns = [c.strip() for c in show.split(",") if c.strip()]

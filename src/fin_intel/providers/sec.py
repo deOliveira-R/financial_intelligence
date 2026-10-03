@@ -91,6 +91,10 @@ class SecProvider(Provider):
             f"https://www.sec.gov/Archives/{path}", dataset="form4", key=accession
         )
 
+    def fetch_submissions(self, cik: int) -> Any:
+        """A filer's profile (SIC code, category, fiscal year end) and recent filings."""
+        return self.get(f"/submissions/CIK{cik:010d}.json", dataset="submissions", key=str(cik))
+
     def fetch_company_facts(self, cik: int) -> Any:
         return self.get(
             f"/api/xbrl/companyfacts/CIK{cik:010d}.json", dataset="companyfacts", key=str(cik)

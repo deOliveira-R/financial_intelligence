@@ -547,10 +547,16 @@ def screener_endpoint(
     rank: str | None = Query(None, description="'magic': earnings yield + ROIC ranks"),
     preset: str | None = Query(None, description="magic, deep_value, quality, cash_cows"),
     limit: int = Query(50, le=500),
+    sector: Annotated[list[str] | None, Query(description="only these sectors")] = None,
+    exclude_sector: Annotated[list[str] | None, Query(description="e.g. finance")] = None,
 ) -> dict:
-    """Companies matching every filter on their latest metrics."""
+    """Companies matching every filter on their latest metrics. Sectors come from SIC
+    codes: agriculture, mining, construction, manufacturing, transportation, utilities,
+    wholesale, retail, finance, services, public."""
     try:
-        as_of, rows = screener.screen(session, where, sort, rank, preset, limit)
+        as_of, rows = screener.screen(
+            session, where, sort, rank, preset, limit, sector, exclude_sector
+        )
     except screener.ScreenError as exc:
         raise HTTPException(400, str(exc)) from None
     return {"as_of": as_of, "count": len(rows), "results": rows}

@@ -87,6 +87,10 @@ class Issuer(Base):
 
     cik: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
     name: Mapped[str | None] = mapped_column(String(256))
+    # From SEC submissions: Standard Industrial Classification and filer status.
+    sic: Mapped[int | None] = mapped_column(index=True)
+    sic_description: Mapped[str | None] = mapped_column(String(256))
+    filer_category: Mapped[str | None] = mapped_column(String(64))
 
 
 class Security(Base):

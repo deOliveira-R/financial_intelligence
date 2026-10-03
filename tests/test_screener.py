@@ -11,9 +11,9 @@ from fin_intel.models import CompanyMetrics, Issuer, Security
 TODAY = date(2026, 10, 2)
 
 
-def company(session, ticker, **metrics):
+def company(session, ticker, sic=None, **metrics):
     cik = abs(hash(ticker)) % 10**9
-    session.add(Issuer(cik=cik, name=ticker))
+    session.add(Issuer(cik=cik, name=ticker, sic=sic))
     session.flush()
     security = Security(ticker=ticker, name=f"{ticker} Inc", cik=cik, origin="sec")
     session.add(security)
@@ -94,3 +94,21 @@ def test_screener_api(engine, market):
         assert client.get("/screener", params={"preset": "nope"}).status_code == 400
     finally:
         app.dependency_overrides.clear()
+
+
+def test_sectors(market):
+    company(market, "BANK", sic=6022, earnings_yield=0.5, roic=0.9)  # state commercial bank
+    company(market, "UTIL", sic=4931, earnings_yield=0.4, roic=0.8)
+    company(market, "OIL", sic=1311, earnings_yield=0.01, roic=0.01)
+    _, rows = screener.screen(market, preset="magic")
+    assert "BANK" not in tickers(rows) and "UTIL" not in tickers(rows)
+    assert "OIL" in tickers(rows) and "CHEAP" in tickers(rows)  # no SIC: kept
+    assert {r["sector"] for r in rows if r["ticker"] == "OIL"} == {"mining"}
+    _, banks = screener.screen(market, sector=["finance"])
+    assert tickers(banks) == ["BANK"]
+    _, banks = screener.screen(market, preset="magic", sector=["finance"])  # explicit wins
+    assert tickers(banks) == ["BANK"]
+    _, rows = screener.screen(market, exclude_sectors=["mining", "finance"])
+    assert "OIL" not in tickers(rows) and "BANK" not in tickers(rows)
+    with pytest.raises(screener.ScreenError, match="unknown sector"):
+        screener.screen(market, sector=["tech"])
