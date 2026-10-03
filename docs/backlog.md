@@ -5,8 +5,10 @@ in [roadmap.md](roadmap.md).
 
 ## Data
 
-- **EIA weekly petroleum status:** crude and gasoline inventories, refinery utilization,
-  production. EIA API v2, free key. Inventory surprises move oil and energy stocks.
+- **EIA key:** the shared DEMO_KEY is limited per IP (fine on the server, exhausted behind
+  VPNs). A free personal key (`FI_EIA_API_KEY`) removes the problem.
+- **EIA expectations:** inventory *surprises* (vs analyst consensus) are what move prices;
+  consensus isn't free, but changes vs the 5-year seasonal average are a usable proxy.
 - **More COT markets:** the curated list in `cot.py` covers 26; add any market by its
   CFTC code. Options-combined reports exist too (futures-only for now).
 - **FRED release calendar:** upcoming CPI, payrolls and GDP release dates for event

@@ -79,7 +79,7 @@ TARGETS = {
         [CotPosition],
     ),
     "economic": (
-        [("fred", "series"), ("fred", "observations"), ("fred", "vintages")],
+        [("fred", "series"), ("fred", "observations"), ("fred", "vintages"), ("eia", "series")],
         [EconomicVintage, EconomicObservation, EconomicSeries],
     ),
     # Securities and market data, without re-loading fundamentals (minutes, not hours).

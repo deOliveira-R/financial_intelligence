@@ -267,6 +267,20 @@ def sync_congress(
 
 
 @app.command()
+def sync_eia(
+    series: Annotated[list[str] | None, typer.Argument(help="EIA IDs or aliases")] = None,
+) -> None:
+    """Load EIA weekly energy data (inventories, production, refining, demand, gas storage);
+    default: every series in energy.py."""
+    from fin_intel import energy
+    from fin_intel.providers import EiaProvider
+
+    eia = EiaProvider(raw_store=default_store())
+    ids = [energy.resolve(s) for s in series] if series else list(energy.SERIES)
+    _run("sync-eia", ids, lambda s, i: ingest.sync_eia(s, eia, i))
+
+
+@app.command()
 def sync_cot(
     since: Annotated[
         str | None, typer.Option(help="YYYY-MM-DD; default: 2006 on first run, else 4 weeks back")
@@ -421,6 +435,7 @@ def sync_daily() -> None:
         ("insider transactions", sync_insiders),
         ("congressional trades", sync_congress),
         ("economic series", lambda: sync_economic(settings.fred_series_ids)),
+        ("EIA energy data", sync_eia),
     ]
     if settings.watchlist_tickers:
         steps.append(("watchlist prices", lambda: sync_prices(settings.watchlist_tickers)))

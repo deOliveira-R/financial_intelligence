@@ -24,7 +24,7 @@ Brokers: Fidelity (taxable and other accounts) and Vanguard (401(k)).
 
 ## Phase B: trading indicators (goal 4): core done
 
-Done: the 53-series macro pack with ALFRED revision history, the point-in-time time-series engine and indicators, market breadth, delisted securities, CFTC positioning for 26 markets since 2006 (2026-10-03). Still to do: EIA inventories, the FRED release calendar.
+Done: the 53-series macro pack with ALFRED revision history, the point-in-time time-series engine and indicators, market breadth, delisted securities, CFTC positioning for 26 markets since 2006, EIA weekly petroleum and natural gas data (2026-10-03). Still to do: the FRED release calendar.
 
 
 - Macro pack: ~40 FRED series across oil, inflation (CPI, PCE, breakevens), rates and curve, industrial activity, dollar, term premium, credit spreads, VIX, Fed liquidity. Plus EIA inventories and CFTC positioning.

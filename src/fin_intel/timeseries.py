@@ -6,6 +6,7 @@ A spec names one series:
     close:SPY              raw close          volume:SPY   raw volume
     fred:DGS10             a FRED series, as known on each date (see `pit`)
     breadth:pct_above_200d market internals for US-listed common stocks (see breadth.py)
+    eia:crude_stocks       EIA weekly energy data by ID or alias (see energy.py)
     cot:crude:managed_money:index  CFTC positioning: market:group[:field], field one of
                            net (default), long, short, net_pct_oi, oi, index (see cot.py)
     px:CPER/px:GLD         ratio of two series      fred:DGS10-fred:DGS2   difference
@@ -20,7 +21,8 @@ release date, as first printed, and changes on the days it was revised. Before a
 history begins (e.g. 2005 for daily Treasury yields) there's no value. With `pit=False`,
 today's revised values are carried forward from each observation date, which looks
 ahead by the publication lag and the later revisions. COT positions (Tuesday's) likewise
-appear on their Friday release, or on their report date with `pit=False`.
+appear on their Friday release, and EIA weekly data on its Wednesday or Thursday release
+(on the week's Friday with `pit=False`).
 """
 
 import re
@@ -41,7 +43,7 @@ from fin_intel.models import (
 )
 from fin_intel.prices import adjustments
 
-SOURCES = ("px", "close", "volume", "fred", "breadth", "cot")
+SOURCES = ("px", "close", "volume", "fred", "breadth", "cot", "eia")
 _OPERATOR = re.compile(rf"([/-])(?=(?:{'|'.join(SOURCES)}):)")
 
 
@@ -137,6 +139,8 @@ def _load(
     session: Session, term: tuple[str, str], days: list[date], pit: bool
 ) -> indicators.Series:
     source, ident = term
+    if source == "eia":
+        return _eia(session, ident, days, pit)
     if source == "cot":
         return _cot(session, ident.lower(), days, pit)
     if source == "breadth":
@@ -200,6 +204,30 @@ def _breadth(session: Session, field: str, days: list[date]) -> indicators.Serie
     if not by_date:
         raise SpecError("no breadth data; run fin-intel derive-breadth")
     return [by_date.get(d) for d in days]
+
+
+def _eia(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+    from fin_intel import energy
+
+    try:
+        series_id = energy.resolve(ident)
+    except ValueError as exc:
+        raise SpecError(str(exc)) from None
+    rows = session.execute(
+        select(EconomicObservation.date, EconomicObservation.value)
+        .where(EconomicObservation.series_id == series_id, EconomicObservation.value.is_not(None))
+        .order_by(EconomicObservation.date)
+    ).all()
+    if not rows:
+        raise SpecError(f"no EIA data for {series_id}; run fin-intel sync-eia")
+    known = [(energy.available_on(series_id, d) if pit else d, v) for d, v in rows]
+    out, i, current = [], 0, None
+    for d in days:
+        while i < len(known) and known[i][0] <= d:
+            current = known[i][1]
+            i += 1
+        out.append(current)
+    return out
 
 
 def _cot(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
