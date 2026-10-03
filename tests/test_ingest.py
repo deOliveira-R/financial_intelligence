@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime
 import httpx
 import pytest
 import respx
-from conftest import COMPANY_FACTS, FRED_OBS, FRED_SERIES, TICKERS, tiingo_bar
+from conftest import COMPANY_FACTS, FRED_OBS, TICKERS, mock_fred, tiingo_bar
 from sqlalchemy import func, select
 
 from fin_intel import ingest
@@ -65,14 +65,15 @@ def test_sec_sync_normalizes_filings_concepts_and_facts(session, raw_store):
 
 @respx.mock
 def test_every_response_is_recorded_without_credentials(session, raw_store):
-    respx.get("https://api.stlouisfed.org/fred/series").respond(json=FRED_SERIES)
-    respx.get("https://api.stlouisfed.org/fred/series/observations").respond(json=FRED_OBS)
+    mock_fred()
     ingest.sync_economic(session, FredProvider(raw_store=raw_store), "UNRATE")
 
     rows = session.scalars(select(RawResponse).order_by(RawResponse.id)).all()
     assert [(r.provider, r.dataset, r.key, r.status) for r in rows] == [
         ("fred", "series", "UNRATE", 200),
         ("fred", "observations", "UNRATE", 200),
+        ("fred", "vintage_dates", "UNRATE", 200),
+        ("fred", "vintages", "UNRATE", 200),
     ]
     assert all("fred-key" not in (r.params or "") for r in rows)
     (latest,) = [r for r in raw_store.records() if r.dataset == "observations"]
@@ -208,3 +209,28 @@ def test_pagination_links_keep_their_query_alongside_auth_params():
     )
     params = route.calls[0].request.url.params
     assert (params["offset"], params["api_key"]) == ("1000", "fred-key")
+
+
+@respx.mock
+def test_fred_vintages_are_stored_and_fetched_incrementally(session, raw_store):
+    from fin_intel.models import EconomicVintage
+
+    mock_fred()
+    fred = FredProvider(raw_store=raw_store)
+    ingest.sync_economic(session, fred, "UNRATE")
+    versions = session.execute(
+        select(
+            EconomicVintage.date, EconomicVintage.realtime_start, EconomicVintage.value
+        ).order_by(EconomicVintage.date, EconomicVintage.realtime_start)
+    ).all()
+    assert versions == [
+        (date(2026, 7, 1), date(2026, 8, 1), 4.1),
+        (date(2026, 7, 1), date(2026, 9, 5), 4.2),
+        (date(2026, 8, 1), date(2026, 9, 5), 4.3),
+    ]
+    # The next sync asks only for vintages after the last one stored.
+    route = respx.get("https://api.stlouisfed.org/fred/series/vintagedates").respond(
+        json={"count": 0, "vintage_dates": []}
+    )
+    ingest.sync_economic(session, fred, "UNRATE")
+    assert route.calls[-1].request.url.params["realtime_start"] == "2026-09-06"

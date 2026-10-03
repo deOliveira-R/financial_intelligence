@@ -1,0 +1,224 @@
+"""Aligned time series for research: prices, macro and indicators on one trading calendar.
+
+A spec names one series:
+
+    px:SPY                 total-return adjusted close (splits and dividends)
+    close:SPY              raw close          volume:SPY   raw volume
+    fred:DGS10             a FRED series, as known on each date (see `pit`)
+    px:CPER/px:GLD         ratio of two series      fred:DGS10-fred:DGS2   difference
+    px:SPY|sma:200         transforms, applied left to right after any ratio/difference:
+                           sma:N ema:N rsi:N macd ret:N diff:N vol:N z:N high:N low:N dd:N yoy
+
+Dates are the trading days on which SPY has a bar. Every transform is causal.
+
+Point-in-time (`pit=True`, the default): a FRED value on day D is what had been published
+by D, from the series' revision history (ALFRED vintages). Monthly CPI appears on its
+release date, as first printed, and changes on the days it was revised. Before a series'
+history begins (e.g. 2005 for daily Treasury yields) there's no value. With `pit=False`,
+today's revised values are carried forward from each observation date, which looks
+ahead by the publication lag and the later revisions.
+"""
+
+import re
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import date
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from fin_intel import indicators
+from fin_intel.models import (
+    CorporateAction,
+    DailyBar,
+    EconomicObservation,
+    EconomicVintage,
+)
+from fin_intel.prices import adjustments
+
+SOURCES = ("px", "close", "volume", "fred")
+_OPERATOR = re.compile(rf"([/-])(?=(?:{'|'.join(SOURCES)}):)")
+
+
+class SpecError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class Spec:
+    terms: tuple[tuple[str, str], ...]  # ((source, id), ...)
+    operator: str | None  # "/" or "-"
+    transforms: tuple[tuple[str, int | None], ...]
+
+
+def parse(text: str) -> Spec:
+    head, *steps = text.strip().split("|")
+    parts = _OPERATOR.split(head)
+    if len(parts) not in (1, 3):
+        raise SpecError(f"{text!r}: at most one ratio or difference per spec")
+    terms = []
+    for part in parts[::2]:
+        source, _, ident = part.partition(":")
+        if source not in SOURCES or not ident:
+            raise SpecError(f"{part!r}: expected one of {', '.join(SOURCES)} followed by :id")
+        terms.append((source, ident.upper()))
+    transforms = []
+    for step in steps:
+        name, _, arg = step.partition(":")
+        if name not in indicators.TRANSFORMS:
+            raise SpecError(f"unknown transform {name!r}")
+        _, windowed, default = indicators.TRANSFORMS[name]
+        if windowed and not arg and default is None:
+            raise SpecError(f"{name} needs a window, e.g. {name}:20")
+        transforms.append((name, int(arg) if arg else default))
+    return Spec(tuple(terms), parts[1] if len(parts) == 3 else None, tuple(transforms))
+
+
+def calendar(session: Session, start: date | None, end: date | None) -> list[date]:
+    """Trading days: dates on which SPY has a bar from any source."""
+    from fin_intel.ingest import get_security
+
+    spy = get_security(session, "SPY")
+    if spy is None:
+        raise SpecError("the trading calendar needs SPY prices; run sync-prices SPY")
+    stmt = select(DailyBar.date).where(DailyBar.security_id == spy.id).distinct()
+    if start:
+        stmt = stmt.where(DailyBar.date >= start)
+    if end:
+        stmt = stmt.where(DailyBar.date <= end)
+    return sorted(session.scalars(stmt))
+
+
+def build(
+    session: Session,
+    specs: Sequence[str],
+    start: date | None = None,
+    end: date | None = None,
+    pit: bool = True,
+) -> tuple[list[date], dict[str, indicators.Series]]:
+    """Evaluate specs on the trading calendar. Transforms need history before `start`, so
+    each series is computed from the earliest data and cut to [start, end] at the end."""
+    parsed = {text: parse(text) for text in specs}
+    full = calendar(session, None, end)
+    cache: dict[tuple[str, str], indicators.Series] = {}
+    out = {}
+    for text, spec in parsed.items():
+        values = []
+        for term in spec.terms:
+            if term not in cache:
+                cache[term] = _load(session, term, full, pit)
+            values.append(cache[term])
+        series = (
+            values[0] if spec.operator is None else _combine(values[0], values[1], spec.operator)
+        )
+        for name, window in spec.transforms:
+            fn, windowed, _ = indicators.TRANSFORMS[name]
+            if name == "yoy":
+                series = fn(series, full)
+            else:
+                series = fn(series, window) if windowed else fn(series)
+        out[text] = series
+    keep = [i for i, d in enumerate(full) if start is None or d >= start]
+    return [full[i] for i in keep], {k: [v[i] for i in keep] for k, v in out.items()}
+
+
+def _combine(a: indicators.Series, b: indicators.Series, op: str) -> indicators.Series:
+    if op == "/":
+        return [None if x is None or not y else x / y for x, y in zip(a, b, strict=True)]
+    return [None if x is None or y is None else x - y for x, y in zip(a, b, strict=True)]
+
+
+def _load(
+    session: Session, term: tuple[str, str], days: list[date], pit: bool
+) -> indicators.Series:
+    source, ident = term
+    if source == "fred":
+        return _fred_pit(session, ident, days) if pit else _fred_latest(session, ident, days)
+    return _price(session, ident, days, source)
+
+
+def _price(session: Session, ticker: str, days: list[date], field: str) -> indicators.Series:
+    """Bars merged across sources: the deepest-history source wins on each date, others fill
+    its gaps (sources agree where both exist). Splits and dividends are merged the same
+    way, and adjustments computed once over the merged bars."""
+    from fin_intel.ingest import get_security
+
+    security = get_security(session, ticker)
+    if security is None:
+        raise SpecError(f"unknown ticker {ticker}")
+    bars = session.scalars(select(DailyBar).where(DailyBar.security_id == security.id)).all()
+    if not bars:
+        raise SpecError(f"no prices for {ticker}")
+    first_date: dict[str, date] = {}
+    for b in bars:
+        first_date[b.source] = min(first_date.get(b.source, b.date), b.date)
+    rank = {src: i for i, src in enumerate(sorted(first_date, key=first_date.get))}
+    merged: dict[date, DailyBar] = {}
+    for b in sorted(bars, key=lambda b: rank[b.source], reverse=True):
+        merged[b.date] = b  # higher-priority sources overwrite
+    series_bars = [merged[d] for d in sorted(merged)]
+    if field == "px":
+        actions: dict[tuple[date, str], tuple[int, float]] = {}
+        for ex_date, action, value, src in session.execute(
+            select(
+                CorporateAction.ex_date,
+                CorporateAction.action,
+                CorporateAction.value,
+                CorporateAction.source,
+            ).where(CorporateAction.security_id == security.id)
+        ):
+            key = (ex_date, action)
+            if src in rank and (key not in actions or rank[src] < actions[key][0]):
+                actions[key] = (rank[src], value)
+        factors = adjustments(series_bars, [(d, a, v) for (d, a), (_, v) in actions.items()])
+        by_date = {
+            b.date: b.close * factors[b.date].price for b in series_bars if b.close is not None
+        }
+    elif field == "close":
+        by_date = {b.date: b.close for b in series_bars}
+    else:
+        by_date = {b.date: float(b.volume) if b.volume is not None else None for b in series_bars}
+    return [by_date.get(d) for d in days]
+
+
+def _fred_latest(session: Session, series_id: str, days: list[date]) -> indicators.Series:
+    rows = session.execute(
+        select(EconomicObservation.date, EconomicObservation.value)
+        .where(EconomicObservation.series_id == series_id, EconomicObservation.value.is_not(None))
+        .order_by(EconomicObservation.date)
+    ).all()
+    if not rows:
+        raise SpecError(f"no FRED data for {series_id}; run sync-economic {series_id}")
+    out, i, current = [], 0, None
+    for d in days:
+        while i < len(rows) and rows[i].date <= d:
+            current = rows[i].value
+            i += 1
+        out.append(current)
+    return out
+
+
+def _fred_pit(session: Session, series_id: str, days: list[date]) -> indicators.Series:
+    """Value known on each day: the latest observation published by then, as published
+    (its latest revision on or before that day)."""
+    rows = session.execute(
+        select(EconomicVintage.realtime_start, EconomicVintage.date, EconomicVintage.value)
+        .where(EconomicVintage.series_id == series_id)
+        .order_by(EconomicVintage.realtime_start, EconomicVintage.date)
+    ).all()
+    if not rows:
+        raise SpecError(f"no revision history for {series_id}; run sync-economic {series_id}")
+    known: dict[date, float | None] = {}
+    latest: date | None = None  # most recent observation date with a value
+    out, i = [], 0
+    for d in days:
+        while i < len(rows) and rows[i].realtime_start <= d:
+            _, obs_date, value = rows[i]
+            known[obs_date] = value
+            if value is not None and (latest is None or obs_date >= latest):
+                latest = obs_date
+            elif value is None and obs_date == latest:  # withdrawn: fall back
+                latest = max((k for k, v in known.items() if v is not None), default=None)
+            i += 1
+        out.append(known[latest] if latest is not None and latest <= d else None)
+    return out

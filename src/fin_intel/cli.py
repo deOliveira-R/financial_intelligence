@@ -167,12 +167,16 @@ def sync_actions(
 
 
 @app.command()
-def sync_economic(series: list[str]) -> None:
-    """Load FRED series, e.g. GDP CPIAUCSL DGS10 FEDFUNDS UNRATE."""
+def sync_economic(
+    series: Annotated[
+        list[str] | None, typer.Argument(help="FRED ids; default: macro pack")
+    ] = None,
+) -> None:
+    """Load FRED series with their revision history. Default: the curated macro pack
+    (macro.py) or FI_FRED_SERIES."""
     fred = FredProvider(raw_store=default_store())
-    _run(
-        "sync-economic", [s.upper() for s in series], lambda s, i: ingest.sync_economic(s, fred, i)
-    )
+    ids = [s.upper() for s in series] if series else get_settings().fred_series_ids
+    _run("sync-economic", ids, lambda s, i: ingest.sync_economic(s, fred, i))
 
 
 def _steps(job: str, steps: list[tuple[str, Callable[[], None]]]) -> None:
@@ -292,6 +296,50 @@ def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False) -> No
     import uvicorn
 
     uvicorn.run("fin_intel.api:app", host=host, port=port, reload=reload)
+
+
+# --- research -------------------------------------------------------------------------
+
+
+@app.command("timeseries")
+def timeseries_cmd(
+    specs: Annotated[list[str], typer.Argument(help="e.g. 'px:SPY|sma:200' 'fred:T10Y2Y'")],
+    start: Annotated[str | None, typer.Option(help="YYYY-MM-DD")] = None,
+    end: Annotated[str | None, typer.Option(help="YYYY-MM-DD")] = None,
+    pit: Annotated[bool, typer.Option(help="FRED values as known on each date")] = True,
+    csv_path: Annotated[str | None, typer.Option("--csv", help="Write all rows to a CSV")] = None,
+    rows: Annotated[int, typer.Option(help="Rows to print")] = 10,
+) -> None:
+    """Prices, macro and indicators on the trading calendar (see timeseries.py for syntax)."""
+    import csv
+
+    from fin_intel import timeseries
+
+    with session_factory()() as session:
+        try:
+            dates, series = timeseries.build(
+                session,
+                specs,
+                date.fromisoformat(start) if start else None,
+                date.fromisoformat(end) if end else None,
+                pit,
+            )
+        except timeseries.SpecError as exc:
+            raise typer.BadParameter(str(exc)) from None
+    if csv_path:
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["date", *series])
+            for i, d in enumerate(dates):
+                writer.writerow([d.isoformat(), *(v[i] for v in series.values())])
+        typer.echo(f"wrote {len(dates)} rows to {csv_path}")
+    width = max(12, *(len(k) for k in series))
+    typer.echo(f"{'date':<11}" + "".join(f"{k:>{width + 2}}" for k in series))
+    for i in range(max(0, len(dates) - rows), len(dates)):
+        cells = "".join(
+            f"{'—' if v[i] is None else f'{v[i]:.4g}':>{width + 2}}" for v in series.values()
+        )
+        typer.echo(f"{dates[i].isoformat():<11}{cells}")
 
 
 # --- portfolio -------------------------------------------------------------------------

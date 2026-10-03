@@ -230,3 +230,45 @@ MASSIVE_DIVIDENDS = {
         },
     ],
 }
+
+# UNRATE's July value was first published as 4.1 on Aug 1, revised to 4.2 on Sep 5, when
+# August was first published.
+FRED_VINTAGE_DATES = {"count": 2, "vintage_dates": ["2026-08-01", "2026-09-05"]}
+FRED_VINTAGES = {
+    "count": 3,
+    "observations": [
+        {
+            "date": "2026-07-01",
+            "realtime_start": "2026-08-01",
+            "realtime_end": "2026-09-04",
+            "value": "4.1",
+        },
+        {
+            "date": "2026-07-01",
+            "realtime_start": "2026-09-05",
+            "realtime_end": "9999-12-31",
+            "value": "4.2",
+        },
+        {
+            "date": "2026-08-01",
+            "realtime_start": "2026-09-05",
+            "realtime_end": "9999-12-31",
+            "value": "4.3",
+        },
+    ],
+}
+
+
+def mock_fred(respx_router=None):
+    """Register FRED routes for UNRATE: series, latest observations, and vintages."""
+    import respx
+
+    router = respx_router or respx
+    base = "https://api.stlouisfed.org/fred"
+    router.get(f"{base}/series").respond(json=FRED_SERIES)
+    router.get(f"{base}/series/vintagedates").respond(json=FRED_VINTAGE_DATES)
+    # Vintage requests carry a realtime window; the plain one is the latest values.
+    router.get(f"{base}/series/observations", params={"realtime_start": "2026-08-01"}).respond(
+        json=FRED_VINTAGES
+    )
+    router.get(f"{base}/series/observations").respond(json=FRED_OBS)

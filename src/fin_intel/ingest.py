@@ -12,7 +12,7 @@ import logging
 from collections import Counter, defaultdict
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -26,6 +26,7 @@ from fin_intel.models import (
     DailyBar,
     EconomicObservation,
     EconomicSeries,
+    EconomicVintage,
     Fact,
     Filing,
     Issuer,
@@ -335,6 +336,11 @@ def load_fred_observations(session: Session, series_id: str, payload: Any) -> in
     return upsert(session, EconomicObservation, rows, key=["series_id", "date"])
 
 
+def load_fred_vintages(session: Session, series_id: str, payload: Any) -> int:
+    rows = fred.parse_vintages(series_id, payload)
+    return upsert(session, EconomicVintage, rows, key=["series_id", "date", "realtime_start"])
+
+
 # --- loader registry (used by rebuild) -------------------------------------------------
 
 # (provider, dataset) -> loader(session, key, payload, fetched_at)
@@ -350,6 +356,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("massive", "dividends"): lambda s, k, p, t: load_massive_actions(s, "dividends", p),
     ("fred", "series"): lambda s, k, p, t: load_fred_series(s, p),
     ("fred", "observations"): lambda s, k, p, t: load_fred_observations(s, k, p),
+    ("fred", "vintages"): lambda s, k, p, t: load_fred_vintages(s, k, p),
 }
 # Datasets that create or rename securities. Rebuilds replay them before everything else,
 # so symbol-keyed market data always resolves against the full security list.
@@ -541,10 +548,25 @@ def sync_market_actions(
 
 
 def sync_economic(session: Session, fred_provider: FredProvider, series_id: str) -> int:
-    """Full refetch each time: one call returns the whole series and picks up revisions."""
+    """Latest values (one call returns the whole series) plus every revision published
+    since the last sync (ALFRED vintages), for point-in-time research."""
     with tracked(session, "fred", "observations", series_id) as result:
+        last_vintage = session.scalar(
+            select(func.max(EconomicVintage.realtime_start)).where(
+                EconomicVintage.series_id == series_id
+            )
+        )
         series = fred_provider.fetch_series(series_id)
         observations = fred_provider.fetch_observations(series_id)
+        since = last_vintage + timedelta(days=1) if last_vintage else None
+        vintage_dates = fred_provider.fetch_vintage_dates(series_id, since)
+        vintage_pages = []
+        for i in range(0, len(vintage_dates), fred.MAX_VINTAGES):
+            window = vintage_dates[i : i + fred.MAX_VINTAGES]
+            vintage_pages += fred_provider.fetch_vintages(series_id, window[0], window[-1])
+
         load_fred_series(session, series)
         result["rows"] = load_fred_observations(session, series_id, observations)
+        for page in vintage_pages:
+            load_fred_vintages(session, series_id, page)
     return result["rows"]

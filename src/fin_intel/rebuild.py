@@ -22,6 +22,7 @@ from fin_intel.models import (
     DailyBar,
     EconomicObservation,
     EconomicSeries,
+    EconomicVintage,
     Fact,
     Filing,
     FiscalCalendar,
@@ -48,8 +49,8 @@ TARGETS = {
         [DailyBar, CorporateAction],
     ),
     "economic": (
-        [("fred", "series"), ("fred", "observations")],
-        [EconomicObservation, EconomicSeries],
+        [("fred", "series"), ("fred", "observations"), ("fred", "vintages")],
+        [EconomicVintage, EconomicObservation, EconomicSeries],
     ),
     # Everything: reference data in fetch order (so renames happen as they did), then the rest.
     "all": (
@@ -64,6 +65,7 @@ TARGETS = {
             TickerHistory,
             Security,
             Issuer,
+            EconomicVintage,
             EconomicObservation,
             EconomicSeries,
         ],

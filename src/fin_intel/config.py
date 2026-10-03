@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     api_key: str | None = None
     # Scheduled syncs (sync-daily / sync-weekly). Comma-separated lists.
     watchlist: str = ""  # tickers for Tiingo history and SEC fundamentals
-    fred_series: str = "GDP,CPIAUCSL,DGS10,FEDFUNDS,UNRATE"
+    fred_series: str = ""  # empty: the curated macro pack (macro.py)
     market_otc: bool = True  # include OTC securities in Massive's daily bars
 
     @property
@@ -26,7 +26,9 @@ class Settings(BaseSettings):
 
     @property
     def fred_series_ids(self) -> list[str]:
-        return _split(self.fred_series)
+        from fin_intel.macro import MACRO_SERIES
+
+        return _split(self.fred_series) or list(MACRO_SERIES)
 
 
 def _split(value: str) -> list[str]:

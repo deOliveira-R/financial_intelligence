@@ -5,13 +5,12 @@ import pytest
 import respx
 from conftest import (
     COMPANY_FACTS,
-    FRED_OBS,
-    FRED_SERIES,
     MASSIVE_DIVIDENDS,
     MASSIVE_GROUPED,
     MASSIVE_SPLITS_PAGE1,
     MASSIVE_SPLITS_PAGE2,
     TICKERS,
+    mock_fred,
     tiingo_bar,
 )
 from sqlalchemy import select
@@ -22,6 +21,7 @@ from fin_intel.models import (
     CorporateAction,
     DailyBar,
     EconomicObservation,
+    EconomicVintage,
     Fact,
     Filing,
     FiscalCalendar,
@@ -41,6 +41,7 @@ SNAPSHOT_TABLES = [
     DailyBar,
     CorporateAction,
     EconomicObservation,
+    EconomicVintage,
 ]
 
 
@@ -103,8 +104,7 @@ def synced(session, raw_store):
                 ]
             }
         )
-        respx.get("https://api.stlouisfed.org/fred/series").respond(json=FRED_SERIES)
-        respx.get("https://api.stlouisfed.org/fred/series/observations").respond(json=FRED_OBS)
+        mock_fred()
         sec = SecProvider(raw_store=raw_store)
         tiingo = TiingoProvider(raw_store=raw_store)
         ingest.sync_tickers(session, sec)

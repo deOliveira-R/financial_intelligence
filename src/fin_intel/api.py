@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import ingest, portfolio
+from fin_intel import ingest, portfolio, timeseries
 from fin_intel.config import get_settings
 from fin_intel.db import get_session
 from fin_intel.fundamentals import Fact, derive_q4, latest_per_period, split_adjust
@@ -483,6 +483,39 @@ def portfolio_replacements(
     keep while a harvested loss waits out the wash-sale window. One tracking the same
     index may count as substantially identical."""
     return portfolio.replacements(session, ticker, top)
+
+
+# --- research time series ----------------------------------------------------------------
+
+
+@api.get("/timeseries", response_model=None)
+def timeseries_endpoint(
+    session: SessionDep,
+    s: Annotated[list[str], Query(description="Series specs, e.g. px:SPY|sma:200, fred:T10Y2Y")],
+    start: date | None = None,
+    end: date | None = None,
+    pit: bool = Query(True, description="FRED values as known on each date (no look-ahead)"),
+    format: str = Query("json", pattern="^(json|csv)$"),
+):
+    """Prices, macro series and indicators aligned on the trading calendar.
+
+    Spec syntax: `px:TICKER` (adjusted close), `close:`, `volume:`, `fred:ID`; one ratio
+    (`/`) or difference (`-`) of two terms; then transforms with `|`: sma:N ema:N rsi:N
+    macd ret:N diff:N vol:N z:N high:N low:N dd:N yoy.
+    """
+    from fastapi.responses import PlainTextResponse
+
+    try:
+        dates, series = timeseries.build(session, s, start, end, pit)
+    except timeseries.SpecError as exc:
+        raise HTTPException(400, str(exc)) from None
+    if format == "csv":
+        lines = [",".join(["date", *(f'"{k}"' for k in series)])]
+        for i, d in enumerate(dates):
+            cells = ["" if v[i] is None else f"{v[i]:.6g}" for v in series.values()]
+            lines.append(",".join([d.isoformat(), *cells]))
+        return PlainTextResponse("\n".join(lines) + "\n", media_type="text/csv")
+    return {"dates": dates, "series": series}
 
 
 app.include_router(api)

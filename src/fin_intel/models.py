@@ -310,3 +310,19 @@ class PositionSnapshot(Base):
     price: Mapped[float | None] = mapped_column(Float)
     market_value: Mapped[float | None] = mapped_column(Float)
     cost_basis: Mapped[float | None] = mapped_column(Float)
+
+
+class EconomicVintage(Base):
+    """A value of an observation as published from `realtime_start` on (ALFRED vintages).
+
+    What was known about `date` on day D is the row with the latest realtime_start <= D.
+    A version spanning two fetch windows appears once per window with the same value,
+    which this lookup makes harmless.
+    """
+
+    __tablename__ = "economic_vintages"
+
+    series_id: Mapped[str] = mapped_column(ForeignKey("economic_series.id"), primary_key=True)
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    realtime_start: Mapped[date] = mapped_column(Date, primary_key=True)
+    value: Mapped[float | None] = mapped_column(Float)
