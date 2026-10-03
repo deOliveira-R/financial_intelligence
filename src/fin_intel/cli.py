@@ -189,6 +189,31 @@ def sync_insiders(
         )
 
 
+@app.command("sync-13f")
+def sync_13f(
+    files: Annotated[int, typer.Option(help="Most recent 13F data set files to load")] = 4,
+) -> None:
+    """Load institutional holdings (13F data sets, three months each), then map their
+    CUSIPs to securities via OpenFIGI (set FI_OPENFIGI_API_KEY to make that ~100x faster)."""
+    from fin_intel.providers import OpenFigiProvider
+
+    store = default_store()
+    sec = SecProvider(raw_store=store)
+    available = sec.list_13f_datasets()
+    wanted = sorted(available)[-files:]
+    loaded = set(store.latest_hashes("sec", "13f_dataset"))
+    pending = [p for p in wanted if p not in loaded]
+    if pending:
+        _run("sync-13f", pending, lambda s, p: ingest.sync_13f_dataset(s, sec, p, available[p]))
+    openfigi = OpenFigiProvider(raw_store=store)
+
+    def progress(done: int, total: int) -> None:
+        if done % 1000 < openfigi.batch or done == total:
+            typer.echo(f"  mapped {done}/{total} CUSIPs")
+
+    _run("sync-13f", ["cusips"], lambda s, _: ingest.sync_cusip_mappings(s, openfigi, progress))
+
+
 @app.command()
 def sync_prices(
     tickers: list[str],
@@ -328,6 +353,7 @@ def sync_weekly() -> None:
     steps = [
         ("SEC tickers", sync_tickers),
         ("Massive reference", lambda: sync_reference(otc=settings.market_otc)),
+        ("institutional holdings (13F)", lambda: sync_13f(files=4)),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
     _steps("sync-weekly", steps)

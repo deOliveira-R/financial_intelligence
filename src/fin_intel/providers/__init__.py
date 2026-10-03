@@ -7,6 +7,7 @@ from fin_intel.providers.errors import (
 )
 from fin_intel.providers.fred import FredProvider
 from fin_intel.providers.massive import MassiveProvider
+from fin_intel.providers.openfigi import OpenFigiProvider
 from fin_intel.providers.sec import SecProvider
 from fin_intel.providers.tiingo import TiingoProvider
 
@@ -15,6 +16,7 @@ __all__ = [
     "MassiveProvider",
     "NotConfiguredError",
     "NotFoundError",
+    "OpenFigiProvider",
     "Provider",
     "ProviderError",
     "QuotaExceededError",

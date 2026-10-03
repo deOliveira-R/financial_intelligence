@@ -15,6 +15,7 @@ from fin_intel.ingest import (
     BINARY_DATASETS,
     LOADERS,
     REFERENCE_DATASETS,
+    REQUEST_DATASETS,
     SNAPSHOT_DATASETS,
     deactivate_unseen_massive,
     get_security,
@@ -23,6 +24,7 @@ from fin_intel.models import (
     CompanyMetrics,
     Concept,
     CorporateAction,
+    CusipMapping,
     DailyBar,
     EconomicObservation,
     EconomicSeries,
@@ -31,6 +33,8 @@ from fin_intel.models import (
     Filing,
     FiscalCalendar,
     InsiderTransaction,
+    InstitutionalFiler,
+    InstitutionalPosition,
     Issuer,
     PortfolioTransaction,
     Security,
@@ -58,6 +62,10 @@ TARGETS = {
     "insiders": (
         [("sec", "insider_dataset"), ("sec", "form4")],
         [InsiderTransaction],
+    ),
+    "holdings": (
+        [("sec", "13f_dataset"), ("openfigi", "mapping")],
+        [InstitutionalPosition, InstitutionalFiler, CusipMapping],
     ),
     "economic": (
         [("fred", "series"), ("fred", "observations"), ("fred", "vintages")],
@@ -93,6 +101,9 @@ TARGETS = {
             EconomicObservation,
             EconomicSeries,
             InsiderTransaction,
+            InstitutionalPosition,
+            InstitutionalFiler,
+            CusipMapping,
         ],
     ),
 }
@@ -123,7 +134,12 @@ def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
         dataset = (r.provider, r.dataset)
         if dataset in SNAPSHOT_DATASETS and latest[(r.provider, r.dataset, r.key)] != r.id:
             continue
-        payload = r.body if dataset in BINARY_DATASETS else r.json()
+        if dataset in BINARY_DATASETS:
+            payload = r.body
+        elif dataset in REQUEST_DATASETS:
+            payload = {"request": r.params.get("body"), "response": r.json()}
+        else:
+            payload = r.json()
         LOADERS[dataset](session, r.key, payload, r.fetched_at)
         loaded[f"{r.provider}/{r.dataset}"] += 1
     # Deactivation needs a complete list, which page-by-page replay doesn't see; apply it

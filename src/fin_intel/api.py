@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import ingest, insiders, portfolio, screener, timeseries
+from fin_intel import ingest, insiders, portfolio, screener, thirteenf, timeseries
 from fin_intel.config import get_settings
 from fin_intel.db import get_session
 from fin_intel.fundamentals import Fact, derive_q4, latest_per_period, split_adjust
@@ -17,12 +17,15 @@ from fin_intel.models import (
     CompanyMetrics,
     Concept,
     CorporateAction,
+    CusipMapping,
     DailyBar,
     EconomicObservation,
     EconomicSeries,
     Filing,
     FiscalCalendar,
     InsiderTransaction,
+    InstitutionalFiler,
+    InstitutionalPosition,
     Security,
     StatementItem,
     SyncRun,
@@ -663,6 +666,66 @@ def insider_transactions(
     if code:
         stmt = stmt.where(InsiderTransaction.trans_code == code.upper())
     return list(session.scalars(stmt))
+
+
+# --- institutional holdings ------------------------------------------------------------------
+
+
+@api.get("/holdings/managers")
+def holdings_managers(session: SessionDep, q: str, limit: int = Query(20, le=100)) -> list[dict]:
+    """Find 13F filers by name, e.g. q=berkshire, q=pershing, q=scion."""
+    return [{"cik": f.cik, "name": f.name} for f in thirteenf.find_filers(session, q, limit)]
+
+
+@api.get("/holdings/managers/{cik}")
+def holdings_manager(session: SessionDep, cik: int, period: date | None = None) -> dict:
+    """A manager's positions at a quarter end, with the change since its previous report
+    (new, added, reduced, sold, unchanged), largest first."""
+    current, changes = thirteenf.manager_changes(session, cik, period)
+    if current is None:
+        raise HTTPException(404, f"no 13F holdings for CIK {cik}")
+    return {"cik": cik, "period": current, "positions": changes}
+
+
+@api.get("/holdings/security/{ticker}")
+def holdings_security(session: SessionDep, ticker: str, limit: int = Query(25, le=200)) -> dict:
+    """Institutions holding a security at the latest quarter end, largest first."""
+    security = _security(session, ticker)
+    cusips = list(
+        session.scalars(select(CusipMapping.cusip).where(CusipMapping.security_id == security.id))
+    )
+    if not cusips:
+        raise HTTPException(404, f"no 13F holdings mapped to {ticker}")
+    period = session.scalar(
+        select(func.max(InstitutionalPosition.period)).where(
+            InstitutionalPosition.cusip.in_(cusips)
+        )
+    )
+    rows = session.execute(
+        select(InstitutionalPosition, InstitutionalFiler.name)
+        .join(InstitutionalFiler, InstitutionalFiler.cik == InstitutionalPosition.filer_cik)
+        .where(
+            InstitutionalPosition.cusip.in_(cusips),
+            InstitutionalPosition.period == period,
+            InstitutionalPosition.put_call == "",
+        )
+        .order_by(InstitutionalPosition.value.desc())
+        .limit(limit)
+    ).all()
+    return {
+        "ticker": ticker.upper(),
+        "period": period,
+        "holders": [
+            {
+                "cik": p.filer_cik,
+                "name": name,
+                "shares": p.shares,
+                "value": p.value,
+                "filed": p.filed,
+            }
+            for p, name in rows
+        ],
+    }
 
 
 app.include_router(api)

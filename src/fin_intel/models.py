@@ -445,3 +445,44 @@ class InsiderTransaction(Base):
     shares_after: Mapped[float | None] = mapped_column(Float)
     direct_indirect: Mapped[str | None] = mapped_column(String(2))
     plan_10b5_1: Mapped[bool] = mapped_column(default=False)
+
+
+class InstitutionalFiler(Base):
+    """A 13F filer: an institutional investment manager with $100M+ under management."""
+
+    __tablename__ = "institutional_filers"
+
+    cik: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    name: Mapped[str | None] = mapped_column(String(256), index=True)
+
+
+class InstitutionalPosition(Base):
+    """A filer's holding of one security at a quarter end (13F), summed across the rows
+    it reports it in (e.g. per subsidiary). Options are separate positions (put_call)."""
+
+    __tablename__ = "institutional_positions"
+
+    filer_cik: Mapped[int] = mapped_column(ForeignKey("institutional_filers.cik"), primary_key=True)
+    period: Mapped[date] = mapped_column(Date, primary_key=True)
+    cusip: Mapped[str] = mapped_column(String(9), primary_key=True, index=True)
+    put_call: Mapped[str] = mapped_column(String(4), primary_key=True)  # "" for shares
+    issuer_name: Mapped[str | None] = mapped_column(String(256))
+    title: Mapped[str | None] = mapped_column(String(64))
+    shares: Mapped[float | None] = mapped_column(Float)  # or principal amount, see share_type
+    share_type: Mapped[str | None] = mapped_column(String(4))  # SH or PRN
+    value: Mapped[float | None] = mapped_column(Float)  # US dollars
+    accession: Mapped[str] = mapped_column(String(32))
+    filed: Mapped[date | None] = mapped_column(Date)
+
+
+class CusipMapping(Base):
+    """Derived: which security a CUSIP is (via a FIGI in the filing or OpenFIGI)."""
+
+    __tablename__ = "cusip_mappings"
+
+    cusip: Mapped[str] = mapped_column(String(9), primary_key=True)
+    figi: Mapped[str | None] = mapped_column(String(12))
+    composite_figi: Mapped[str | None] = mapped_column(String(12))
+    ticker: Mapped[str | None] = mapped_column(String(32))
+    security_type: Mapped[str | None] = mapped_column(String(64))
+    security_id: Mapped[int | None] = mapped_column(ForeignKey("securities.id"))

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     fred_api_key: str | None = None
     tiingo_api_key: str | None = None
     massive_api_key: str | None = None
+    openfigi_api_key: str | None = None  # optional: raises OpenFIGI's limits
     http_timeout: float = 30.0
     # When set, every API endpoint except /health requires the header `X-API-Key: <value>`.
     api_key: str | None = None

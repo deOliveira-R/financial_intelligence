@@ -20,7 +20,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import derive, insiders
+from fin_intel import derive, insiders, thirteenf
 from fin_intel.db import upsert
 from fin_intel.models import (
     Concept,
@@ -40,6 +40,7 @@ from fin_intel.models import (
 from fin_intel.providers import (
     FredProvider,
     MassiveProvider,
+    OpenFigiProvider,
     ProviderError,
     SecProvider,
     TiingoProvider,
@@ -530,6 +531,10 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("massive", "dividends"): lambda s, k, p, t: load_massive_actions(s, "dividends", p),
     ("sec", "insider_dataset"): lambda s, k, p, t: load_insider_dataset(s, p),
     ("sec", "form4"): lambda s, k, p, t: load_form4(s, k, p),
+    ("sec", "13f_dataset"): lambda s, k, p, t: load_13f_dataset(s, p),
+    ("openfigi", "mapping"): lambda s, k, p, t: load_openfigi_mapping(
+        s, p["request"], p["response"]
+    ),
     ("fred", "series"): lambda s, k, p, t: load_fred_series(s, p),
     ("fred", "observations"): lambda s, k, p, t: load_fred_observations(s, k, p),
     ("fred", "vintages"): lambda s, k, p, t: load_fred_vintages(s, k, p),
@@ -550,7 +555,9 @@ SYMBOL_KEYED_DATASETS = [
     ("massive", "dividends"),
 ]
 # Datasets whose loaders take the raw body (bytes) rather than parsed JSON.
-BINARY_DATASETS = {("sec", "insider_dataset"), ("sec", "form4")}
+BINARY_DATASETS = {("sec", "insider_dataset"), ("sec", "form4"), ("sec", "13f_dataset")}
+# Datasets whose response only means something with its request (recorded as params).
+REQUEST_DATASETS = {("openfigi", "mapping")}
 # Datasets where each response is a full snapshot, so only the latest one matters.
 SNAPSHOT_DATASETS = {
     ("sec", "companyfacts"),
@@ -834,6 +841,49 @@ def sync_insider_day(session: Session, sec_provider: SecProvider, day: date) -> 
         bodies = [(a, sec_provider.fetch_submission(a, p)) for a, p in filings if a not in have]
         result["rows"] = sum(load_form4(session, a, body) for a, body in bodies)
     return result["rows"]
+
+
+# --- institutional holdings (13F) -------------------------------------------------------------
+
+
+def load_13f_dataset(session: Session, body: bytes) -> int:
+    count = thirteenf.load(session, body)
+    thirteenf.link_securities(session)
+    return count
+
+
+def load_openfigi_mapping(session: Session, request: list[dict], response: list[dict]) -> int:
+    count = thirteenf.load_openfigi(session, [job["idValue"] for job in request], response)
+    thirteenf.link_securities(session)
+    return count
+
+
+def sync_13f_dataset(session: Session, sec_provider: SecProvider, period: str, url: str) -> int:
+    with tracked(session, "sec", "13f_dataset", period) as result:
+        body = sec_provider.fetch_13f_dataset(period, url)
+        result["rows"] = load_13f_dataset(session, body)
+    return result["rows"]
+
+
+def sync_cusip_mappings(
+    session: Session, openfigi: OpenFigiProvider, progress: Callable[[int, int], None] | None = None
+) -> int:
+    """Look up every unmapped CUSIP on OpenFIGI, one committed batch at a time (a first
+    run without an API key takes hours; progress survives interruptions)."""
+    cusips = thirteenf.unmapped_cusips(session)
+    done = 0
+    for i in range(0, len(cusips), openfigi.batch):
+        batch = cusips[i : i + openfigi.batch]
+        session.commit()  # fetch-then-load: no write lock held during the request
+        results = openfigi.map_cusips(batch)
+        thirteenf.load_openfigi(session, batch, results)
+        session.commit()
+        done += len(batch)
+        if progress:
+            progress(done, len(cusips))
+    thirteenf.link_securities(session)
+    session.commit()
+    return done
 
 
 def sync_economic(session: Session, fred_provider: FredProvider, series_id: str) -> int:

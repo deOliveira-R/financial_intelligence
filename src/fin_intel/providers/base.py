@@ -83,8 +83,20 @@ class Provider:
         """GET a non-JSON resource (zip, HTML, text), recorded in the raw store."""
         return self._request(url, params, dataset=dataset, key=key).content
 
+    def post_json(self, url: str, body: Any, *, dataset: str, key: str | None = None) -> Any:
+        """POST a JSON body and return the JSON response. The body is recorded with the
+        raw response (as its params), since the request defines what the answer means."""
+        resp = self._request(url, None, dataset=dataset, key=key, json_body=body)
+        return resp.json()
+
     def _request(
-        self, url: str, params: dict[str, Any] | None, *, dataset: str, key: str | None
+        self,
+        url: str,
+        params: dict[str, Any] | None,
+        *,
+        dataset: str,
+        key: str | None,
+        json_body: Any = None,
     ) -> httpx.Response:
         if not url.startswith("http"):
             url = self.base_url + url
@@ -96,14 +108,18 @@ class Provider:
         for attempt in range(self.max_retries + 1):
             self.limiter.acquire()
             try:
-                resp = self.client.get(request_url, headers=headers)
+                if json_body is None:
+                    resp = self.client.get(request_url, headers=headers)
+                else:
+                    resp = self.client.post(request_url, headers=headers, json=json_body)
             except httpx.TransportError as exc:
                 if attempt == self.max_retries:
                     raise ProviderError(f"{self.name}: {exc}") from exc
             else:
                 if self.raw_store:
+                    recorded = public_params if json_body is None else {"body": json_body}
                     self.raw_store.save(
-                        self.name, dataset, key, public_params, resp.status_code, resp.content
+                        self.name, dataset, key, recorded, resp.status_code, resp.content
                     )
                 if resp.status_code not in RETRY_STATUSES or attempt == self.max_retries:
                     break

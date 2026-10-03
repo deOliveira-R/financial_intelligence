@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +9,7 @@ from fin_intel.providers.errors import NotFoundError
 from fin_intel.providers.ratelimit import SECOND, Limit
 
 TICKERS_URL = "https://www.sec.gov/files/company_tickers_exchange.json"
+THIRTEENF_DATASETS_PAGE = "https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets"
 INSIDER_DATASETS_PAGE = (
     "https://www.sec.gov/data-research/sec-markets-data/insider-transactions-data-sets"
 )
@@ -56,6 +57,21 @@ class SecProvider(Provider):
             m.group(2): "https://www.sec.gov" + m.group(1)
             for m in re.finditer(r'href="(/files/[^"]*/(\d{4}q\d)_form345\.zip)"', html)
         }
+
+    def list_13f_datasets(self) -> dict[str, str]:
+        """{"2026-06-01_2026-08-31": url, ...}: each file covers three months of filings."""
+        html = self.get_bytes(THIRTEENF_DATASETS_PAGE, dataset="13f_dataset_index").decode()
+        out = {}
+        for m in re.finditer(
+            r'href="(/files/[^"]*/(\d{2}[a-z]{3}\d{4})-(\d{2}[a-z]{3}\d{4})_form13f\.zip)"', html
+        ):
+            start = datetime.strptime(m.group(2), "%d%b%Y").date()
+            end = datetime.strptime(m.group(3), "%d%b%Y").date()
+            out[f"{start}_{end}"] = "https://www.sec.gov" + m.group(1)
+        return out
+
+    def fetch_13f_dataset(self, period: str, url: str) -> bytes:
+        return self.get_bytes(url, dataset="13f_dataset", key=period)
 
     def fetch_insider_dataset(self, quarter: str, url: str) -> bytes:
         return self.get_bytes(url, dataset="insider_dataset", key=quarter)
