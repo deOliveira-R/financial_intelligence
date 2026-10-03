@@ -7,8 +7,9 @@ candidates in priority order; for every period the first candidate with a value 
 company switching concepts over the years still yields one continuous series. The chosen
 concept is kept with each value, so every number traces back to its filing.
 
-Values are the latest filed per period (restatements win), with a derived Q4 (FY minus
-nine months) for flow items when a company only reports the full year.
+Values are the latest filed per period (restatements win). Flow items get one standalone
+value per fiscal quarter, derived from year-to-date figures where a company reports only
+those (10-Q cash flow statements); derived values are flagged.
 """
 
 from collections import defaultdict
@@ -286,6 +287,7 @@ class _Value:
     value: float
     filed: date | None
     concept_id: int
+    derived: bool = False  # computed from other periods (e.g. Q2 = six months - Q1)
 
 
 def build_issuer(session: Session, cik: int) -> int:
@@ -344,7 +346,7 @@ def build_issuer(session: Session, cik: int) -> int:
         values[item].append(v)
     for item, (_, kind, _) in LINE_ITEMS.items():
         if kind == "flow":
-            values[item] += _derived_q4(values[item])
+            values[item] = _standalone_quarters(values[item])
 
     records = [
         {
@@ -359,6 +361,7 @@ def build_issuer(session: Session, cik: int) -> int:
             "value": v.value,
             "filed": v.filed,
             "concept_id": v.concept_id,
+            "derived": v.derived,
         }
         for item, vs in values.items()
         for v in vs
@@ -374,33 +377,71 @@ def _belongs(item: str, v: _Value) -> bool:
     statement, kind, _ = LINE_ITEMS[item]
     if kind == "stock" or (kind == "shares" and statement == "balance"):
         return v.period_type == "instant"
+    if kind == "flow":  # year-to-date periods only feed the standalone-quarter derivation
+        return v.period_type in ("annual", "quarter", "half", "nine_months")
     return v.period_type in ("annual", "quarter")
 
 
-def _derived_q4(values: list[_Value]) -> list[_Value]:
-    """FY minus the first three quarters (or the nine-month YTD) when Q4 isn't reported."""
+def _standalone_quarters(values: list[_Value]) -> list[_Value]:
+    """Annual values plus one standalone value per fiscal quarter.
+
+    10-Q cash flow statements (and some income statements) are year-to-date: three, six
+    and nine months. Quarters not reported on their own are derived from cumulative values
+    starting at the fiscal year start: Q2 = six months - Q1, Q3 = nine months - six months,
+    Q4 = full year - nine months (or minus the sum of the earlier quarters). Year-to-date
+    values themselves aren't kept.
+    """
+    out = [v for v in values if v.period_type == "annual"]
+    out += [v for v in values if v.period_type == "quarter" and v.fiscal_year is None]
     by_year: dict[tuple, dict[str, _Value]] = defaultdict(dict)
     for v in values:
         if v.fiscal_year is not None and v.fiscal_period:
             by_year[(v.unit, v.fiscal_year)][v.fiscal_period] = v
-    out = []
     for periods in by_year.values():
-        fy, q1, q2, q3 = (periods.get(p) for p in ("FY", "Q1", "Q2", "Q3"))
-        if fy is None or q1 is None or q2 is None or q3 is None or "Q4" in periods:
+        reported = {n: periods.get(f"Q{n}") for n in (1, 2, 3, 4)}
+        reported = {
+            n: v for n, v in reported.items() if v is not None and v.period_type == "quarter"
+        }
+        starts = [v.period_start for k in ("FY", "9M", "H1") if (v := periods.get(k))]
+        if 1 in reported:
+            starts.append(reported[1].period_start)
+        if not starts:
+            out += reported.values()
             continue
-        quarters = [q1, q2, q3]
-        if q1.period_start != fy.period_start:
-            continue
-        start = q3.period_end + timedelta(days=1)
-        if period_type(start, fy.period_end, instant=False) != "quarter":
-            continue
-        out.append(
-            replace(
-                fy,
+        year_start = min(starts)
+        cumulative: dict[int, _Value] = {}
+        for n, key in ((2, "H1"), (3, "9M"), (4, "FY")):
+            v = periods.get(key)
+            if v is not None and v.period_start == year_start:
+                cumulative[n] = v
+        if 1 in reported and reported[1].period_start == year_start:
+            cumulative[1] = reported[1]
+
+        quarters: dict[int, _Value] = {}
+        for n in (1, 2, 3, 4):
+            if n in reported:
+                quarters[n] = reported[n]
+                continue
+            ytd = cumulative.get(n)
+            if ytd is None or n == 1:
+                continue
+            if n - 1 in cumulative:
+                before, prev_end = cumulative[n - 1].value, cumulative[n - 1].period_end
+            elif all(k in quarters for k in range(1, n)):
+                before = sum(quarters[k].value for k in range(1, n))
+                prev_end = quarters[n - 1].period_end
+            else:
+                continue
+            start = prev_end + timedelta(days=1)
+            if period_type(start, ytd.period_end, instant=False) != "quarter":
+                continue
+            quarters[n] = replace(
+                ytd,
                 period_start=start,
                 period_type="quarter",
-                fiscal_period="Q4",
-                value=fy.value - sum(q.value for q in quarters),
+                fiscal_period=f"Q{n}",
+                value=ytd.value - before,
+                derived=True,
             )
-        )
+        out += quarters.values()
     return out

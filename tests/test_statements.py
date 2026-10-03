@@ -233,3 +233,40 @@ def test_company_without_facts_loads_cleanly(session):
         ingest.load_company_facts(session, 7, {"cik": 7, "entityName": "Empty", "facts": {}}) == 0
     )
     assert items(session, 7, "revenue") == []
+
+
+def test_quarters_derived_from_year_to_date_cash_flows(session):
+    # 10-Q cash flow statements are year-to-date: 3, 6 and 9 months, then the 10-K year.
+    ytd = [
+        ("2024-09-29", "2024-12-28", 29.9, "Q1", "10-Q"),
+        ("2024-09-29", "2025-03-29", 53.9, "Q2", "10-Q"),
+        ("2024-09-29", "2025-06-28", 81.8, "Q3", "10-Q"),
+        ("2024-09-29", "2025-09-27", 111.5, "FY", "10-K"),
+    ]
+    ingest.load_company_facts(
+        session,
+        8,
+        payload(
+            8,
+            {
+                ("us-gaap", "NetCashProvidedByUsedInOperatingActivities"): (
+                    "USD",
+                    [
+                        fact(s, e, v, f"A-{fp}", 2025, fp, form=form, filed="2025-11-01")
+                        for s, e, v, fp, form in ytd
+                    ],
+                ),
+            },
+        ),
+    )
+    rows = session.execute(
+        select(StatementItem.fiscal_period, StatementItem.value, StatementItem.derived)
+        .where(StatementItem.cik == 8, StatementItem.period_type == "quarter")
+        .order_by(StatementItem.period_end)
+    ).all()
+    assert [(fp, round(v, 1), d) for fp, v, d in rows] == [
+        ("Q1", 29.9, False),
+        ("Q2", 24.0, True),
+        ("Q3", 27.9, True),
+        ("Q4", 29.7, True),
+    ]

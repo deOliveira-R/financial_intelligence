@@ -14,6 +14,7 @@ from fin_intel.db import get_session
 from fin_intel.fundamentals import Fact, derive_q4, latest_per_period, split_adjust
 from fin_intel.models import (
     Account,
+    CompanyMetrics,
     Concept,
     CorporateAction,
     DailyBar,
@@ -22,6 +23,7 @@ from fin_intel.models import (
     Filing,
     FiscalCalendar,
     Security,
+    StatementItem,
     SyncRun,
     SyncState,
     TickerHistory,
@@ -536,6 +538,80 @@ def screener_endpoint(
     except screener.ScreenError as exc:
         raise HTTPException(400, str(exc)) from None
     return {"as_of": as_of, "count": len(rows), "results": rows}
+
+
+# --- statements and company metrics --------------------------------------------------------
+
+
+@api.get("/fundamentals/{ticker}/statements")
+def financial_statements(
+    session: SessionDep,
+    ticker: str,
+    statement: str = Query("income", pattern="^(income|balance|cash_flow)$"),
+    period: str = Query("annual", pattern="^(annual|quarter)$"),
+    limit: int = Query(8, le=40),
+) -> dict:
+    """Standard statement lines per period, newest first. Balance-sheet lines are taken at
+    each period's end date; `concepts` names the XBRL concept behind each line."""
+    from fin_intel.statements import LINE_ITEMS
+
+    cik = _issuer_cik(session, ticker)
+    lines = [name for name, (stmt, _, _) in LINE_ITEMS.items() if stmt == statement]
+    rows = session.execute(
+        select(StatementItem, Concept.taxonomy, Concept.name)
+        .join(Concept, Concept.id == StatementItem.concept_id)
+        .where(StatementItem.cik == cik, StatementItem.line_item.in_(lines))
+    ).all()
+    periods: dict[tuple, dict] = {}
+    for item, taxonomy, name in rows:
+        if statement == "balance":
+            # Balances are instants; annual means those at a fiscal year end.
+            if item.period_type != "instant" or (period == "annual" and item.fiscal_period != "FY"):
+                continue
+        elif item.period_type != period:
+            continue
+        entry = periods.setdefault(
+            (item.period_start, item.period_end),
+            {
+                "period_start": item.period_start,
+                "period_end": item.period_end,
+                "fiscal_year": item.fiscal_year,
+                "fiscal_period": item.fiscal_period,
+                "concepts": {},
+            },
+        )
+        entry[item.line_item] = item.value
+        entry["concepts"][item.line_item] = f"{taxonomy}:{name}"
+    ordered = sorted(periods.values(), key=lambda e: e["period_end"], reverse=True)[:limit]
+    return {"ticker": ticker.upper(), "statement": statement, "period": period, "periods": ordered}
+
+
+@api.get("/metrics/{ticker}")
+def company_metrics(session: SessionDep, ticker: str, history: int = Query(0, le=365)) -> dict:
+    """Latest valuation, quality, growth and score metrics, plus up to `history` earlier
+    daily rows (each computed from what was known that day)."""
+    from fin_intel.screener import NUMERIC
+
+    security = _security(session, ticker)
+    rows = list(
+        session.scalars(
+            select(CompanyMetrics)
+            .where(CompanyMetrics.security_id == security.id)
+            .order_by(CompanyMetrics.as_of.desc())
+            .limit(history + 1)
+        )
+    )
+    if not rows:
+        raise HTTPException(404, f"no metrics for {ticker} (not a primary listed security?)")
+
+    def as_dict(m: CompanyMetrics) -> dict:
+        return {"as_of": m.as_of, "period_end": m.period_end, **{c: getattr(m, c) for c in NUMERIC}}
+
+    return {
+        "ticker": ticker.upper(),
+        "latest": as_dict(rows[0]),
+        "history": [as_dict(m) for m in rows[1:]],
+    }
 
 
 app.include_router(api)

@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     true,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -371,6 +372,7 @@ class StatementItem(Base):
     value: Mapped[float]
     filed: Mapped[date | None] = mapped_column(Date)
     concept_id: Mapped[int] = mapped_column(ForeignKey("concepts.id"))
+    derived: Mapped[bool] = mapped_column(default=False, server_default=false())
 
 
 class CompanyMetrics(Base):
