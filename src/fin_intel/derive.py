@@ -115,5 +115,5 @@ def derive_all(session: Session) -> int:
     ciks = session.scalars(select(Issuer.cik).where(Issuer.cik.in_(select(Fact.cik)))).all()
     for cik in ciks:
         derive_issuer(session, cik)
-    session.commit()
+        session.commit()  # per issuer: no hour-long write lock, and progress survives a crash
     return len(ciks)

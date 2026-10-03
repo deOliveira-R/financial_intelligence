@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from fin_intel import breadth, metrics
 from fin_intel.ingest import (
+    BINARY_DATASETS,
     LOADERS,
     REFERENCE_DATASETS,
     SNAPSHOT_DATASETS,
@@ -29,6 +30,7 @@ from fin_intel.models import (
     Fact,
     Filing,
     FiscalCalendar,
+    InsiderTransaction,
     Issuer,
     PortfolioTransaction,
     Security,
@@ -52,6 +54,10 @@ TARGETS = {
             ("massive", "dividends"),
         ],
         [DailyBar, CorporateAction],
+    ),
+    "insiders": (
+        [("sec", "insider_dataset"), ("sec", "form4")],
+        [InsiderTransaction],
     ),
     "economic": (
         [("fred", "series"), ("fred", "observations"), ("fred", "vintages")],
@@ -86,6 +92,7 @@ TARGETS = {
             EconomicVintage,
             EconomicObservation,
             EconomicSeries,
+            InsiderTransaction,
         ],
     ),
 }
@@ -93,6 +100,12 @@ TARGETS = {
 
 def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
     datasets, tables = TARGETS[target]
+    # Read the raw index before writing anything (bodies load lazily, one at a time).
+    records = [
+        r
+        for r in store.records(connection=session.connection())
+        if (r.provider, r.dataset) in datasets
+    ]
     wipes_securities = Security in tables
     if wipes_securities:
         # Portfolio transactions point at securities; detach, re-attach by symbol after.
@@ -100,7 +113,6 @@ def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
     for table in tables:
         session.execute(delete(table))
 
-    records = [r for r in store.records() if (r.provider, r.dataset) in datasets]
     # Reference datasets first (in fetch order), so market data fetched before a security
     # was discovered still finds it: the result is independent of the order syncs ran in.
     records.sort(key=lambda r: (r.provider, r.dataset) not in REFERENCE_DATASETS)
@@ -111,7 +123,8 @@ def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
         dataset = (r.provider, r.dataset)
         if dataset in SNAPSHOT_DATASETS and latest[(r.provider, r.dataset, r.key)] != r.id:
             continue
-        LOADERS[dataset](session, r.key, r.json(), r.fetched_at)
+        payload = r.body if dataset in BINARY_DATASETS else r.json()
+        LOADERS[dataset](session, r.key, payload, r.fetched_at)
         loaded[f"{r.provider}/{r.dataset}"] += 1
     # Deactivation needs a complete list, which page-by-page replay doesn't see; apply it
     # as of each market's latest reference sync, as the live sync did.

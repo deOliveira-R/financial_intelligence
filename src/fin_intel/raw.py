@@ -29,7 +29,13 @@ class RawRecord:
     params: dict[str, Any]
     fetched_at: datetime
     status: int
-    body: bytes
+    path: Path
+
+    @property
+    def body(self) -> bytes:
+        """Read and decompressed on access: a full rebuild iterates tens of thousands of
+        responses (company facts alone are ~10 GB decompressed), so bodies aren't held."""
+        return gzip.decompress(self.path.read_bytes())
 
     def json(self) -> Any:
         return json.loads(self.body)
@@ -115,7 +121,7 @@ class RawStore:
                 params=json.loads(r.params) if r.params else {},
                 fetched_at=_aware(r.fetched_at),
                 status=r.status,
-                body=gzip.decompress(self._path(r.provider, r.content_hash).read_bytes()),
+                path=self._path(r.provider, r.content_hash),
             )
 
     def latest_hashes(self, provider: str, dataset: str) -> dict[str | None, str]:

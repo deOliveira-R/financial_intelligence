@@ -12,7 +12,7 @@ from fin_intel import derive, ingest
 from fin_intel.config import get_settings
 from fin_intel.db import init_db, session_factory
 from fin_intel.ingest import SNAPSHOT_DATASETS
-from fin_intel.models import DailyBar, SyncRun
+from fin_intel.models import DailyBar, SyncRun, SyncState
 from fin_intel.providers import (
     FredProvider,
     MassiveProvider,
@@ -139,6 +139,57 @@ def sync_fundamentals_bulk(
 
 
 @app.command()
+def sync_insiders(
+    since: Annotated[
+        str | None,
+        typer.Option(help="First quarterly data set, e.g. 2024q1; default: 2 years back"),
+    ] = None,
+    until: Annotated[
+        str | None, typer.Option(help="Last day of daily filings; default: yesterday")
+    ] = None,
+) -> None:
+    """Load insider transactions: SEC's quarterly data sets, then each day's Form 4s since
+    the latest data set (one request per filing, ~1,500 per day at SEC's rate limit)."""
+    store = default_store()
+    sec = SecProvider(raw_store=store)
+    today = date.today()
+    first = since or f"{today.year - 2}q{(today.month - 1) // 3 + 1}"
+    datasets = {q: url for q, url in sec.list_insider_datasets().items() if q >= first}
+    loaded = set(store.latest_hashes("sec", "insider_dataset"))
+    pending = sorted(q for q in datasets if q not in loaded)
+    if pending:
+        _run(
+            "sync-insiders",
+            pending,
+            lambda s, q: ingest.sync_insider_dataset(s, sec, q, datasets[q]),
+        )
+
+    latest = max(datasets, default=None)
+    if latest is None:
+        return
+    year, quarter = int(latest[:4]), int(latest[5])
+    start = date(year + quarter // 4, quarter % 4 * 3 + 1, 1)  # day after the quarter
+    end = date.fromisoformat(until) if until else today - timedelta(days=1)
+    with session_factory()() as session:
+        done = set(
+            session.scalars(
+                select(SyncState.key).where(
+                    SyncState.provider == "sec",
+                    SyncState.dataset == "insider_day",
+                    SyncState.last_success.is_not(None),
+                )
+            )
+        )
+    days = [d.isoformat() for d in _weekdays(start, end) if d.isoformat() not in done]
+    if days:
+        _run(
+            "sync-insiders",
+            days,
+            lambda s, d: ingest.sync_insider_day(s, sec, date.fromisoformat(d)),
+        )
+
+
+@app.command()
 def sync_prices(
     tickers: list[str],
     start: Annotated[str | None, typer.Option(help="YYYY-MM-DD; default: incremental")] = None,
@@ -261,6 +312,7 @@ def sync_daily() -> None:
         ("market breadth", derive_breadth_cmd),
         ("fundamentals (SEC bulk, changed companies only)", sync_fundamentals_bulk),
         ("company metrics", derive_metrics_cmd),
+        ("insider transactions", sync_insiders),
         ("economic series", lambda: sync_economic(settings.fred_series_ids)),
     ]
     if settings.watchlist_tickers:

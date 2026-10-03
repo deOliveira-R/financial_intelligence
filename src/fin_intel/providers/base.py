@@ -6,7 +6,12 @@ from typing import Any, ClassVar
 import httpx
 
 from fin_intel.config import get_settings
-from fin_intel.providers.errors import NotConfiguredError, ProviderError, QuotaExceededError
+from fin_intel.providers.errors import (
+    NotConfiguredError,
+    NotFoundError,
+    ProviderError,
+    QuotaExceededError,
+)
 from fin_intel.providers.ratelimit import Limit, RateLimiter
 from fin_intel.raw import RawStore
 
@@ -59,6 +64,28 @@ class Provider:
         dataset: str,
         key: str | None = None,
     ) -> Any:
+        """GET a JSON resource (recorded in the raw store)."""
+        resp = self._request(url, params, dataset=dataset, key=key)
+        try:
+            return resp.json()
+        except ValueError:
+            self.check_text_error(resp.text)
+            raise ProviderError(f"{self.name}: non-JSON response: {resp.text[:200]}") from None
+
+    def get_bytes(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        *,
+        dataset: str,
+        key: str | None = None,
+    ) -> bytes:
+        """GET a non-JSON resource (zip, HTML, text), recorded in the raw store."""
+        return self._request(url, params, dataset=dataset, key=key).content
+
+    def _request(
+        self, url: str, params: dict[str, Any] | None, *, dataset: str, key: str | None
+    ) -> httpx.Response:
         if not url.startswith("http"):
             url = self.base_url + url
         public_params = params or {}
@@ -86,14 +113,10 @@ class Provider:
         if resp.status_code == 429:
             raise QuotaExceededError(f"{self.name}: rate limited after {self.max_retries} retries")
         if resp.status_code == 404:
-            raise ProviderError(f"{self.name}: not found: {url}")
+            raise NotFoundError(f"{self.name}: not found: {url}")
         if resp.is_error:
             raise ProviderError(f"{self.name}: HTTP {resp.status_code}: {resp.text[:200]}")
-        try:
-            return resp.json()
-        except ValueError:
-            self.check_text_error(resp.text)
-            raise ProviderError(f"{self.name}: non-JSON response: {resp.text[:200]}") from None
+        return resp
 
     def check_text_error(self, text: str) -> None:
         """Some providers report errors as plain text with HTTP 200; raise a typed error."""

@@ -9,6 +9,7 @@ responses through the same loaders. The API only ever reads what these have stor
 """
 
 import logging
+import re
 from collections import Counter, defaultdict
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -19,7 +20,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import derive
+from fin_intel import derive, insiders
 from fin_intel.db import upsert
 from fin_intel.models import (
     Concept,
@@ -30,6 +31,7 @@ from fin_intel.models import (
     EconomicVintage,
     Fact,
     Filing,
+    InsiderTransaction,
     Issuer,
     Security,
     SyncState,
@@ -526,6 +528,8 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("massive", "grouped_daily"): lambda s, k, p, t: load_massive_grouped_daily(s, k, p),
     ("massive", "splits"): lambda s, k, p, t: load_massive_actions(s, "splits", p),
     ("massive", "dividends"): lambda s, k, p, t: load_massive_actions(s, "dividends", p),
+    ("sec", "insider_dataset"): lambda s, k, p, t: load_insider_dataset(s, p),
+    ("sec", "form4"): lambda s, k, p, t: load_form4(s, k, p),
     ("fred", "series"): lambda s, k, p, t: load_fred_series(s, p),
     ("fred", "observations"): lambda s, k, p, t: load_fred_observations(s, k, p),
     ("fred", "vintages"): lambda s, k, p, t: load_fred_vintages(s, k, p),
@@ -545,6 +549,8 @@ SYMBOL_KEYED_DATASETS = [
     ("massive", "splits"),
     ("massive", "dividends"),
 ]
+# Datasets whose loaders take the raw body (bytes) rather than parsed JSON.
+BINARY_DATASETS = {("sec", "insider_dataset"), ("sec", "form4")}
 # Datasets where each response is a full snapshot, so only the latest one matters.
 SNAPSHOT_DATASETS = {
     ("sec", "companyfacts"),
@@ -784,6 +790,49 @@ def sync_market_actions(
     with tracked(session, "massive", dataset, "all") as result:
         pages = fetch(since)
         result["rows"] = sum(load_massive_actions(session, dataset, page) for page in pages)
+    return result["rows"]
+
+
+# --- insiders -----------------------------------------------------------------------------
+
+INSIDER_FORMS = ("4", "4/A")
+_FILED = re.compile(rb"FILED AS OF DATE:\s*(\d{8})")
+
+
+def load_insider_dataset(session: Session, body: bytes) -> int:
+    return insiders.load(session, insiders.parse_dataset(body))
+
+
+def load_form4(session: Session, accession: str, body: bytes) -> int:
+    match = _FILED.search(body)
+    filed = datetime.strptime(match.group(1).decode(), "%Y%m%d").date() if match else None
+    return insiders.load(session, insiders.parse_form4(accession, filed, body))
+
+
+def sync_insider_dataset(
+    session: Session, sec_provider: SecProvider, quarter: str, url: str
+) -> int:
+    with tracked(session, "sec", "insider_dataset", quarter) as result:
+        body = sec_provider.fetch_insider_dataset(quarter, url)
+        result["rows"] = load_insider_dataset(session, body)
+    return result["rows"]
+
+
+def sync_insider_day(session: Session, sec_provider: SecProvider, day: date) -> int:
+    """Every Form 4 filed on a day that isn't loaded yet (each fetched individually)."""
+    with tracked(session, "sec", "insider_day", day.isoformat()) as result:
+        filings = [
+            (a, p) for form, a, p in sec_provider.fetch_daily_index(day) if form in INSIDER_FORMS
+        ]
+        have = set(
+            session.scalars(
+                select(InsiderTransaction.accession).where(
+                    InsiderTransaction.accession.in_([a for a, _ in filings])
+                )
+            )
+        )
+        bodies = [(a, sec_provider.fetch_submission(a, p)) for a, p in filings if a not in have]
+        result["rows"] = sum(load_form4(session, a, body) for a, body in bodies)
     return result["rows"]
 
 

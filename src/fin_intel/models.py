@@ -418,3 +418,30 @@ class CompanyMetrics(Base):
     operating_margin_vs_5y: Mapped[float | None] = mapped_column(Float)
     altman_z: Mapped[float | None] = mapped_column(Float)
     piotroski_f: Mapped[int | None]
+
+
+class InsiderTransaction(Base):
+    """A non-derivative transaction reported on Form 3, 4 or 5 (insiders.py). `key` is a
+    content hash within the filing, identical whichever source the row came from."""
+
+    __tablename__ = "insider_transactions"
+
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    accession: Mapped[str] = mapped_column(String(32), index=True)
+    form_type: Mapped[str | None] = mapped_column(String(8))
+    filing_date: Mapped[date | None] = mapped_column(Date, index=True)
+    issuer_cik: Mapped[int] = mapped_column(index=True)
+    issuer_symbol: Mapped[str | None] = mapped_column(String(32))
+    owner_cik: Mapped[int | None]
+    owner_name: Mapped[str | None] = mapped_column(String(256))
+    relationship: Mapped[str | None] = mapped_column(String(64))
+    owner_title: Mapped[str | None] = mapped_column(String(256))
+    security_title: Mapped[str | None] = mapped_column(String(256))
+    trans_date: Mapped[date] = mapped_column(Date, index=True)
+    trans_code: Mapped[str | None] = mapped_column(String(4))
+    acquired_disposed: Mapped[str | None] = mapped_column(String(2))
+    shares: Mapped[float | None] = mapped_column(Float)
+    price: Mapped[float | None] = mapped_column(Float)
+    shares_after: Mapped[float | None] = mapped_column(Float)
+    direct_indirect: Mapped[str | None] = mapped_column(String(2))
+    plan_10b5_1: Mapped[bool] = mapped_column(default=False)

@@ -1,5 +1,10 @@
 from fin_intel.providers.base import Provider
-from fin_intel.providers.errors import NotConfiguredError, ProviderError, QuotaExceededError
+from fin_intel.providers.errors import (
+    NotConfiguredError,
+    NotFoundError,
+    ProviderError,
+    QuotaExceededError,
+)
 from fin_intel.providers.fred import FredProvider
 from fin_intel.providers.massive import MassiveProvider
 from fin_intel.providers.sec import SecProvider
@@ -9,6 +14,7 @@ __all__ = [
     "FredProvider",
     "MassiveProvider",
     "NotConfiguredError",
+    "NotFoundError",
     "Provider",
     "ProviderError",
     "QuotaExceededError",

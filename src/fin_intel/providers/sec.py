@@ -1,12 +1,17 @@
+import re
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 from fin_intel.config import get_settings
 from fin_intel.providers.base import NotConfiguredError, Provider, ProviderError
+from fin_intel.providers.errors import NotFoundError
 from fin_intel.providers.ratelimit import SECOND, Limit
 
 TICKERS_URL = "https://www.sec.gov/files/company_tickers_exchange.json"
+INSIDER_DATASETS_PAGE = (
+    "https://www.sec.gov/data-research/sec-markets-data/insider-transactions-data-sets"
+)
 BULK_COMPANY_FACTS_URL = "https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
 
 
@@ -42,6 +47,33 @@ class SecProvider(Provider):
                     f.write(chunk)
         tmp.replace(path)
         return path
+
+    def list_insider_datasets(self) -> dict[str, str]:
+        """{"2026q2": url, ...} from SEC's data set page. Read from the page because the
+        file paths change between quarters (structureddata/ vs datastandardsinnovation/)."""
+        html = self.get_bytes(INSIDER_DATASETS_PAGE, dataset="insider_dataset_index").decode()
+        return {
+            m.group(2): "https://www.sec.gov" + m.group(1)
+            for m in re.finditer(r'href="(/files/[^"]*/(\d{4}q\d)_form345\.zip)"', html)
+        }
+
+    def fetch_insider_dataset(self, quarter: str, url: str) -> bytes:
+        return self.get_bytes(url, dataset="insider_dataset", key=quarter)
+
+    def fetch_daily_index(self, day: date) -> list[tuple[str, str, str]]:
+        """(form type, accession, file path) for every filing on a day; [] on holidays."""
+        quarter = (day.month - 1) // 3 + 1
+        url = f"https://www.sec.gov/Archives/edgar/daily-index/{day.year}/QTR{quarter}/form.{day:%Y%m%d}.idx"
+        try:
+            text = self.get_bytes(url, dataset="daily_index", key=day.isoformat()).decode("latin-1")
+        except NotFoundError:
+            return []
+        return parse_daily_index(text)
+
+    def fetch_submission(self, accession: str, path: str) -> bytes:
+        return self.get_bytes(
+            f"https://www.sec.gov/Archives/{path}", dataset="form4", key=accession
+        )
 
     def fetch_company_facts(self, cik: int) -> Any:
         return self.get(
@@ -103,3 +135,26 @@ def parse_company_facts(cik: int, payload: dict[str, Any]):
 
 def _date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
+
+
+def parse_daily_index(text: str) -> list[tuple[str, str, str]]:
+    """EDGAR's form.YYYYMMDD.idx: fixed-width rows (form type, company, CIK, date, path)
+    after a dashed header line. A filing appears once per filer (issuer and owner), so
+    rows are deduplicated by path."""
+    lines = text.splitlines()
+    try:
+        start = next(i for i, line in enumerate(lines) if line.startswith("---")) + 1
+    except StopIteration:
+        return []
+    seen, out = set(), []
+    for line in lines[start:]:
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+        form, path = parts[0], parts[-1]
+        if path in seen:
+            continue
+        seen.add(path)
+        accession = path.rsplit("/", 1)[-1].removesuffix(".txt")
+        out.append((form, accession, path))
+    return out

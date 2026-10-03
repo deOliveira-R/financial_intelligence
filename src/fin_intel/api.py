@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import ingest, portfolio, screener, timeseries
+from fin_intel import ingest, insiders, portfolio, screener, timeseries
 from fin_intel.config import get_settings
 from fin_intel.db import get_session
 from fin_intel.fundamentals import Fact, derive_q4, latest_per_period, split_adjust
@@ -22,6 +22,7 @@ from fin_intel.models import (
     EconomicSeries,
     Filing,
     FiscalCalendar,
+    InsiderTransaction,
     Security,
     StatementItem,
     SyncRun,
@@ -612,6 +613,56 @@ def company_metrics(session: SessionDep, ticker: str, history: int = Query(0, le
         "latest": as_dict(rows[0]),
         "history": [as_dict(m) for m in rows[1:]],
     }
+
+
+# --- insiders ------------------------------------------------------------------------------
+
+
+class InsiderOut(Orm):
+    filing_date: date | None
+    trans_date: date
+    owner_name: str | None
+    relationship: str | None
+    owner_title: str | None
+    trans_code: str | None
+    acquired_disposed: str | None
+    shares: float | None
+    price: float | None
+    shares_after: float | None
+    direct_indirect: str | None
+    plan_10b5_1: bool
+    accession: str
+
+
+@api.get("/insiders/clusters")
+def insider_clusters(
+    session: SessionDep,
+    days: int = Query(30, le=365),
+    min_insiders: int = Query(3, ge=2),
+) -> list[insiders.ClusterBuy]:
+    """Companies where several insiders bought on the open market (not under 10b5-1 plans)
+    within the window."""
+    return insiders.cluster_buys(session, days, min_insiders)
+
+
+@api.get("/insiders/{ticker}", response_model=list[InsiderOut])
+def insider_transactions(
+    session: SessionDep,
+    ticker: str,
+    code: str | None = Query(None, description="e.g. P (purchases), S (sales)"),
+    limit: int = Query(100, le=1000),
+) -> list[InsiderTransaction]:
+    """A company's insider transactions, newest first."""
+    cik = _issuer_cik(session, ticker)
+    stmt = (
+        select(InsiderTransaction)
+        .where(InsiderTransaction.issuer_cik == cik)
+        .order_by(InsiderTransaction.trans_date.desc())
+        .limit(limit)
+    )
+    if code:
+        stmt = stmt.where(InsiderTransaction.trans_code == code.upper())
+    return list(session.scalars(stmt))
 
 
 app.include_router(api)
