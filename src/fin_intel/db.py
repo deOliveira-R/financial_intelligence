@@ -85,12 +85,14 @@ def upsert(
     rows: Iterable[dict[str, Any]],
     key: Sequence[str],
     update: Sequence[str] | None = None,
-    chunk_size: int = 500,
+    chunk_size: int = 5000,
 ) -> int:
     """Insert rows, updating non-key columns (or just `update`) when the key already exists.
 
+    One parameterized statement, compiled once and executed per chunk of rows (executemany):
+    building a multi-row VALUES statement per chunk spent most of a load compiling SQL.
     Rows repeating a key within the batch are collapsed (last wins): PostgreSQL rejects an
-    ON CONFLICT DO UPDATE that touches the same row twice in one statement.
+    ON CONFLICT DO UPDATE that touches the same row twice.
     """
     rows = list({tuple(r[k] for k in key): r for r in rows}.values())
     if not rows:
@@ -99,14 +101,14 @@ def upsert(
     insert = {"postgresql": postgresql.insert, "sqlite": sqlite.insert}.get(dialect)
     if insert is None:
         raise NotImplementedError(f"upsert not supported for dialect {dialect!r}")
-    columns = rows[0].keys()
+    stmt = insert(model.__table__)
+    targets = rows[0].keys() if update is None else update  # [] means insert-only
+    updates = {c: stmt.excluded[c] for c in targets if c not in key}
+    if updates:
+        stmt = stmt.on_conflict_do_update(index_elements=list(key), set_=updates)
+    else:
+        stmt = stmt.on_conflict_do_nothing(index_elements=list(key))
+    connection = session.connection()
     for i in range(0, len(rows), chunk_size):
-        stmt = insert(model).values(rows[i : i + chunk_size])
-        targets = columns if update is None else update  # [] means insert-only
-        updates = {c: stmt.excluded[c] for c in targets if c not in key}
-        if updates:
-            stmt = stmt.on_conflict_do_update(index_elements=list(key), set_=updates)
-        else:
-            stmt = stmt.on_conflict_do_nothing(index_elements=list(key))
-        session.execute(stmt)
+        connection.execute(stmt, rows[i : i + chunk_size])
     return len(rows)

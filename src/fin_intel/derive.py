@@ -5,7 +5,7 @@ its own period type and fiscal year/period, find each filing's primary period en
 build standard statement lines (statements.py).
 """
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import bindparam, delete, select, update
 from sqlalchemy.orm import Session
 
 from fin_intel import statements
@@ -67,18 +67,24 @@ def derive_issuer(session: Session, cik: int) -> None:
         )
 
     label(facts, schedule)
-    session.execute(
-        update(Fact),
+    # One compiled UPDATE executed for all facts (the ORM's bulk update spent most of the
+    # time on per-row bookkeeping).
+    facts_table = Fact.__table__
+    pk = ("filing_id", "concept_id", "unit", "period_start", "period_end")
+    session.connection().execute(
+        update(facts_table)
+        .where(*(facts_table.c[c] == bindparam(f"k_{c}") for c in pk))
+        .values(
+            period_type=bindparam("v_period_type"),
+            fiscal_year=bindparam("v_fiscal_year"),
+            fiscal_period=bindparam("v_fiscal_period"),
+        ),
         [
             {
-                "filing_id": f["filing_id"],
-                "concept_id": f["concept_id"],
-                "unit": f["unit"],
-                "period_start": f["period_start"],
-                "period_end": f["period_end"],
-                "period_type": f["period_type"],
-                "fiscal_year": f["fiscal_year"],
-                "fiscal_period": f["fiscal_period"],
+                **{f"k_{c}": f[c] for c in pk},
+                "v_period_type": f["period_type"],
+                "v_fiscal_year": f["fiscal_year"],
+                "v_fiscal_period": f["fiscal_period"],
             }
             for f in facts
         ],

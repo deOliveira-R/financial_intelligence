@@ -1,4 +1,5 @@
 import logging
+import sys
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any
@@ -28,6 +29,8 @@ app = typer.Typer(help="Financial Intelligence data backend", no_args_is_help=Tr
 
 @app.callback()
 def main(verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False) -> None:
+    # Under systemd stdout is a pipe, block-buffered by default: progress would show up late.
+    sys.stdout.reconfigure(line_buffering=True)
     logging.basicConfig(level=logging.INFO if verbose else logging.WARNING)
     init_db()
 
