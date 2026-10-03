@@ -244,7 +244,8 @@ def _steps(job: str, steps: list[tuple[str, Callable[[], None]]]) -> None:
 
 @app.command()
 def sync_daily() -> None:
-    """Scheduled daily sync: market bars, recent actions, watchlist prices, FRED series.
+    """Scheduled daily sync: market bars, recent actions, breadth, fundamentals of companies
+    that filed, company metrics, FRED series, watchlist prices.
 
     Run after the US close (data is end-of-day). Lists come from FI_WATCHLIST and
     FI_FRED_SERIES; OTC bars follow FI_MARKET_OTC.
@@ -255,6 +256,7 @@ def sync_daily() -> None:
         ("market bars", lambda: sync_market_daily(otc=settings.market_otc)),
         ("splits and dividends", lambda: sync_actions(since=recent)),
         ("market breadth", derive_breadth_cmd),
+        ("fundamentals (SEC bulk, changed companies only)", sync_fundamentals_bulk),
         ("company metrics", derive_metrics_cmd),
         ("economic series", lambda: sync_economic(settings.fred_series_ids)),
     ]
@@ -265,14 +267,13 @@ def sync_daily() -> None:
 
 @app.command()
 def sync_weekly() -> None:
-    """Scheduled weekly sync: security lists, watchlist fundamentals, raw retention."""
+    """Scheduled weekly sync: security lists and raw retention (fundamentals load nightly
+    from SEC's bulk file in sync-daily)."""
     settings = get_settings()
     steps = [
         ("SEC tickers", sync_tickers),
         ("Massive reference", lambda: sync_reference(otc=settings.market_otc)),
     ]
-    if settings.watchlist_tickers:
-        steps.append(("fundamentals", lambda: sync_fundamentals(settings.watchlist_tickers)))
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
     _steps("sync-weekly", steps)
 
@@ -408,6 +409,47 @@ def timeseries_cmd(
             f"{'—' if v[i] is None else f'{v[i]:.4g}':>{width + 2}}" for v in series.values()
         )
         typer.echo(f"{dates[i].isoformat():<11}{cells}")
+
+
+@app.command("screen")
+def screen_cmd(
+    where: Annotated[list[str] | None, typer.Option("--where", "-w", help="e.g. 'pe<15'")] = None,
+    sort: Annotated[str | None, typer.Option(help="metric, '-' prefix for descending")] = None,
+    rank: Annotated[str | None, typer.Option(help="'magic'")] = None,
+    preset: Annotated[
+        str | None, typer.Option(help="magic, deep_value, quality, cash_cows")
+    ] = None,
+    limit: int = 25,
+    show: Annotated[
+        str, typer.Option(help="Comma-separated metrics to display")
+    ] = "market_cap,pe,ev_ebit,p_fcf,roic,operating_margin,revenue_growth,piotroski_f",
+) -> None:
+    """Screen the market on company metrics (see screener.py)."""
+    from fin_intel import screener
+
+    with session_factory()() as session:
+        try:
+            as_of, rows = screener.screen(session, where, sort, rank, preset, limit)
+        except screener.ScreenError as exc:
+            raise typer.BadParameter(str(exc)) from None
+    columns = [c.strip() for c in show.split(",") if c.strip()]
+    typer.echo(f"{len(rows)} companies (metrics as of {as_of})")
+    typer.echo(f"{'ticker':<8} {'name':<30}" + "".join(f"{c[:14]:>15}" for c in columns))
+
+    def cell(value) -> str:
+        if value is None:
+            return "—"
+        if abs(value) >= 1e9:
+            return f"{value / 1e9:,.1f}B"
+        if abs(value) >= 1e6:
+            return f"{value / 1e6:,.1f}M"
+        return f"{value:.3g}"
+
+    for r in rows:
+        name = (r["name"] or "")[:30]
+        typer.echo(
+            f"{r['ticker'] or '':<8} {name:<30}" + "".join(f"{cell(r[c]):>15}" for c in columns)
+        )
 
 
 # --- portfolio -------------------------------------------------------------------------

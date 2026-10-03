@@ -93,8 +93,19 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
     monkeypatch.setattr(cli, "sync_actions", ok("actions"))
     monkeypatch.setattr(cli, "sync_economic", lambda series: calls.append(("fred", series)))
     monkeypatch.setattr(cli, "sync_prices", lambda tickers: calls.append(("prices", tickers)))
+    monkeypatch.setattr(cli, "derive_breadth_cmd", ok("breadth"))
+    monkeypatch.setattr(cli, "sync_fundamentals_bulk", ok("fundamentals"))
+    monkeypatch.setattr(cli, "derive_metrics_cmd", ok("metrics"))
 
     result = CliRunner().invoke(app, ["sync-daily"])
     # A failed step doesn't stop the others, but the command still fails.
     assert result.exit_code == 1 and "failed steps: market bars" in result.output
-    assert calls == ["market", "actions", ("fred", ["GDP"]), ("prices", ["AAPL", "MSFT"])]
+    assert calls == [
+        "market",
+        "actions",
+        "breadth",
+        "fundamentals",
+        "metrics",
+        ("fred", ["GDP"]),
+        ("prices", ["AAPL", "MSFT"]),
+    ]

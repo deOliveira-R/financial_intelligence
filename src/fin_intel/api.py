@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import ingest, portfolio, timeseries
+from fin_intel import ingest, portfolio, screener, timeseries
 from fin_intel.config import get_settings
 from fin_intel.db import get_session
 from fin_intel.fundamentals import Fact, derive_q4, latest_per_period, split_adjust
@@ -516,6 +516,26 @@ def timeseries_endpoint(
             lines.append(",".join([d.isoformat(), *cells]))
         return PlainTextResponse("\n".join(lines) + "\n", media_type="text/csv")
     return {"dates": dates, "series": series}
+
+
+# --- screener ----------------------------------------------------------------------------
+
+
+@api.get("/screener")
+def screener_endpoint(
+    session: SessionDep,
+    where: Annotated[list[str] | None, Query(description="e.g. pe<15, roic>=0.15")] = None,
+    sort: str | None = Query(None, description="metric, '-' prefix for descending"),
+    rank: str | None = Query(None, description="'magic': earnings yield + ROIC ranks"),
+    preset: str | None = Query(None, description="magic, deep_value, quality, cash_cows"),
+    limit: int = Query(50, le=500),
+) -> dict:
+    """Companies matching every filter on their latest metrics."""
+    try:
+        as_of, rows = screener.screen(session, where, sort, rank, preset, limit)
+    except screener.ScreenError as exc:
+        raise HTTPException(400, str(exc)) from None
+    return {"as_of": as_of, "count": len(rows), "results": rows}
 
 
 app.include_router(api)
