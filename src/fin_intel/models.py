@@ -251,3 +251,62 @@ class EconomicObservation(Base):
     series_id: Mapped[str] = mapped_column(ForeignKey("economic_series.id"), primary_key=True)
     date: Mapped[date] = mapped_column(Date, primary_key=True)
     value: Mapped[float | None] = mapped_column(Float)
+
+
+# --- portfolio -------------------------------------------------------------------------
+
+
+class Account(Base):
+    """A brokerage or retirement account. Only taxable accounts are harvesting candidates,
+    but purchases in every account count for the wash-sale rule."""
+
+    __tablename__ = "accounts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True)  # e.g. "Fidelity Individual"
+    broker: Mapped[str] = mapped_column(String(32))  # fidelity, vanguard, manual, ...
+    account_type: Mapped[str] = mapped_column(String(32))  # taxable, ira, roth_ira, 401k, hsa
+    taxable: Mapped[bool]
+    number_last4: Mapped[str | None] = mapped_column(String(4))
+
+
+class PortfolioTransaction(Base):
+    """One account event as the broker reported it. Lots are derived from these (portfolio.py).
+
+    `amount` is the cash effect on the account (negative for purchases); `source_ref` is a
+    hash of the source row so re-importing the same export is idempotent.
+    """
+
+    __tablename__ = "portfolio_transactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    trade_date: Mapped[date] = mapped_column(Date)
+    # buy, sell, reinvest, dividend, interest, split, transfer_in, transfer_out, fee, other
+    action: Mapped[str] = mapped_column(String(16))
+    symbol: Mapped[str | None] = mapped_column(String(32), index=True)
+    security_id: Mapped[int | None] = mapped_column(ForeignKey("securities.id"))
+    quantity: Mapped[float | None] = mapped_column(Float)
+    price: Mapped[float | None] = mapped_column(Float)
+    amount: Mapped[float | None] = mapped_column(Float)
+    fees: Mapped[float] = mapped_column(Float, default=0.0)
+    description: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(32))  # generic, fidelity, vanguard, manual
+    source_ref: Mapped[str] = mapped_column(String(64), unique=True)
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PositionSnapshot(Base):
+    """Holdings as a broker reported them on a date: used to reconcile derived lots and to
+    price holdings with no market data (e.g. 401(k) collective trusts without tickers)."""
+
+    __tablename__ = "position_snapshots"
+
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    as_of: Mapped[date] = mapped_column(Date, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(64), primary_key=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    quantity: Mapped[float] = mapped_column(Float)
+    price: Mapped[float | None] = mapped_column(Float)
+    market_value: Mapped[float | None] = mapped_column(Float)
+    cost_basis: Mapped[float | None] = mapped_column(Float)
