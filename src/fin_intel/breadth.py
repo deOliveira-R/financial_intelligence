@@ -161,7 +161,8 @@ def field_values(row: MarketBreadth, field: str) -> float | None:
         num, den = derived[field]
         return num / den if den else None
     if field == "net_advances":
-        return row.advancers - row.decliners
+        # The first day of data has no previous close to compare with: unknown, not zero.
+        return row.advancers - row.decliners if row.count else None
     if field == "net_new_highs":
         return row.new_highs - row.new_lows if row.eligible_252 else None
     if field in ("ad_line", "up_volume", "down_volume") or field in INT_FIELDS:
