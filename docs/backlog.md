@@ -70,6 +70,9 @@ walk-forward out-of-sample splits, and storing runs for comparison.
   them.
 - **Congress history:** PTRs go back to 2012; the default load is 2 years. Amendments
   arrive as new reports, so an amended trade can appear twice.
+- **Congress data quality:** a few filers mistype dates (7 of 12.8k trades are dated after
+  their own report, e.g. 2026-12-26 for a January trade); the notification date could
+  stand in. Late disclosures (trades years before the report) are genuine.
 - **Congress signals:** purchases by several members, committee membership vs sector
   (e.g. Armed Services and defense stocks), excess returns after disclosure date.
 - **13D/13G stakes:** activists crossing 5% (EDGAR full-text search or daily index).
