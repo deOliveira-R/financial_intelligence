@@ -373,14 +373,24 @@ def portfolio_import(
 @portfolio_app.command("import-positions")
 def portfolio_import_positions(
     path: str,
-    fmt: Annotated[str, typer.Option("--format")] = "generic",
+    fmt: Annotated[str, typer.Option("--format", help="generic or fidelity")] = "generic",
 ) -> None:
-    """Import a positions snapshot (used to reconcile lots and price untickered funds)."""
+    """Import a positions snapshot. Accounts without transaction history are reported from
+    it; otherwise it reconciles derived lots and prices funds without market data."""
     from fin_intel import importers
 
+    if fmt not in importers.POSITION_FORMATS:
+        raise typer.BadParameter(f"--format must be one of {', '.join(importers.POSITION_FORMATS)}")
     with session_factory()() as session:
         try:
-            count = importers.load_positions(session, importers.POSITION_FORMATS[fmt](path))
+            if fmt == "fidelity":
+                rows, accounts = importers.read_fidelity_positions(path)
+                for name in importers.ensure_accounts(session, accounts, "fidelity"):
+                    account_type, last4 = accounts[name]
+                    typer.echo(f"created account {name} ({account_type}, ...{last4})")
+            else:
+                rows = importers.POSITION_FORMATS[fmt](path)
+            count = importers.load_positions(session, rows)
         except importers.PortfolioImportError as exc:
             typer.secho(str(exc), fg="red", err=True)
             raise typer.Exit(1) from None
@@ -396,19 +406,18 @@ def portfolio_positions() -> None:
         rows = portfolio.positions(session)
         warnings = portfolio.lot_book(session).warnings
     typer.echo(
-        f"{'account':<24} {'symbol':<8} {'shares':>12} {'cost':>14} {'value':>14} "
+        f"{'account':<26} {'symbol':<8} {'shares':>12} {'cost':>14} {'value':>14} "
         f"{'unrealized':>13} {'short':>12} {'long':>12}  check"
     )
     for p in rows:
-        check = (
-            ""
-            if p.reconciled is None
-            else "ok"
-            if p.reconciled
-            else f"broker: {p.broker_quantity:g}"
-        )
+        if p.basis_source == "broker":
+            check = "broker basis"
+        elif p.reconciled is None:
+            check = ""
+        else:
+            check = "ok" if p.reconciled else f"broker: {p.broker_quantity:g}"
         typer.echo(
-            f"{p.account:<24} {p.symbol:<8} {p.quantity:>12,.4f} {_money(p.cost_basis):>14} "
+            f"{p.account:<26} {p.symbol:<8} {p.quantity:>12,.4f} {_money(p.cost_basis):>14} "
             f"{_money(p.market_value):>14} {_money(p.unrealized):>13} "
             f"{_money(p.unrealized_short):>12} {_money(p.unrealized_long):>12}  {check}"
         )
@@ -430,10 +439,21 @@ def portfolio_harvest(
         typer.echo("no harvesting candidates")
     for c in candidates:
         lot = c.lot
-        typer.echo(
-            f"{lot.account:<24} {lot.symbol:<8} {lot.quantity:>10,.4f} sh acquired {lot.acquired} "
-            f"({lot.term}-term): loss {_money(c.loss)} ({c.loss_pct:.1%})"
+        held = (
+            f"acquired {lot.acquired} ({lot.term}-term)"
+            if lot.acquired
+            else "holding period unknown"
         )
+        typer.echo(
+            f"{lot.account:<26} {lot.symbol:<8} {lot.quantity:>10,.4f} sh {held}: "
+            f"loss {_money(c.loss)} ({c.loss_pct:.1%})"
+        )
+        if not c.history_known:
+            typer.secho(
+                "    no transaction history: can't check purchases in the last 30 days "
+                "(including reinvested dividends)",
+                fg="yellow",
+            )
         for account, day, shares in c.blocking_purchases:
             typer.secho(f"    would wash: bought {shares:g} on {day} in {account}", fg="yellow")
         typer.echo(f"    don't buy it back before {c.rebuy_after}")

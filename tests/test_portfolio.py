@@ -283,7 +283,9 @@ def test_positions_reconcile_with_broker_snapshot(session, accounts):
         False,
         12,
     )
-    assert by_symbol["VTR2050TRUST"].quantity == 0  # held per broker, no transactions yet
+    # No transactions for the 401(k): reported from the broker's snapshot.
+    trust = by_symbol["VTR2050TRUST"]
+    assert (trust.quantity, trust.market_value, trust.basis_source) == (100, 5550, "broker")
     assert portfolio.latest_prices(session, {"VTR2050TRUST"})["VTR2050TRUST"][2] == "broker"
 
 
@@ -323,7 +325,8 @@ def test_context_and_replacements(session):
     base = [100 * math.exp(0.01 * math.sin(i / 3) + 0.0005 * i) for i in range(300)]
     add_security(session, "SPY", base, "ETF")
     add_security(session, "IVV", [x * 1.001 for x in base], "ETF")  # tracks SPY
-    add_security(session, "GLD", [200 + (i % 7) for i in range(300)], "ETF")  # unrelated
+    add_security(session, "GLD", [200 + (i % 7) for i in range(300)], "ETV")  # unrelated
+    add_security(session, "IAU", [40 + (i % 7) / 5 for i in range(300)], "ETV")  # tracks GLD
     ctx = portfolio.context(session, "IVV")
     assert ctx.high_52w >= ctx.price >= ctx.low_52w and ctx.returns["1y"] is not None
     assert ctx.spy_returns["1m"] == pytest.approx(ctx.returns["1m"], abs=1e-9)
@@ -333,6 +336,8 @@ def test_context_and_replacements(session):
     ivv, spxl = ranked[0], ranked[1]
     assert ivv.correlation > 0.99 and ivv.beta == pytest.approx(1.0, abs=0.01)
     assert spxl.beta > 2.5 and spxl.tracking_error > 10 * ivv.tracking_error  # leverage sinks it
+    # Commodity trusts are typed ETV, not ETF, and must still be found.
+    assert portfolio.replacements(session, "GLD", min_dollar_volume=0)[0].ticker == "IAU"
 
 
 def test_portfolio_api(engine, session, accounts):
@@ -368,3 +373,45 @@ def test_portfolio_api(engine, session, accounts):
         ] == "Fidelity Individual"
     finally:
         app.dependency_overrides.clear()
+
+
+# A synthetic export with every quirk of Fidelity's Portfolio Positions CSV.
+FIDELITY_POSITIONS = (
+    "\ufeffAccount number,Account name,Symbol,Description,Quantity,Last price,Last price change,"
+    "Current value,Today's gain/loss dollar,Today's gain/loss percent,Total gain/loss dollar,"
+    "Total gain/loss percent,Percent of account,Cost basis total,Average cost basis,Type\r\n"
+    "Z11112222,Individual - TOD,SPAXX**,HELD IN MONEY MARKET,,,,$268.22,,,,,0.57%,,,Cash,\r\n"
+    "Z11112222,Individual - TOD,ABC,ABC CORP COM,10.5,$80.00,-$1.00,$840.00,-$10.50,-1.23%,"
+    "-$210.00,-20.00%,50.00%,$1050.00,$100.00,Cash,\r\n"
+    "333344444,ROTH IRA,XYZ,XYZ INC,2,$50.00,+$1.00,$100.00,+$2.00,+2.04%,+$20.00,+25.00%,"
+    "100%,$80.00,$40.00,Cash,\r\n"
+    "\r\n"
+    '"The data and information in this spreadsheet is provided to you solely for your use."\r\n'
+    "\r\n"
+    '"Date downloaded Oct-03-2026 4:58 a.m ET"\r\n'
+)
+
+
+def test_fidelity_positions_import_and_history_free_harvest(session, tmp_path):
+    path = tmp_path / "Portfolio_Positions.csv"
+    path.write_bytes(FIDELITY_POSITIONS.encode("utf-8"))
+    rows, accounts = importers.read_fidelity_positions(path)
+    assert accounts == {
+        "Fidelity Individual - TOD": ("taxable", "2222"),
+        "Fidelity ROTH IRA": ("roth_ira", "4444"),
+    }
+    cash, abc, xyz = rows
+    assert (cash["symbol"], cash["quantity"], cash["price"]) == ("SPAXX", 268.22, 1.0)
+    assert (abc["quantity"], abc["price"], abc["cost_basis"]) == (10.5, 80.0, 1050.0)
+    assert {r["as_of"] for r in rows} == {D("2026-10-03")}
+
+    assert importers.ensure_accounts(session, accounts, "fidelity") == list(accounts)
+    assert importers.ensure_accounts(session, accounts, "fidelity") == []  # idempotent
+    importers.load_positions(session, rows)
+
+    positions = {p.symbol: p for p in portfolio.positions(session)}
+    assert positions["ABC"].unrealized == pytest.approx(-210)  # broker price, broker basis
+    assert positions["ABC"].unrealized_short is None  # no acquisition dates
+    (candidate,) = portfolio.harvest_candidates(session)  # XYZ is a gain, and in a Roth
+    assert candidate.lot.symbol == "ABC" and candidate.lot.term == "unknown"
+    assert candidate.history_known is False and candidate.loss == pytest.approx(210)

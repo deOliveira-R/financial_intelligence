@@ -54,12 +54,13 @@ class PortfolioImportError(ValueError):
 def _number(value: str | None) -> float | None:
     if value is None:
         return None
+    value = str(value)
     value = value.strip().replace(",", "").replace("$", "")
     if value in ("", "--", "n/a", "N/A"):
         return None
     if value.startswith("(") and value.endswith(")"):  # accounting negatives
         value = "-" + value[1:-1]
-    return float(value)
+    return float(value.replace("+", "").rstrip("%"))
 
 
 def _field(row: dict[str, Any], key: str) -> float | None:
@@ -154,7 +155,90 @@ def read_generic(path: Path | str) -> list[dict[str, str]]:
     return list(csv.DictReader(io.StringIO(text)))
 
 
-# Broker-specific readers convert their exports to generic rows. Fidelity and Vanguard are
-# added once real exports show their exact layout.
+# --- Fidelity --------------------------------------------------------------------------
+
+
+def account_type_from_name(name: str) -> str:
+    upper = name.upper()
+    for marker, account_type in (
+        ("ROTH", "roth_ira"),
+        ("401", "401k"),
+        ("HSA", "hsa"),
+        ("IRA", "ira"),
+    ):
+        if marker in upper:
+            return account_type
+    return "taxable"
+
+
+def ensure_accounts(
+    session: Session, accounts: dict[str, tuple[str, str]], broker: str
+) -> list[str]:
+    """Create accounts named in an export if missing: {name: (type, last4)}. Returns new names."""
+    existing = _accounts(session)
+    created = []
+    for name, (account_type, last4) in accounts.items():
+        if name not in existing:
+            session.add(
+                Account(
+                    name=name,
+                    broker=broker,
+                    account_type=account_type,
+                    taxable=account_type == "taxable",
+                    number_last4=last4,
+                )
+            )
+            created.append(name)
+    session.commit()
+    return created
+
+
+def read_fidelity_positions(
+    path: Path | str,
+) -> tuple[list[dict[str, Any]], dict[str, tuple[str, str]]]:
+    """Fidelity's Portfolio Positions CSV: generic position rows plus the accounts it names.
+
+    The file has a byte-order mark, CRLF line endings, a trailing empty column, $ and +
+    signs, money market funds (e.g. SPAXX**) with a value but no quantity, and disclaimer
+    paragraphs ending in "Date downloaded Oct-03-2026 4:58 a.m ET", which dates the snapshot.
+    """
+    text = Path(path).read_text(encoding="utf-8-sig").replace("\r\n", "\n")
+    table, _, footer = text.partition("\n\n")
+    as_of = date.today()
+    for line in footer.splitlines():
+        if "Date downloaded" in line:
+            stamp = line.split("Date downloaded", 1)[1].strip().strip('"').split()[0]
+            as_of = datetime.strptime(stamp, "%b-%d-%Y").date()
+    rows, accounts = [], {}
+    for r in csv.DictReader(io.StringIO(table)):
+        symbol = (r.get("Symbol") or "").strip()
+        if not symbol:
+            continue
+        name = f"Fidelity {r['Account name'].strip()}"
+        accounts[name] = (account_type_from_name(name), r["Account number"].strip()[-4:])
+        value = _number(r.get("Current value"))
+        quantity = _number(r.get("Quantity"))
+        is_cash = symbol.endswith("**")  # money market sweep: $1.00 per share
+        rows.append(
+            {
+                "account": name,
+                "as_of": as_of,
+                "symbol": symbol.rstrip("*"),
+                "description": (r.get("Description") or "").strip(),
+                "quantity": value if is_cash else quantity,
+                "price": 1.0 if is_cash else _number(r.get("Last price")),
+                "market_value": value,
+                "cost_basis": value if is_cash else _number(r.get("Cost basis total")),
+            }
+        )
+    return rows, accounts
+
+
+def _fidelity_positions(path: Path | str) -> list[dict[str, Any]]:
+    rows, _ = read_fidelity_positions(path)
+    return rows
+
+
+# Broker-specific readers convert their exports to generic rows.
 TRANSACTION_FORMATS = {"generic": read_generic}
-POSITION_FORMATS = {"generic": read_generic}
+POSITION_FORMATS = {"generic": read_generic, "fidelity": _fidelity_positions}

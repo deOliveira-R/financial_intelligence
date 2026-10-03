@@ -32,6 +32,7 @@ from fin_intel.models import (
 from fin_intel.prices import adjustments
 
 WASH_SALE_DAYS = 30
+EXCHANGE_TRADED_TYPES = ("ETF", "ETV", "ETN", "ETS")  # funds, vehicles, notes, single-stock
 LOT_ACTIONS = {"buy", "reinvest", "transfer_in"}
 
 
@@ -331,21 +332,44 @@ class LotView:
     account: str
     taxable: bool
     symbol: str
-    acquired: date
+    acquired: date | None  # None for broker positions (no transaction history imported)
     quantity: float
     cost_basis: float | None
     price: float | None
     market_value: float | None
     unrealized: float | None
-    term: str
+    term: str  # "short", "long", or "unknown" without an acquisition date
+    basis_source: str = "lots"  # "lots": from transactions; "broker": the broker's snapshot
 
 
 def lot_views(session: Session, as_of: date | None = None) -> list[LotView]:
+    """Open lots from transaction history, plus one pseudo-lot per broker position in
+    accounts with no history yet (cost basis from the broker, acquisition date unknown)."""
     as_of = as_of or date.today()
     book = lot_book(session)
     accounts = {a.id: a for a in session.scalars(select(Account))}
-    prices = latest_prices(session, {lot.symbol for lot in book.open})
+    with_history = {t.account_id for t in load_transactions(session)}
+    broker = [r for r in _latest_snapshot_rows(session) if r.account_id not in with_history]
+    prices = latest_prices(session, {lot.symbol for lot in book.open} | {r.symbol for r in broker})
     views = []
+    for r in broker:
+        price = prices.get(r.symbol, (r.price,))[0]
+        value = None if price is None else price * r.quantity
+        views.append(
+            LotView(
+                account=accounts[r.account_id].name,
+                taxable=accounts[r.account_id].taxable,
+                symbol=r.symbol,
+                acquired=None,
+                quantity=r.quantity,
+                cost_basis=r.cost_basis,
+                price=price,
+                market_value=value,
+                unrealized=None if value is None or r.cost_basis is None else value - r.cost_basis,
+                term="unknown",
+                basis_source="broker",
+            )
+        )
     for lot in sorted(book.open, key=lambda x: (x.symbol, x.acquired)):
         price = prices.get(lot.symbol, (None,))[0]
         value = None if price is None else price * lot.quantity
@@ -379,7 +403,8 @@ class Position:
     unrealized_short: float | None  # from lots held one year or less
     unrealized_long: float | None
     broker_quantity: float | None  # from the latest position snapshot, if imported
-    reconciled: bool | None  # derived quantity matches the broker's; None without a snapshot
+    reconciled: bool | None  # derived quantity matches the broker's; None if nothing to compare
+    basis_source: str  # "lots" (from transactions) or "broker" (snapshot only, no history)
 
 
 def positions(session: Session, as_of: date | None = None) -> list[Position]:
@@ -396,12 +421,15 @@ def positions(session: Session, as_of: date | None = None) -> list[Position]:
         return None if not values or any(v is None for v in values) else sum(values)
 
     def by_term(lots: list[LotView], term: str) -> float | None:
+        if any(lot.term == "unknown" for lot in lots):
+            return None  # no acquisition dates: the split can't be known
         matching = [lot.unrealized for lot in lots if lot.term == term]
         return total(matching) if matching else (0.0 if lots else None)
 
     out = []
     for (account, symbol), lots in sorted(groups.items()):
         quantity = sum(lot.quantity for lot in lots)
+        from_broker = bool(lots) and all(lot.basis_source == "broker" for lot in lots)
         broker = snapshots.get((account, symbol))
         out.append(
             Position(
@@ -414,7 +442,8 @@ def positions(session: Session, as_of: date | None = None) -> list[Position]:
                 unrealized_short=by_term(lots, "short"),
                 unrealized_long=by_term(lots, "long"),
                 broker_quantity=broker,
-                reconciled=None if broker is None else abs(broker - quantity) < 1e-4,
+                reconciled=None if broker is None or from_broker else abs(broker - quantity) < 1e-4,
+                basis_source="broker" if from_broker else "lots",
             )
         )
     return out
@@ -438,6 +467,23 @@ def _latest_snapshots(session: Session) -> dict[tuple[str, str], float]:
     return {(name, symbol): quantity for name, symbol, quantity in rows}
 
 
+def _latest_snapshot_rows(session: Session) -> list[PositionSnapshot]:
+    latest = (
+        select(PositionSnapshot.account_id, func.max(PositionSnapshot.as_of).label("d"))
+        .group_by(PositionSnapshot.account_id)
+        .subquery()
+    )
+    return list(
+        session.scalars(
+            select(PositionSnapshot).join(
+                latest,
+                (latest.c.account_id == PositionSnapshot.account_id)
+                & (latest.c.d == PositionSnapshot.as_of),
+            )
+        )
+    )
+
+
 @dataclass(frozen=True)
 class HarvestCandidate:
     lot: LotView
@@ -445,6 +491,9 @@ class HarvestCandidate:
     loss_pct: float
     blocking_purchases: list[tuple[str, date, float]]  # (account, date, shares) in last 30 days
     rebuy_after: date  # earliest repurchase date that won't wash the loss
+    # False for broker positions without transaction history: the holding period and any
+    # purchases in the last 30 days (including reinvested dividends) can't be checked.
+    history_known: bool = True
 
 
 def harvest_candidates(
@@ -470,7 +519,14 @@ def harvest_candidates(
             continue
         blockers = [b for b in recent[lot.symbol] if b[1] != lot.acquired]
         out.append(
-            HarvestCandidate(lot, loss, pct, blockers, as_of + timedelta(WASH_SALE_DAYS + 1))
+            HarvestCandidate(
+                lot,
+                loss,
+                pct,
+                blockers,
+                as_of + timedelta(WASH_SALE_DAYS + 1),
+                history_known=lot.basis_source == "lots",
+            )
         )
     return sorted(out, key=lambda c: -c.loss)
 
@@ -582,7 +638,10 @@ def replacements(
     if target is None:
         return []
     since = date.today() - timedelta(days=380)
-    etf_ids = select(Security.id).where(Security.security_type == "ETF", Security.active)
+    # Commodity trusts (GLD, IAU) are "ETV"s and notes "ETN"s in Massive's types, not "ETF"s.
+    etf_ids = select(Security.id).where(
+        Security.security_type.in_(EXCHANGE_TRADED_TYPES), Security.active
+    )
     liquid = (
         select(DailyBar.security_id)
         .where(DailyBar.source == "massive", DailyBar.date >= date.today() - timedelta(days=90))
