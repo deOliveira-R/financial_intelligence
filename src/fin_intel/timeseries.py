@@ -5,6 +5,7 @@ A spec names one series:
     px:SPY                 total-return adjusted close (splits and dividends)
     close:SPY              raw close          volume:SPY   raw volume
     fred:DGS10             a FRED series, as known on each date (see `pit`)
+    breadth:pct_above_200d market internals for US-listed common stocks (see breadth.py)
     px:CPER/px:GLD         ratio of two series      fred:DGS10-fred:DGS2   difference
     px:SPY|sma:200         transforms, applied left to right after any ratio/difference:
                            sma:N ema:N rsi:N macd ret:N diff:N vol:N z:N high:N low:N dd:N yoy
@@ -33,10 +34,11 @@ from fin_intel.models import (
     DailyBar,
     EconomicObservation,
     EconomicVintage,
+    MarketBreadth,
 )
 from fin_intel.prices import adjustments
 
-SOURCES = ("px", "close", "volume", "fred")
+SOURCES = ("px", "close", "volume", "fred", "breadth")
 _OPERATOR = re.compile(rf"([/-])(?=(?:{'|'.join(SOURCES)}):)")
 
 
@@ -132,6 +134,8 @@ def _load(
     session: Session, term: tuple[str, str], days: list[date], pit: bool
 ) -> indicators.Series:
     source, ident = term
+    if source == "breadth":
+        return _breadth(session, ident.lower(), days)
     if source == "fred":
         return _fred_pit(session, ident, days) if pit else _fred_latest(session, ident, days)
     return _price(session, ident, days, source)
@@ -178,6 +182,18 @@ def _price(session: Session, ticker: str, days: list[date], field: str) -> indic
         by_date = {b.date: b.close for b in series_bars}
     else:
         by_date = {b.date: float(b.volume) if b.volume is not None else None for b in series_bars}
+    return [by_date.get(d) for d in days]
+
+
+def _breadth(session: Session, field: str, days: list[date]) -> indicators.Series:
+    from fin_intel import breadth
+
+    if field not in breadth.FIELDS:
+        raise SpecError(f"unknown breadth field {field!r}; one of {', '.join(breadth.FIELDS)}")
+    rows = session.scalars(select(MarketBreadth).where(MarketBreadth.universe == "us_common"))
+    by_date = {r.date: breadth.field_values(r, field) for r in rows}
+    if not by_date:
+        raise SpecError("no breadth data; run fin-intel derive-breadth")
     return [by_date.get(d) for d in days]
 
 

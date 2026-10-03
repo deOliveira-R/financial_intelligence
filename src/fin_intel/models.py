@@ -326,3 +326,26 @@ class EconomicVintage(Base):
     date: Mapped[date] = mapped_column(Date, primary_key=True)
     realtime_start: Mapped[date] = mapped_column(Date, primary_key=True)
     value: Mapped[float | None] = mapped_column(Float)
+
+
+class MarketBreadth(Base):
+    """Derived: daily market internals for a universe of stocks (see breadth.py)."""
+
+    __tablename__ = "market_breadth"
+
+    universe: Mapped[str] = mapped_column(String(32), primary_key=True)
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    count: Mapped[int]  # stocks with a bar today and the previous trading day
+    advancers: Mapped[int]
+    decliners: Mapped[int]
+    unchanged: Mapped[int]
+    ad_line: Mapped[int]  # cumulative advancers minus decliners since the data begins
+    up_volume: Mapped[float]
+    down_volume: Mapped[float]
+    new_highs: Mapped[int]  # close at its 252-day high
+    new_lows: Mapped[int]
+    eligible_252: Mapped[int]  # stocks with 252 days of history (denominator for highs/lows)
+    above_50d: Mapped[int]
+    eligible_50d: Mapped[int]
+    above_200d: Mapped[int]
+    eligible_200d: Mapped[int]

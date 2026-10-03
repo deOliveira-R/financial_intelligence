@@ -206,6 +206,7 @@ def sync_daily() -> None:
     steps = [
         ("market bars", lambda: sync_market_daily(otc=settings.market_otc)),
         ("splits and dividends", lambda: sync_actions(since=recent)),
+        ("market breadth", derive_breadth_cmd),
         ("economic series", lambda: sync_economic(settings.fred_series_ids)),
     ]
     if settings.watchlist_tickers:
@@ -237,6 +238,15 @@ def rebuild_cmd(
     with session_factory()() as session:
         for dataset, count in sorted(rebuild(session, default_store(), target).items()):
             typer.echo(f"replayed {count:>5} {dataset}")
+
+
+@app.command("derive-breadth")
+def derive_breadth_cmd() -> None:
+    """Recompute market breadth from stored bars (no network)."""
+    from fin_intel import breadth
+
+    with session_factory()() as session:
+        typer.echo(f"breadth: {breadth.compute(session)} days")
 
 
 @app.command("derive")
