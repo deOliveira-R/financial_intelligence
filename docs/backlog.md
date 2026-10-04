@@ -52,13 +52,22 @@ walk-forward out-of-sample splits, and storing runs for comparison.
 
 ## Global coverage (phase E)
 
-- **Prices outside the US:** home-market prices for valuations. Options: US ADRs and OTC
+- **Prices outside the US:** done for Taiwan (exchange open data) and via US OTC/ADR lines
+  for liquid foreign companies; a licensed global feed (EODHD) would cover the rest. Original
+  options: Options: US ADRs and OTC
   ADRs already in our Massive bars (most large foreign companies have one; needs a
   home-listing <-> ADR map and ADR ratios), TWSE/TPEx daily closes (open data), Korea's
   public-data portal (free key), J-Quants for Japan (free tier, delayed), or yfinance as a
   fallback. Stooq now sits behind a JavaScript bot check: not used.
-- **Identity map:** one issuer per company across SEC, EDINET, DART, TWSE and ESEF (Toyota,
-  Sony, TSMC, ASML, SAP file with both SEC and their home regulator), by LEI, ISIN or name.
+- **Cross-listing gaps (crosslist.py):** ambiguous names are skipped, so TSMC isn't merged
+  with its SEC filer yet ("Taiwan Semiconductor" also names another TWSE company); match via
+  the SEC 20-F's home ticker or LEI instead. A few one-word merges miss when SEC has no
+  incorporation country (Equinor, Grifols). ADR ratios break around stock splits unless both
+  lines' prices are split-adjusted (Tokyo Electron's OTC line, Sept 2026). Depositary banks'
+  DR directories would give ratios for the ~370 linked ADRs still unvalued.
+- **Korea prices:** no free official route (data.go.kr needs a Korean phone, KRX Open API
+  registration failed); OTC lines barely trade (Samsung's SSNLF), so Korean companies stay
+  unvalued unless they file with the SEC (KB, POSCO, Shinhan, SK Telecom...).
 - **Taiwan history:** the open data has only the latest quarter; backfill earlier quarters
   from MOPS so income statements (year to date) can be split into quarters and TTM.
 - **Japanese mappings:** refine for IFRS filers with other concept names (Panasonic's debt,

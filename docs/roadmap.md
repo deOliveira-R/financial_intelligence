@@ -55,7 +55,10 @@ US filings miss much of the world's industrial backbone (Samsung, SK hynix, Toky
 Shin-Etsu, LVMH, Siemens, SAP, Infineon, BYD, CATL...). Done (2026-10-04): foreign filers
 whose latest 20-F SEC's company facts skipped (TSMC, Toyota, Sony and ~370 others) are read
 from the filings' XBRL. Loading since 2026-10-04: Korea (DART, ~4,000 listed companies),
-Japan (EDINET, ~3,900), Taiwan (TWSE/TPEx, ~1,950), Europe (ESEF, ~5,000). Sources:
+Japan (EDINET, ~3,900), Taiwan (TWSE/TPEx, ~1,950), Europe (ESEF, ~5,000). Valuations:
+Taiwan from its exchanges' daily prices; Japan and Europe through liquid US OTC lines and
+ADRs linked by share-class FIGI (crosslist.py); companies filing with both the SEC and a
+home regulator are counted once. Sources:
 
 - **Europe and UK:** ESEF annual reports (filings.xbrl.org, ~26k filings as xBRL-JSON,
   keyed by LEI). Annual only; half-year reports aren't mandated in XBRL.
