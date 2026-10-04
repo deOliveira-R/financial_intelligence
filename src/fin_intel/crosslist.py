@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from fin_intel.models import DailyBar, Issuer, Security, StatementItem
 
+RATIO_WINDOW_DAYS = 180
 HOME_EXCHANGES = {"edinet": ["JT"], "dart": ["KS", "KQ"], "twse": ["TT"]}
 COMMON = ("Common Stock", "Ordinary Shares")
 NICE_RATIOS = (0.1, 0.125, 0.2, 0.25, 1 / 3, 0.5, 1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 40, 50, 100)
@@ -173,7 +174,9 @@ def link(session: Session, today: date | None = None) -> dict[str, int]:
         tokens = _tokens(issuer.figi_name)
         if tokens:
             candidates[tokens[0]].append((tokens, issuer))
-    since = today - timedelta(days=40)
+    # Ratios rarely change, and OTC ordinary lines trade only now and then: compare each
+    # ordinary-line trade with the ADR's close that day or the day before, over half a year.
+    since = today - timedelta(days=RATIO_WINDOW_DAYS)
     for adr in session.scalars(
         select(Security).where(Security.security_type == "ADRC", Security.active)
     ):
@@ -199,11 +202,14 @@ def link(session: Session, today: date | None = None) -> dict[str, int]:
             )
         ):
             closes[day][sid] = close
-        both = [
-            c[adr.id] / c[ordinary.id]
-            for c in closes.values()
-            if c.get(adr.id) and c.get(ordinary.id)
-        ]
+        adr_close = {d: c[adr.id] for d, c in closes.items() if c.get(adr.id)}
+        both = []
+        for day, c in closes.items():
+            if not c.get(ordinary.id):
+                continue
+            near = adr_close.get(day) or adr_close.get(day - timedelta(days=1))
+            if near:
+                both.append(near / c[ordinary.id])
         ratio = _nice(median(both)) if len(both) >= 3 else None
         shares = session.scalar(
             select(StatementItem.value)
