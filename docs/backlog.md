@@ -21,6 +21,11 @@ in [roadmap.md](roadmap.md).
 - **Options:** yfinance or delayed CBOE chains, with Greeks computed ourselves.
 - **Sector breadth:** SIC codes are loaded; breadth per sector (% above 200-day) is next.
 
+- **Price outliers:** a few series have unadjusted reverse splits (one shows 117x in a
+  year) or stitch a post-bankruptcy listing onto the old one (WW). Flag implausible jumps
+  without a matching split, and break series at bankruptcies/relistings, before research
+  relies on means.
+
 ## Trading strategy prototypes (phase B data)
 
 Each needs a walk-forward backtest on point-in-time data with transaction costs.
