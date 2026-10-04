@@ -792,12 +792,15 @@ def screen_backtest_cmd(
         return "—" if v is None else f"{v:+.1%}"
 
     typer.echo(f"{r.screen}: top {r.top}, {len(r.periods)} rebalance dates")
-    typer.echo(f"{'horizon':>8}{'periods':>9}{'return':>9}{'vs univ':>9}{'vs SPY':>9}{'beat':>7}")
+    typer.echo(
+        f"{'horizon':>8}{'periods':>9}{'return':>9}{'vs univ':>9}{'vs SPY':>9}{'beat':>7}"
+        f"{'median vs univ':>16}"
+    )
     for s in r.summary:
         beat = "—" if s.beat_universe is None else f"{s.beat_universe:.0%}"
         typer.echo(
             f"{s.horizon:>7}d{s.periods:>9}{pct(s.mean_return):>9}{pct(s.vs_universe):>9}"
-            f"{pct(s.vs_spy):>9}{beat:>7}"
+            f"{pct(s.vs_spy):>9}{beat:>7}{pct(s.median_vs_universe):>16}"
         )
     if periods:
         h = screentest.HORIZONS[0]

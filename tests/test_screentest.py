@@ -41,3 +41,29 @@ def test_picks_vs_universe_with_a_delisting(session):
     three, fifty = r.summary
     assert three.periods == 1 and three.beat_universe == 0.0
     assert fifty.periods == 0 and fifty.mean_return is None
+
+
+def test_medians_and_bad_prices(session):
+    add_bars(session, "SPY", START, [100.0] * 10)
+    a = add_bars(session, "A", START, [10.0, 10.0, 10.0, 10.0, 200.0])  # one outlier (+1900%)
+    b = add_bars(session, "B", START, [10.0, 10.0, 0.0, 0.0, 0.0])  # zero closes: ignored
+    c = add_bars(session, "C", START, [10.0, 10.0, 11.0, 11.0, 11.0])
+    for i, security in enumerate((a, b, c), start=1):
+        session.add(Issuer(cik=i, name=security.ticker))
+        session.flush()
+        security.cik = i
+        session.add(
+            CompanyMetrics(
+                security_id=security.id,
+                as_of=START,
+                cik=i,
+                price=10.0,
+                period_end=date(2025, 12, 31),
+                pe=float(i),
+            )
+        )
+    session.commit()
+    r = screentest.run(session, filters=["pe<10"], sort="pe", top=3, horizons=(3,))
+    (p,) = r.periods
+    assert p.returns[3] == pytest.approx((19.0 + 0.0 + 0.1) / 3)  # B keeps its last good price
+    assert p.median_return[3] == pytest.approx(0.1)

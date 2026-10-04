@@ -8,11 +8,15 @@ something, since small and cheap stocks as a group can beat SPY on their own.
 
 A pick delisted during the holding period keeps its last price (cash afterwards): a
 bankruptcy shows as a loss and a takeover as a gain, with no survivorship bias.
+
+Small-cap returns are extremely skewed (a few stocks go up 20x) and price data has rare
+errors (unadjusted reverse splits), so medians are reported next to means: a screen whose
+edge only shows in the mean is riding a handful of outliers.
 """
 
 from dataclasses import dataclass, field
 from datetime import date
-from statistics import mean
+from statistics import mean, median
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -30,6 +34,8 @@ class Period:
     returns: dict[int, float | None]  # horizon -> equal-weight return of the picks
     universe: dict[int, float | None]
     spy: dict[int, float | None]
+    median_return: dict[int, float | None] = field(default_factory=dict)
+    median_universe: dict[int, float | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -40,6 +46,7 @@ class Summary:
     vs_universe: float | None  # mean excess over the universe
     vs_spy: float | None
     beat_universe: float | None  # share of periods beating it
+    median_vs_universe: float | None = None  # mean of (median pick - median stock)
 
 
 @dataclass
@@ -73,10 +80,11 @@ class _Prices:
         """Return from `start` over `horizon` days; a series that stops (delisting) keeps
         its last price. None if the horizon isn't over yet."""
         first = px[start]
-        if first is None or start + horizon >= len(self.days):
+        if first is None or first <= 0 or start + horizon >= len(self.days):
             return None
         last = next(
-            (v for i in range(start + horizon, start, -1) if (v := px[i]) is not None), first
+            (v for i in range(start + horizon, start, -1) if (v := px[i]) is not None and v > 0),
+            first,
         )
         return last / first - 1
 
@@ -116,30 +124,37 @@ def run(
             select(CompanyMetrics.security_id).where(CompanyMetrics.as_of == as_of)
         ).all()
 
-        def basket(ids: list[int], h: int, start: int = start) -> float | None:
+        def basket(ids: list[int], h: int, start: int = start, how=mean) -> float | None:
             rets = [
                 r
                 for sid in ids
                 if (px := prices.series(sid)) is not None
                 and (r := prices.forward(px, start, h)) is not None
             ]
-            return mean(rets) if rets else None
+            return how(rets) if rets else None
+
+        pick_ids = [p["security_id"] for p in picks]
 
         result.periods.append(
             Period(
                 as_of=as_of,
                 picks=[p["ticker"] or f"#{p['security_id']}" for p in picks],
-                returns={h: basket([p["security_id"] for p in picks], h) for h in horizons},
+                returns={h: basket(pick_ids, h) for h in horizons},
                 universe={h: basket(list(universe_ids), h) for h in horizons},
                 spy={h: prices.forward(spy, start, h) for h in horizons},
+                median_return={h: basket(pick_ids, h, how=median) for h in horizons},
+                median_universe={h: basket(list(universe_ids), h, how=median) for h in horizons},
             )
         )
     for h in horizons:
-        rets, vs_u, vs_s = [], [], []
+        rets, vs_u, vs_s, med = [], [], [], []
         for p in result.periods:
             r, u, b = p.returns[h], p.universe[h], p.spy[h]
             if r is None:
                 continue
+            mr, mu = p.median_return.get(h), p.median_universe.get(h)
+            if mr is not None and mu is not None:
+                med.append(mr - mu)
             rets.append(r)
             if u is not None:
                 vs_u.append(r - u)
@@ -153,6 +168,7 @@ def run(
                 vs_universe=mean(vs_u) if vs_u else None,
                 vs_spy=mean(vs_s) if vs_s else None,
                 beat_universe=sum(1 for x in vs_u if x > 0) / len(vs_u) if vs_u else None,
+                median_vs_universe=mean(med) if med else None,
             )
         )
     return result
