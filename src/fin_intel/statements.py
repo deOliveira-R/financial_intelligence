@@ -271,6 +271,7 @@ LINE_ITEMS: dict[str, tuple[str, str, list[tuple[str, str]]]] = {
         [
             ("dei", "EntityCommonStockSharesOutstanding"),  # cover page, near the filing date
             ("us-gaap", "CommonStockSharesOutstanding"),
+            ("ifrs-full", "NumberOfSharesOutstanding"),
         ],
     ),
 }
@@ -354,8 +355,27 @@ JAPAN: dict[str, list[tuple[str, str]]] = {
     "retained_earnings": [("jpigp", "RetainedEarningsIFRS"), ("jppfs", "RetainedEarnings")],
     "shares_outstanding": [("fin-intel", "SharesOutstanding")],
 }
-for _item, _keys in JAPAN.items():
-    LINE_ITEMS[_item][2].extend(_keys)
+# Taiwan (TWSE/TPEx open data): concepts named by taiwan.py from the exchanges' tables.
+TAIWAN: dict[str, list[tuple[str, str]]] = {
+    "revenue": [("twse", "Revenue")],
+    "cost_of_revenue": [("twse", "CostOfRevenue")],
+    "gross_profit": [("twse", "GrossProfit")],
+    "operating_income": [("twse", "OperatingIncome")],
+    "pretax_income": [("twse", "PretaxIncome")],
+    "income_tax": [("twse", "IncomeTax")],
+    "net_income": [("twse", "NetIncomeParent"), ("twse", "NetIncome")],
+    "eps_basic": [("twse", "EPS")],
+    "current_assets": [("twse", "CurrentAssets")],
+    "total_assets": [("twse", "Assets")],
+    "current_liabilities": [("twse", "CurrentLiabilities")],
+    "total_liabilities": [("twse", "Liabilities")],
+    "equity": [("twse", "EquityParent"), ("twse", "Equity")],
+    "retained_earnings": [("twse", "RetainedEarnings")],
+    "shares_outstanding": [("twse", "SharesOutstanding")],
+}
+for _extra in (JAPAN, TAIWAN):
+    for _item, _keys in _extra.items():
+        LINE_ITEMS[_item][2].extend(_keys)
 
 CANDIDATES = {key: item for item, (_, _, keys) in LINE_ITEMS.items() for key in keys}
 

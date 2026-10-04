@@ -26,8 +26,10 @@ from fin_intel import (
     dart,
     derive,
     energy,
+    esef,
     insiders,
     releases,
+    taiwan,
     thirteenf,
     world,
     xbrl,
@@ -490,6 +492,66 @@ def sync_dart_report(
     return result["rows"]
 
 
+# --- Europe (ESEF) -------------------------------------------------------------------------
+
+
+def load_esef_report(session: Session, key: str, body: bytes) -> int:
+    """One ESEF annual report. Key: `LEI|period end|country|date added|name`."""
+    lei, _, country, added, name = key.split("|", 4)
+    cik = world.ensure_issuer(session, "esef", lei, name or None, country=country, lei=lei)
+    payload = esef.parse_report(body, f"esef:{lei}:{key.split('|')[1]}", date.fromisoformat(added))
+    if not payload["facts"]:
+        return 0
+    return load_company_facts(session, cik, payload, supplement=True)
+
+
+def sync_esef_report(session: Session, provider: Any, filing: dict[str, Any]) -> int:
+    name = (filing["name"] or "").replace("|", " ")
+    key = f"{filing['lei']}|{filing['period_end']}|{filing['country']}|{filing['added']}|{name}"
+    with tracked(session, "esef", "report", f"{filing['lei']}|{filing['period_end']}") as result:
+        session.commit()
+        result["rows"] = load_esef_report(
+            session, key, provider.fetch_report(filing["json_url"], key)
+        )
+    return result["rows"]
+
+
+# --- Taiwan (TWSE / TPEx) --------------------------------------------------------------------
+
+
+def load_twse_table(session: Session, key: str, payload: Any) -> int:
+    """One exchange table: profiles (names), or a quarter's income statements or balance
+    sheets for every company. Key: `twse|t187ap06_ci|2026-10-04`."""
+    if not isinstance(payload, list):
+        return 0
+    _, table, snapshot = key.split("|")
+    if table == "t187ap03":
+        profiles = taiwan.parse_profiles(payload)
+        for p in profiles:
+            world.ensure_issuer(session, "twse", p["code"], p["name"], home_ticker=p["code"])
+        return len(profiles)
+    statement = "income" if table.startswith("t187ap06") else "balance"
+    rows = 0
+    for company, facts in taiwan.parse_table(
+        payload, statement, date.fromisoformat(snapshot)
+    ).items():
+        cik = world.ensure_issuer(session, "twse", company, home_ticker=company)
+        rows += load_company_facts(session, cik, world.facts_payload(facts), supplement=True)
+    return rows
+
+
+def sync_twse_table(
+    session: Session, provider: Any, market: str, table: str, snapshot: date
+) -> int:
+    with tracked(session, "twse", "table", f"{market}|{table}|{snapshot.isoformat()}") as result:
+        session.commit()
+        payload = provider.fetch(market, table, snapshot.isoformat())
+        result["rows"] = load_twse_table(
+            session, f"{market}|{table}|{snapshot.isoformat()}", payload
+        )
+    return result["rows"]
+
+
 # --- Japan (EDINET) -------------------------------------------------------------------------
 
 
@@ -772,6 +834,9 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("dart", "share_counts"): lambda s, k, p, t: load_dart_share_counts(s, k, p),
     ("edinet", "documents"): lambda s, k, p, t: len(edinet_reports(p)),
     ("edinet", "instance"): lambda s, k, p, t: load_edinet_instance(s, k, p),
+    ("twse", "table"): lambda s, k, p, t: load_twse_table(s, k, p),
+    ("esef", "index"): lambda s, k, p, t: len(esef.filings(p)),
+    ("esef", "report"): lambda s, k, p, t: load_esef_report(s, k, p),
     ("tiingo", "metadata"): lambda s, k, p, t: load_tiingo_metadata(s, k, p, t.date()),
     ("tiingo", "daily_prices"): lambda s, k, p, t: load_tiingo_daily(s, k, p),
     ("massive", "tickers"): lambda s, k, p, t: load_massive_tickers(s, k, p, t.date()),
@@ -826,6 +891,7 @@ BINARY_DATASETS = {
     ("sec", "filing_xbrl"),
     ("dart", "corp_codes"),
     ("edinet", "instance"),
+    ("esef", "report"),
     ("sec", "insider_dataset"),
     ("sec", "form4"),
     ("sec", "13f_dataset"),

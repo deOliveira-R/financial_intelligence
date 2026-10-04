@@ -364,6 +364,63 @@ def sync_edinet(
         )
 
 
+@app.command("sync-esef")
+def sync_esef(
+    since: Annotated[str, typer.Option(help="Oldest fiscal year end to load")] = "2023-01-01",
+) -> None:
+    """Load European listed companies' annual reports (ESEF, filings.xbrl.org): the latest
+    version of each company's report for every fiscal year since `since`."""
+    from fin_intel import esef
+    from fin_intel.providers import EsefProvider
+
+    store = default_store()
+    provider = EsefProvider(raw_store=store)
+    found: dict[tuple[str, str], dict] = {}
+    page = 1
+    while True:
+        index = provider.fetch_index(page)
+        rows = esef.filings(index)
+        for f in rows:
+            if (f["period_end"] or "") < since:
+                continue
+            key = (f["lei"], f["period_end"])
+            if key not in found or (f["version"], f["added"]) > (
+                found[key]["version"],
+                found[key]["added"],
+            ):
+                found[key] = f
+        if not (index.get("links") or {}).get("next") or not index.get("data"):
+            break
+        page += 1
+    loaded = {"|".join(k.split("|")[:2]) for k in store.latest_hashes("esef", "report") if k}
+    pending = {f"{lei}|{end}": f for (lei, end), f in found.items() if f"{lei}|{end}" not in loaded}
+    typer.echo(f"{len(found)} reports since {since}, {len(pending)} to load")
+    if pending:
+        _run(
+            "sync-esef",
+            list(pending),
+            lambda s, k: ingest.sync_esef_report(s, provider, pending[k]),
+        )
+
+
+@app.command("sync-twse")
+def sync_twse() -> None:
+    """Load Taiwan's listed (TWSE) and OTC (TPEx) companies: profiles, then the latest
+    quarter's income statements and balance sheets in every industry format."""
+    from fin_intel.providers import TwseProvider
+    from fin_intel.providers.twse import INDUSTRIES, MARKETS
+
+    provider = TwseProvider(raw_store=default_store())
+    tables = ["t187ap03"] + [f"{s}_{i}" for s in ("t187ap06", "t187ap07") for i in INDUSTRIES]
+    items = [f"{m}|{t}" for m in MARKETS for t in tables]
+    today = date.today()
+    _run(
+        "sync-twse",
+        items,
+        lambda s, item: ingest.sync_twse_table(s, provider, *item.split("|"), today),
+    )
+
+
 @app.command("fill-xbrl-gaps")
 def fill_xbrl_gaps(
     cik: Annotated[list[int] | None, typer.Option(help="Only these issuers")] = None,
@@ -635,6 +692,8 @@ def sync_weekly() -> None:
         ("ADR share counts", sync_adr_shares),
         ("SIC codes of new issuers", sync_sic),
         ("filings missing from SEC company facts", fill_xbrl_gaps),
+        ("Taiwanese companies (TWSE/TPEx)", sync_twse),
+        ("European annual reports (ESEF)", sync_esef),
         ("economic release calendar", sync_calendar),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
