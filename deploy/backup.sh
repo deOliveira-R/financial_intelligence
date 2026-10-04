@@ -39,9 +39,12 @@ gzip -9 "$DUMP"
 "${RCLONE[@]}" delete --min-age "${KEEP_DAYS}d" "$REMOTE/essential/"
 
 # 2. Raw bodies. `copy` never deletes remotely: older index dumps may still reference
-# responses pruned locally.
-"${RCLONE[@]}" copy data/raw "$REMOTE/raw"
-"${RCLONE[@]}" check data/raw "$REMOTE/raw" --one-way
+# responses pruned locally. Syncs keep writing during the backup, so copy and verify the
+# files that existed once the index was dumped (bodies are written before their index rows,
+# so every dumped row's body is listed); later files go up with the next backup.
+(cd data/raw && find . -type f ! -name "*.tmp" | sed 's|^\./||') > "$TMP/raw-files.txt"
+"${RCLONE[@]}" copy data/raw "$REMOTE/raw" --files-from "$TMP/raw-files.txt"
+"${RCLONE[@]}" check data/raw "$REMOTE/raw" --one-way --files-from "$TMP/raw-files.txt"
 
 # 3. Optional full snapshot (.backup is consistent even in WAL mode with writers active).
 if [ "${FI_BACKUP_DB_SNAPSHOT:-0}" = "1" ]; then
