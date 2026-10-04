@@ -188,6 +188,20 @@ def test_home_issuer_of_an_sec_filer_is_marked_and_skipped(session):
     from fin_intel.models import Issuer as I
 
     session.add(I(cik=1046179, name="TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD"))
+    session.add(Concept(id=2, taxonomy="ifrs-full", name="Revenue"))
+    session.flush()
+    session.add(
+        StatementItem(
+            cik=1046179,
+            line_item="revenue",
+            period_start=TODAY,
+            period_end=TODAY,
+            period_type="annual",
+            unit="TWD",
+            value=1.0,
+            concept_id=2,
+        )
+    )  # files its own statements: not an ADR shell
     home = world.ensure_issuer(session, "twse", "2330", "TSMC", home_ticker="2330")
     issuer = session.get(I, home)
     issuer.share_class_figi, issuer.figi_name = "BBG001S6Q004", "TAIWAN SEMICONDUCTOR MANUFAC"
@@ -211,3 +225,9 @@ def test_home_issuer_of_an_sec_filer_is_marked_and_skipped(session):
     assert issuer.same_as == 1046179 and adr.cik == 1046179  # the ADR stays the SEC filer's
     primary = metrics.primary_securities(session)
     assert home not in primary and primary[1046179].ticker == "TSM"
+
+
+def test_one_word_names_must_match_exactly():
+    mitsubishi = crosslist._tokens("MITSUBISHI CORP")
+    assert not crosslist._same_name(mitsubishi, crosslist._tokens("MITSUBISHI UFJ FINANCIAL GRP"))
+    assert crosslist._same_name(mitsubishi, crosslist._tokens("MITSUBISHI CORP-SPONS ADR"))

@@ -132,6 +132,8 @@ def _same_name(adr: list[str], ordinary: list[str]) -> bool:
     if not adr or not ordinary or adr[0] != ordinary[0]:
         return False
     short, long_ = sorted((adr, ordinary), key=len)
+    if len(short) == 1:  # "Mitsubishi" alone mustn't match Mitsubishi UFJ Financial
+        return short == long_
     j = 0
     for word in short:
         while j < len(long_) and not long_[j].startswith(word):
@@ -158,6 +160,17 @@ def link(session: Session, today: date | None = None) -> dict[str, int]:
         for i in session.scalars(select(Issuer).where(Issuer.share_class_figi.is_not(None)))
     }
     stats = {"ordinary": 0, "adr": 0, "adr_valued": 0}
+    # Name-based links are recomputed each run, so a corrected rule clears earlier ones;
+    # share-class links (exact identifiers) are kept.
+    for s in session.scalars(
+        select(Security).where(Security.security_type == "ADRC", Security.cik >= 10**10)
+    ):
+        s.cik, s.shares_outstanding, s.shares_as_of = None, None, None
+    for i in issuers.values():
+        i.same_as = None
+    with_statements = set(
+        session.scalars(select(StatementItem.cik).where(StatementItem.cik < 10**10).distinct())
+    )
     ordinary_by_cik: dict[int, Security] = {}
     for s in session.scalars(
         select(Security).where(
@@ -193,7 +206,9 @@ def link(session: Session, today: date | None = None) -> dict[str, int]:
         if adr.cik is not None and adr.cik < 10**10:
             # An SEC filer's ADR: the home issuer is the same company, valued from its SEC
             # filings (matched only on OpenFIGI's own names, not filers' names).
-            if adr.figi_name and issuer.same_as is None:
+            # SEC "issuers" that are ADR programs (registered by the depositary bank, no
+            # financial statements) don't count: only the company's own filings do.
+            if adr.figi_name and issuer.same_as is None and adr.cik in with_statements:
                 issuer.same_as = adr.cik
                 stats["same_as_sec"] += 1
             continue
