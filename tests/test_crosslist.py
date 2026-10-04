@@ -96,3 +96,15 @@ def test_illiquid_us_line_doesnt_price_a_foreign_company(session):
     bars(session, line, [60.0, 61.0])  # two trades in a month
     session.commit()
     assert cik not in metrics.primary_securities(session)
+
+
+def test_isins_by_lei_reads_only_wanted_leis():
+    import io
+    import zipfile
+
+    from fin_intel.providers.gleif import isins_by_lei
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("lei-isin.csv", "LEI,ISIN\nA1,FR0000121972\nA1,XS1234567890\nB2,US0000000001\n")
+    assert isins_by_lei(buf.getvalue(), {"A1"}) == {"A1": ["FR0000121972", "XS1234567890"]}

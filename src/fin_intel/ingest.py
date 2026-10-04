@@ -548,20 +548,30 @@ def sync_crosslist(session: Session, openfigi: OpenFigiProvider, gleif: Any) -> 
             session.commit()
 
     run("home", crosslist.home_jobs(session), crosslist.apply_home)
-    europeans = session.execute(
-        select(Issuer.cik, Issuer.lei).where(
-            Issuer.source == "esef", Issuer.lei.is_not(None), Issuer.share_class_figi.is_(None)
+    europeans = dict(
+        session.execute(
+            select(Issuer.lei, Issuer.cik).where(
+                Issuer.source == "esef", Issuer.lei.is_not(None), Issuer.share_class_figi.is_(None)
+            )
+        ).all()
+    )
+    if europeans:
+        from fin_intel.providers.gleif import isins_by_lei
+
+        session.commit()
+        mapping = isins_by_lei(gleif.fetch_mapping(), set(europeans))
+        countries = dict(
+            session.execute(select(Issuer.lei, Issuer.country).where(Issuer.lei.in_(list(mapping))))
         )
-    ).all()
-    for cik, lei in europeans:
-        session.commit()
-        isins = [r["attributes"]["isin"] for r in (gleif.fetch_isins(lei) or {}).get("data") or []]
-        if not isins:
-            continue
-        jobs = [({"idType": "ID_ISIN", "idValue": isin}, cik) for isin in isins[: openfigi.batch]]
-        results = openfigi.map_jobs([job for job, _ in jobs], f"isin|{lei}")
-        stats["isin"] += crosslist.apply_home(session, jobs, results)
-        session.commit()
+        for lei, isins in mapping.items():
+            # Shares carry the home country's prefix; banks also list thousands of bonds.
+            home = countries.get(lei) or ""
+            isins = sorted(isins, key=lambda i: not i.startswith(home))[: openfigi.batch]
+            jobs = [({"idType": "ID_ISIN", "idValue": isin}, europeans[lei]) for isin in isins]
+            session.commit()
+            results = openfigi.map_jobs([job for job, _ in jobs], f"isin|{lei}")
+            stats["isin"] += crosslist.apply_home(session, jobs, results)
+            session.commit()
     run("us", crosslist.us_jobs(session), crosslist.apply_us)
     stats.update(crosslist.link(session))
     session.commit()
