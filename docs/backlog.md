@@ -73,6 +73,11 @@ walk-forward out-of-sample splits, and storing runs for comparison.
 - **Congress data quality:** a few filers mistype dates (7 of 12.8k trades are dated after
   their own report, e.g. 2026-12-26 for a January trade); the notification date could
   stand in. Late disclosures (trades years before the report) are genuine.
+- **Policy corroboration (with congress by industry):** committee rosters
+  (unitedstates/congress-legislators, no key), bills and policy areas (congress.gov API,
+  free key), lobbying spend by industry (Senate LDA API), federal contracts by company
+  (USAspending API). Rising lobbying, contracts, bills and member buying in one industry
+  is the stronger story.
 - **Congress signals:** purchases by several members, committee membership vs sector
   (e.g. Armed Services and defense stocks), excess returns after disclosure date.
 - **13D/13G stakes:** activists crossing 5% (EDGAR full-text search or daily index).
