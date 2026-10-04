@@ -100,6 +100,7 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
     monkeypatch.setattr(cli, "sync_congress", ok("congress"))
     monkeypatch.setattr(cli, "sync_eia", ok("eia"))
     monkeypatch.setattr(cli, "sync_dart", ok("dart"))
+    monkeypatch.setattr(cli, "sync_edinet", ok("edinet"))
 
     result = CliRunner().invoke(app, ["sync-daily"])
     # A failed step doesn't stop the others, but the command still fails.
@@ -115,5 +116,6 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
         ("fred", ["GDP", *(series for series, _ in fx.SERIES.values())]),  # plus FX rates
         "eia",
         "dart",
+        "edinet",
         ("prices", ["AAPL", "MSFT"]),
     ]

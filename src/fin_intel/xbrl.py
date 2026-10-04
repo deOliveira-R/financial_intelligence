@@ -22,7 +22,14 @@ _TAXONOMIES = [
     (re.compile(r"xbrl\.ifrs\.org/taxonomy/[^/]+/ifrs-full"), "ifrs-full"),
     (re.compile(r"xbrl\.sec\.gov/dei/"), "dei"),
     (re.compile(r"fasb\.org/srt/"), "srt"),
+    # Japan's EDINET: J-GAAP statements, IFRS statements, the report's summary tables, DEI.
+    (re.compile(r"edinet-fsa\.go\.jp/taxonomy/jppfs/"), "jppfs"),
+    (re.compile(r"edinet-fsa\.go\.jp/taxonomy/jpigp/"), "jpigp"),
+    (re.compile(r"edinet-fsa\.go\.jp/taxonomy/jpcrp/"), "jpcrp"),
+    (re.compile(r"edinet-fsa\.go\.jp/taxonomy/jpdei/"), "jpdei"),
 ]
+DEI_TAXONOMIES = ("dei", "jpdei")
+EDINET_PERIODS = {"FY": "FY", "HY": "H1", "Q1": "Q1", "Q2": "Q2", "Q3": "Q3"}
 PERIODIC_FORMS = ("10-K", "10-K/A", "10-Q", "10-Q/A", "20-F", "20-F/A", "40-F", "40-F/A")
 
 
@@ -92,7 +99,7 @@ def parse_instance(
         if taxonomy is None or el.get("contextRef") is None:
             continue
         text = (el.text or "").strip()
-        if taxonomy == "dei" and el.get("unitRef") is None:
+        if taxonomy in DEI_TAXONOMIES and el.get("unitRef") is None:
             dei.setdefault(name, text)
             continue
         context = contexts.get(el.get("contextRef", ""))
@@ -114,6 +121,9 @@ def parse_instance(
 
     fy = dei.get("DocumentFiscalYearFocus")
     fp = dei.get("DocumentFiscalPeriodFocus")
+    if fy is None and dei.get("CurrentFiscalYearEndDateDEI"):  # EDINET
+        fy = dei["CurrentFiscalYearEndDateDEI"][:4]
+        fp = EDINET_PERIODS.get(dei.get("TypeOfCurrentPeriodDEI") or "", fp)
     for concepts in facts.values():
         for by_unit in concepts.values():
             for entries in by_unit.values():
@@ -121,7 +131,8 @@ def parse_instance(
                     fact["fy"] = int(fy) if fy and fy.isdigit() else None
                     fact["fp"] = fp
     return {
-        "entityName": dei.get("EntityRegistrantName"),
+        "entityName": dei.get("EntityRegistrantName") or dei.get("FilerNameInEnglishDEI"),
+        "dei": dei,
         "facts": {
             taxonomy: {
                 name: {"units": {unit: list(entries.values()) for unit, entries in by_unit.items()}}

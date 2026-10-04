@@ -51,6 +51,7 @@ from fin_intel.models import (
 from fin_intel.providers import (
     CftcProvider,
     DartProvider,
+    EdinetProvider,
     EiaProvider,
     FedProvider,
     FredProvider,
@@ -489,6 +490,73 @@ def sync_dart_report(
     return result["rows"]
 
 
+# --- Japan (EDINET) -------------------------------------------------------------------------
+
+
+def load_edinet_instance(session: Session, key: str, body: bytes) -> int:
+    """One EDINET report's facts. The raw key carries the document id, filer, type and
+    filing date: `S100YE9I|E00776|120|2026-06-19`."""
+    from fin_intel.providers.edinet import DOC_TYPES
+
+    doc_id, edinet_code, doc_type, filed = key.split("|")
+    payload = xbrl.parse_instance(
+        body, f"edinet:{doc_id}", DOC_TYPES.get(doc_type), date.fromisoformat(filed)
+    )
+    from fin_intel import edinet
+
+    dei = payload.pop("dei", {})
+    edinet.add_derived(payload)
+    year_end = dei.get("CurrentFiscalYearEndDateDEI") or ""
+    code = (dei.get("SecurityCodeDEI") or "").strip()
+    cik = world.ensure_issuer(
+        session,
+        "edinet",
+        edinet_code,
+        payload.get("entityName"),
+        home_ticker=code[:4] or None,
+        fiscal_month=int(year_end[5:7]) if len(year_end) >= 7 else None,
+    )
+    if not payload["facts"]:
+        return 0
+    return load_company_facts(session, cik, payload, supplement=True)
+
+
+def edinet_reports(documents: Any) -> list[dict[str, Any]]:
+    """Listed companies' annual, quarterly and half-year reports with XBRL in a day's list."""
+    from fin_intel.providers.edinet import DOC_TYPES
+
+    return [
+        r
+        for r in (documents or {}).get("results") or []
+        if r.get("docTypeCode") in DOC_TYPES and r.get("secCode") and r.get("xbrlFlag") == "1"
+    ]
+
+
+def sync_edinet_day(session: Session, provider: EdinetProvider, day: date) -> int:
+    """Every report a day's list names that isn't loaded yet."""
+    with tracked(session, "edinet", "documents", day.isoformat()) as result:
+        session.commit()
+        reports = edinet_reports(provider.fetch_documents(day))
+        store = provider.raw_store
+        done = (
+            {k.split("|")[0] for k in store.latest_hashes("edinet", "instance") if k}
+            if store
+            else set()
+        )
+        rows = 0
+        for r in reports:
+            if r["docID"] in done:
+                continue
+            filed = (r.get("submitDateTime") or day.isoformat())[:10]
+            key = f"{r['docID']}|{r['edinetCode']}|{r['docTypeCode']}|{filed}"
+            session.commit()  # fetch-then-load
+            body = provider.fetch_instance(r["docID"], key)
+            if body is not None:
+                rows += load_edinet_instance(session, key, body)
+        result["rows"] = rows
+    return result["rows"]
+
+
 def dart_periods(today: date, first_year: int = 2015) -> list[tuple[int, str]]:
     """(business year, report code) newest first, for reports past their filing deadline
     (December year ends: Q1 by May 15, half by Aug 14, Q3 by Nov 14, annual by Mar 31)."""
@@ -702,6 +770,8 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("dart", "company"): lambda s, k, p, t: load_dart_company(s, k, p),
     ("dart", "statements"): lambda s, k, p, t: load_dart_statements(s, k, p),
     ("dart", "share_counts"): lambda s, k, p, t: load_dart_share_counts(s, k, p),
+    ("edinet", "documents"): lambda s, k, p, t: len(edinet_reports(p)),
+    ("edinet", "instance"): lambda s, k, p, t: load_edinet_instance(s, k, p),
     ("tiingo", "metadata"): lambda s, k, p, t: load_tiingo_metadata(s, k, p, t.date()),
     ("tiingo", "daily_prices"): lambda s, k, p, t: load_tiingo_daily(s, k, p),
     ("massive", "tickers"): lambda s, k, p, t: load_massive_tickers(s, k, p, t.date()),
@@ -755,6 +825,7 @@ SYMBOL_KEYED_DATASETS = [
 BINARY_DATASETS = {
     ("sec", "filing_xbrl"),
     ("dart", "corp_codes"),
+    ("edinet", "instance"),
     ("sec", "insider_dataset"),
     ("sec", "form4"),
     ("sec", "13f_dataset"),

@@ -326,6 +326,44 @@ def sync_dart(
         )
 
 
+@app.command("sync-edinet")
+def sync_edinet(
+    since: Annotated[str, typer.Option(help="First filing day, YYYY-MM-DD")] = "2024-04-01",
+    until: Annotated[str | None, typer.Option(help="Last filing day; default: yesterday")] = None,
+) -> None:
+    """Load Japanese listed companies' annual, quarterly and half-year reports from EDINET,
+    one filing day at a time, newest first; days already loaded are skipped (the last week
+    is rechecked for late additions)."""
+    from fin_intel.models import SyncState
+    from fin_intel.providers import EdinetProvider
+
+    provider = EdinetProvider(raw_store=default_store())
+    end = date.fromisoformat(until) if until else date.today() - timedelta(days=1)
+    start = date.fromisoformat(since)
+    with session_factory()() as session:
+        done = set(
+            session.scalars(
+                select(SyncState.key).where(
+                    SyncState.provider == "edinet",
+                    SyncState.dataset == "documents",
+                    SyncState.last_success.is_not(None),
+                )
+            )
+        )
+    recent = end - timedelta(days=7)
+    days = []
+    for i in range((end - start).days + 1):
+        day = end - timedelta(days=i)
+        if day.isoformat() not in done or day >= recent:
+            days.append(day.isoformat())
+    if days:
+        _run(
+            "sync-edinet",
+            days,
+            lambda s, d: ingest.sync_edinet_day(s, provider, date.fromisoformat(d)),
+        )
+
+
 @app.command("fill-xbrl-gaps")
 def fill_xbrl_gaps(
     cik: Annotated[list[int] | None, typer.Option(help="Only these issuers")] = None,
@@ -577,6 +615,7 @@ def sync_daily() -> None:
         ("economic series", lambda: sync_economic(settings.fred_series_ids)),
         ("EIA energy data", sync_eia),
         ("Korean filings (DART)", lambda: sync_dart(limit=6000)),
+        ("Japanese filings (EDINET)", sync_edinet),
     ]
     if settings.watchlist_tickers:
         steps.append(("watchlist prices", lambda: sync_prices(settings.watchlist_tickers)))

@@ -2,6 +2,7 @@ from fin_intel.providers.base import Provider
 from fin_intel.providers.cftc import CftcProvider
 from fin_intel.providers.congress import HouseProvider, SenateProvider
 from fin_intel.providers.dart import DartProvider
+from fin_intel.providers.edinet import EdinetProvider
 from fin_intel.providers.eia import EiaProvider
 from fin_intel.providers.errors import (
     NotConfiguredError,
@@ -19,6 +20,7 @@ from fin_intel.providers.tiingo import TiingoProvider
 __all__ = [
     "CftcProvider",
     "DartProvider",
+    "EdinetProvider",
     "EiaProvider",
     "FedProvider",
     "FredProvider",

@@ -275,6 +275,88 @@ LINE_ITEMS: dict[str, tuple[str, str, list[tuple[str, str]]]] = {
     ),
 }
 
+# Japan (EDINET): J-GAAP (jppfs), Japan's IFRS taxonomy (jpigp) and the annual report's
+# summary of business results (jpcrp, consolidated figures for five years). Each list is
+# appended after the US GAAP and IFRS candidates, in priority order. `fin-intel` concepts
+# are assembled from several lines at load time (edinet.py).
+JAPAN: dict[str, list[tuple[str, str]]] = {
+    "revenue": [
+        ("jpigp", "RevenueIFRS"),
+        ("jppfs", "NetSales"),
+        ("jppfs", "OperatingRevenue1"),
+        ("jppfs", "NetSalesOfCompletedConstructionContractsCNS"),
+        ("jppfs", "OrdinaryIncomeBNK"),  # a bank's total revenue (not "ordinary profit")
+        ("jpcrp", "RevenueIFRSSummaryOfBusinessResults"),
+        ("jpcrp", "NetSalesSummaryOfBusinessResults"),
+        ("jpcrp", "OperatingRevenue1SummaryOfBusinessResults"),
+    ],
+    "cost_of_revenue": [("jpigp", "CostOfSalesIFRS"), ("jppfs", "CostOfSales")],
+    "gross_profit": [("jpigp", "GrossProfitIFRS"), ("jppfs", "GrossProfit")],
+    "operating_income": [("jpigp", "OperatingProfitLossIFRS"), ("jppfs", "OperatingIncome")],
+    "interest_expense": [("jpigp", "FinanceCostsIFRS"), ("jppfs", "InterestExpensesNOE")],
+    "pretax_income": [("jpigp", "ProfitLossBeforeTaxIFRS"), ("jppfs", "IncomeBeforeIncomeTaxes")],
+    "income_tax": [("jpigp", "IncomeTaxExpenseIFRS"), ("jppfs", "IncomeTaxes")],
+    "net_income": [
+        ("jpigp", "ProfitLossAttributableToOwnersOfParentIFRS"),
+        ("jppfs", "ProfitLossAttributableToOwnersOfParent"),
+        ("jpcrp", "ProfitLossAttributableToOwnersOfParentSummaryOfBusinessResults"),
+        ("jpigp", "ProfitLossIFRS"),
+        ("jppfs", "ProfitLoss"),
+    ],
+    "eps_diluted": [
+        ("jpigp", "DilutedEarningsLossPerShareIFRS"),
+        ("jpcrp", "DilutedEarningsLossPerShareIFRSSummaryOfBusinessResults"),
+        ("jpcrp", "DilutedEarningsPerShareSummaryOfBusinessResults"),
+    ],
+    "eps_basic": [
+        ("jpigp", "BasicEarningsLossPerShareIFRS"),
+        ("jpcrp", "BasicEarningsLossPerShareIFRSSummaryOfBusinessResults"),
+        ("jpcrp", "BasicEarningsLossPerShareSummaryOfBusinessResults"),
+    ],
+    "operating_cash_flow": [
+        ("jpigp", "NetCashProvidedByUsedInOperatingActivitiesIFRS"),
+        ("jppfs", "NetCashProvidedByUsedInOperatingActivities"),
+    ],
+    "capex": [
+        ("jpigp", "PurchaseOfPropertyPlantAndEquipmentInvCFIFRS"),
+        ("jppfs", "PurchaseOfPropertyPlantAndEquipmentInvCF"),
+    ],
+    "depreciation": [
+        ("jpigp", "DepreciationAndAmortizationOpeCFIFRS"),
+        ("jppfs", "DepreciationAndAmortizationOpeCF"),
+    ],
+    "dividends_paid": [("jpigp", "DividendsPaidFinCFIFRS"), ("jppfs", "CashDividendsPaidFinCF")],
+    "buybacks": [
+        ("jpigp", "PurchaseOfTreasurySharesFinCFIFRS"),
+        ("jppfs", "PurchaseOfTreasuryStockFinCF"),
+    ],
+    "cash": [
+        ("jpigp", "CashAndCashEquivalentsIFRS"),
+        ("jppfs", "CashAndCashEquivalents"),
+        ("jppfs", "CashAndDeposits"),
+    ],
+    "short_term_investments": [("jppfs", "ShortTermInvestmentSecurities")],
+    "current_assets": [("jpigp", "CurrentAssetsIFRS"), ("jppfs", "CurrentAssets")],
+    "total_assets": [("jpigp", "AssetsIFRS"), ("jppfs", "Assets")],
+    "current_liabilities": [
+        ("jpigp", "TotalCurrentLiabilitiesIFRS"),
+        ("jppfs", "CurrentLiabilities"),
+    ],
+    "total_liabilities": [("jpigp", "LiabilitiesIFRS"), ("jppfs", "Liabilities")],
+    "long_term_debt": [("fin-intel", "InterestBearingDebt")],  # including current portions
+    "lease_liabilities": [("jpigp", "LeaseLiabilitiesNCLIFRS")],
+    "equity": [
+        ("jpigp", "EquityAttributableToOwnersOfParentIFRS"),
+        ("jppfs", "ShareholdersEquity"),
+        ("jpigp", "EquityIFRS"),
+        ("jppfs", "NetAssets"),
+    ],
+    "retained_earnings": [("jpigp", "RetainedEarningsIFRS"), ("jppfs", "RetainedEarnings")],
+    "shares_outstanding": [("fin-intel", "SharesOutstanding")],
+}
+for _item, _keys in JAPAN.items():
+    LINE_ITEMS[_item][2].extend(_keys)
+
 CANDIDATES = {key: item for item, (_, _, keys) in LINE_ITEMS.items() for key in keys}
 
 

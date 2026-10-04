@@ -57,6 +57,7 @@ FACT_DATASETS = [
     ("sec", "submissions"),
     ("dart", "statements"),
     ("dart", "share_counts"),
+    ("edinet", "instance"),
 ]
 
 # target -> (datasets to replay, tables to wipe first, in foreign-key-safe order)
