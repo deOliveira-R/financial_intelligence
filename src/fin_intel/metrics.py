@@ -353,7 +353,11 @@ def _issuer_metrics(
     if liabilities is None and assets is not None and equity is not None:
         liabilities = assets - equity
     current_assets, current_liabilities = bal("current_assets"), bal("current_liabilities")
-    shares = bal("shares_outstanding") or ttm_last(items.get("shares_diluted", []))
+    shares = (
+        bal("shares_outstanding")
+        or ttm_last(items.get("shares_diluted", []))
+        or implied_shares(items, period_end)
+    )
 
     if listing_shares is not None:  # an ADR: its own count, in depositary shares
         market_cap = price * listing_shares if valued and listing_shares else None
@@ -448,6 +452,23 @@ def _growth(now: float | None, before: float | None) -> float | None:
     if now is None or before is None or before == 0:
         return None
     return (now - before) / abs(before)
+
+
+def implied_shares(items: dict[str, list[Item]], period_end: date) -> float | None:
+    """Shares implied by the latest fiscal year's net income and basic EPS, for filers that
+    tag no share count outside dimensional tables (most European ESEF reports)."""
+    eps = {i.period_end: i.value for i in items.get("eps_basic", []) if i.fiscal_period == "FY"}
+    years = sorted(
+        (i.period_end, i.value, eps[i.period_end])
+        for i in items.get("net_income", [])
+        if i.fiscal_period == "FY" and i.period_end in eps
+    )
+    if not years:
+        return None
+    end, net_income, per_share = years[-1]
+    if period_end - end > CURRENT_WINDOW or not per_share or net_income * per_share <= 0:
+        return None
+    return net_income / per_share
 
 
 def ttm_last(items: list[Item]) -> float | None:

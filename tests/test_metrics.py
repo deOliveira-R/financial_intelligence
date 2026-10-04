@@ -262,3 +262,17 @@ def test_historical_compute_uses_what_was_known_then(session):
     (row,) = session.query(CompanyMetrics).all()
     assert row.as_of == as_of and row.price == 20.0  # that day's close, not later ones
     assert row.net_income_ttm == 10e6 and row.pe == pytest.approx(10)
+
+
+def test_shares_implied_by_net_income_and_eps_when_untagged():
+    items = {
+        "revenue": [fy("2025-12-31", 30e9)],
+        "net_income": [fy("2025-12-31", 10.2e9)],
+        "eps_basic": [fy("2025-12-31", 26.0)],
+    }
+    assert metrics.implied_shares(items, D("2025-12-31")) == pytest.approx(10.2e9 / 26)
+    m = _issuer_metrics(items, 900.0, D("2026-03-01"))
+    assert m["market_cap"] == pytest.approx(900 * 10.2e9 / 26)
+    assert m["pe"] == pytest.approx(900 / 26)
+    loss = {"net_income": [fy("2025-12-31", -1e9)], "eps_basic": [fy("2025-12-31", 2.0)]}
+    assert metrics.implied_shares(loss, D("2025-12-31")) is None  # inconsistent signs
