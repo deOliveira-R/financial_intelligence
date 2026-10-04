@@ -922,7 +922,7 @@ def sync_xbrl_gaps(session: Session, sec_provider: SecProvider, cik: int) -> int
         )
         store = sec_provider.raw_store
         read = (
-            {key.split("|")[1] for key in store.latest_hashes("sec", "filing_xbrl")}
+            {key.split("|")[1] for key in store.latest_hashes("sec", "filing_xbrl") if key}
             if store
             else set()
         )
