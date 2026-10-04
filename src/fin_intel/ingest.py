@@ -787,6 +787,7 @@ def load_submissions(session: Session, cik: int, payload: Any) -> int:
     issuer.sic = int(sic) if sic.isdigit() else None
     issuer.sic_description = payload.get("sicDescription") or None
     issuer.filer_category = payload.get("category") or ""  # "" marks it looked up
+    issuer.country = world.sec_country(payload) or issuer.country
     return 1
 
 

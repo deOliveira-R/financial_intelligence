@@ -22,6 +22,79 @@ SOURCES = {
 }
 
 
+# Country names as SEC submissions give them (business address) -> ISO 3166 codes.
+COUNTRIES = {
+    "argentina": "AR",
+    "australia": "AU",
+    "austria": "AT",
+    "belgium": "BE",
+    "bermuda": "BM",
+    "brazil": "BR",
+    "british virgin islands": "VG",
+    "canada": "CA",
+    "cayman islands": "KY",
+    "chile": "CL",
+    "china": "CN",
+    "colombia": "CO",
+    "cyprus": "CY",
+    "czech republic": "CZ",
+    "denmark": "DK",
+    "finland": "FI",
+    "france": "FR",
+    "germany": "DE",
+    "greece": "GR",
+    "hong kong": "HK",
+    "hungary": "HU",
+    "india": "IN",
+    "indonesia": "ID",
+    "ireland": "IE",
+    "isle of man": "IM",
+    "israel": "IL",
+    "italy": "IT",
+    "japan": "JP",
+    "jersey": "JE",
+    "guernsey": "GG",
+    "korea, republic of": "KR",
+    "south korea": "KR",
+    "korea": "KR",
+    "luxembourg": "LU",
+    "malaysia": "MY",
+    "malta": "MT",
+    "mexico": "MX",
+    "monaco": "MC",
+    "netherlands": "NL",
+    "new zealand": "NZ",
+    "norway": "NO",
+    "peru": "PE",
+    "philippines": "PH",
+    "poland": "PL",
+    "portugal": "PT",
+    "singapore": "SG",
+    "south africa": "ZA",
+    "spain": "ES",
+    "sweden": "SE",
+    "switzerland": "CH",
+    "taiwan": "TW",
+    "taiwan, province of china": "TW",
+    "thailand": "TH",
+    "turkey": "TR",
+    "united arab emirates": "AE",
+    "united kingdom": "GB",
+    "uruguay": "UY",
+    "vietnam": "VN",
+}
+
+
+def sec_country(submissions: dict[str, Any]) -> str | None:
+    """An SEC filer's country from its business address (US unless marked foreign)."""
+    address = (submissions.get("addresses") or {}).get("business") or {}
+    if not address:
+        return None
+    if not address.get("isForeignLocation"):
+        return "US"
+    return COUNTRIES.get((address.get("country") or "").strip().lower())
+
+
 def issuer_id(source: str, source_id: str) -> int:
     base = SOURCES[source][1]
     digits = "".join(c for c in source_id if c.isdigit())

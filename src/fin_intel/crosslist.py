@@ -204,6 +204,9 @@ def link(session: Session, today: date | None = None) -> dict[str, int]:
             continue
         issuer = matches[0]
         if adr.cik is not None and adr.cik < 10**10:
+            filer = session.get(Issuer, adr.cik)
+            if len(tokens) == 1 and filer and filer.country and filer.country != issuer.country:
+                continue  # one-word names (NICE, TIM) must also share a country
             # An SEC filer's ADR: the home issuer is the same company, valued from its SEC
             # filings (matched only on OpenFIGI's own names, not filers' names).
             # SEC "issuers" that are ADR programs (registered by the depositary bank, no

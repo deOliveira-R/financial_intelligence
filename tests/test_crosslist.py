@@ -231,3 +231,17 @@ def test_one_word_names_must_match_exactly():
     mitsubishi = crosslist._tokens("MITSUBISHI CORP")
     assert not crosslist._same_name(mitsubishi, crosslist._tokens("MITSUBISHI UFJ FINANCIAL GRP"))
     assert crosslist._same_name(mitsubishi, crosslist._tokens("MITSUBISHI CORP-SPONS ADR"))
+
+
+def test_sec_country_from_business_address():
+    assert (
+        world.sec_country({"addresses": {"business": {"isForeignLocation": 1, "country": "Japan"}}})
+        == "JP"
+    )
+    assert (
+        world.sec_country(
+            {"addresses": {"business": {"isForeignLocation": 0, "stateOrCountry": "CA"}}}
+        )
+        == "US"
+    )
+    assert world.sec_country({}) is None
