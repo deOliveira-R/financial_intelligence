@@ -91,6 +91,14 @@ class Issuer(Base):
     sic: Mapped[int | None] = mapped_column(index=True)
     sic_description: Mapped[str | None] = mapped_column(String(256))
     filer_category: Mapped[str | None] = mapped_column(String(64))
+    # Where the issuer comes from. SEC filers use their CIK; issuers known from other
+    # regulators (EDINET, DART, TWSE, ESEF) get an id in a reserved range (world.py).
+    source: Mapped[str] = mapped_column(String(16), server_default="sec")
+    source_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    country: Mapped[str | None] = mapped_column(String(2))
+    lei: Mapped[str | None] = mapped_column(String(20), index=True)
+    home_ticker: Mapped[str | None] = mapped_column(String(16))  # e.g. 005930 (Samsung)
+    fiscal_month: Mapped[int | None]  # month the fiscal year ends, when known
 
 
 class Security(Base):

@@ -20,7 +20,18 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import congress, cot, derive, energy, insiders, releases, thirteenf, xbrl
+from fin_intel import (
+    congress,
+    cot,
+    dart,
+    derive,
+    energy,
+    insiders,
+    releases,
+    thirteenf,
+    world,
+    xbrl,
+)
 from fin_intel.db import upsert
 from fin_intel.models import (
     Concept,
@@ -39,6 +50,7 @@ from fin_intel.models import (
 )
 from fin_intel.providers import (
     CftcProvider,
+    DartProvider,
     EiaProvider,
     FedProvider,
     FredProvider,
@@ -383,6 +395,115 @@ def load_filing_xbrl(session: Session, key: str, body: bytes) -> int:
     return load_company_facts(session, int(cik), payload, supplement=True)
 
 
+# --- Korea (DART) --------------------------------------------------------------------------
+
+
+def load_dart_corp_codes(session: Session, body: bytes) -> int:
+    corps = dart.parse_corp_codes(body)
+    for c in corps:
+        world.ensure_issuer(
+            session, "dart", c["corp_code"], c["name"] or None, home_ticker=c["stock_code"]
+        )
+    return len(corps)
+
+
+def load_dart_company(session: Session, corp_code: str, payload: Any) -> int:
+    if (payload or {}).get("status") != "000":
+        return 0
+    month = str(payload.get("acc_mt") or "").strip()
+    world.ensure_issuer(
+        session,
+        "dart",
+        corp_code,
+        payload.get("corp_name_eng") or payload.get("corp_name"),
+        home_ticker=(payload.get("stock_code") or "").strip() or None,
+        fiscal_month=int(month) if month.isdigit() else None,
+    )
+    return 1
+
+
+def _dart_issuer(session: Session, corp_code: str) -> tuple[int, int]:
+    cik = world.ensure_issuer(session, "dart", corp_code)
+    issuer = session.get(Issuer, cik)
+    return cik, (issuer.fiscal_month if issuer and issuer.fiscal_month else 12)
+
+
+def load_dart_statements(session: Session, key: str, payload: Any) -> int:
+    if (payload or {}).get("status") != "000":
+        return 0
+    corp, year, report, _ = key.split("|")
+    cik, fiscal_month = _dart_issuer(session, corp)
+    facts = dart.parse_statements(payload, int(year), report, fiscal_month)
+    if not facts:
+        return 0
+    return load_company_facts(session, cik, world.facts_payload(facts), supplement=True)
+
+
+def load_dart_share_counts(session: Session, key: str, payload: Any) -> int:
+    if (payload or {}).get("status") != "000":
+        return 0
+    corp, year, report = key.split("|")
+    cik, _ = _dart_issuer(session, corp)
+    facts = dart.parse_share_counts(payload, int(year), report)
+    if not facts:
+        return 0
+    return load_company_facts(session, cik, world.facts_payload(facts), supplement=True)
+
+
+def sync_dart_corps(session: Session, provider: DartProvider) -> int:
+    with tracked(session, "dart", "corp_codes", "all") as result:
+        session.commit()
+        result["rows"] = load_dart_corp_codes(session, provider.fetch_corp_codes())
+    return result["rows"]
+
+
+def sync_dart_company(session: Session, provider: DartProvider, corp_code: str) -> int:
+    with tracked(session, "dart", "company", corp_code) as result:
+        session.commit()
+        result["rows"] = load_dart_company(session, corp_code, provider.fetch_company(corp_code))
+    return result["rows"]
+
+
+def sync_dart_report(
+    session: Session, provider: DartProvider, corp_code: str, year: int, report: str, shares: bool
+) -> int:
+    """One report's statements (consolidated, else separate) and, if asked, share counts.
+    Everything is fetched before anything is loaded (fetch-then-load)."""
+    with tracked(session, "dart", "report", f"{corp_code}|{year}|{report}") as result:
+        session.commit()
+        statements = None
+        for fs_div in ("CFS", "OFS"):
+            payload = provider.fetch_statements(corp_code, year, report, fs_div)
+            if payload is not None:
+                statements = (fs_div, payload)
+                break
+        counts = provider.fetch_share_counts(corp_code, year, report) if shares else None
+        rows = 0
+        if statements is not None:
+            fs_div, payload = statements
+            key = f"{corp_code}|{year}|{report}|{fs_div}"
+            rows += load_dart_statements(session, key, payload)
+        if counts is not None:
+            rows += load_dart_share_counts(session, f"{corp_code}|{year}|{report}", counts)
+        result["rows"] = rows
+    return result["rows"]
+
+
+def dart_periods(today: date, first_year: int = 2015) -> list[tuple[int, str]]:
+    """(business year, report code) newest first, for reports past their filing deadline
+    (December year ends: Q1 by May 15, half by Aug 14, Q3 by Nov 14, annual by Mar 31)."""
+    deadlines = {"11013": (5, 16), "11012": (8, 15), "11014": (11, 15), "11011": (4, 1)}
+    out = []
+    for year in range(today.year, first_year - 1, -1):
+        for report in ("11014", "11012", "11013"):
+            month, day = deadlines[report]
+            if date(year, month, day) <= today:
+                out.append((year, report))
+        if date(year + 1, 4, 1) <= today:
+            out.insert(len(out) - sum(1 for y, _ in out if y == year), (year, "11011"))
+    return out
+
+
 def load_submissions(session: Session, cik: int, payload: Any) -> int:
     """A filer's SIC code and category (SEC submissions)."""
     issuer = session.get(Issuer, cik)
@@ -577,6 +698,10 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("sec", "companyfacts"): lambda s, k, p, t: load_company_facts(s, int(k), p),
     ("sec", "submissions"): lambda s, k, p, t: load_submissions(s, int(k), p),
     ("sec", "filing_xbrl"): lambda s, k, p, t: load_filing_xbrl(s, k, p),
+    ("dart", "corp_codes"): lambda s, k, p, t: load_dart_corp_codes(s, p),
+    ("dart", "company"): lambda s, k, p, t: load_dart_company(s, k, p),
+    ("dart", "statements"): lambda s, k, p, t: load_dart_statements(s, k, p),
+    ("dart", "share_counts"): lambda s, k, p, t: load_dart_share_counts(s, k, p),
     ("tiingo", "metadata"): lambda s, k, p, t: load_tiingo_metadata(s, k, p, t.date()),
     ("tiingo", "daily_prices"): lambda s, k, p, t: load_tiingo_daily(s, k, p),
     ("massive", "tickers"): lambda s, k, p, t: load_massive_tickers(s, k, p, t.date()),
@@ -629,6 +754,7 @@ SYMBOL_KEYED_DATASETS = [
 # Datasets whose loaders take the raw body (bytes) rather than parsed JSON.
 BINARY_DATASETS = {
     ("sec", "filing_xbrl"),
+    ("dart", "corp_codes"),
     ("sec", "insider_dataset"),
     ("sec", "form4"),
     ("sec", "13f_dataset"),
@@ -645,6 +771,8 @@ SNAPSHOT_DATASETS = {
     ("massive", "grouped_daily"),  # one complete response per trading day
     ("massive", "ticker_details"),
     ("sec", "submissions"),
+    ("dart", "corp_codes"),
+    ("dart", "company"),
     ("fred", "series"),
     ("fred", "observations"),
     ("house", "fd_index"),  # the year's complete index

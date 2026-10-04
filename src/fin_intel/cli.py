@@ -266,6 +266,66 @@ def sync_congress(
             _run("sync-congress", ids, lambda s, d: ingest.sync_senate_ptr(s, senate, d))
 
 
+@app.command("sync-dart")
+def sync_dart(
+    corp: Annotated[list[str] | None, typer.Option(help="Only these DART corp codes")] = None,
+    limit: Annotated[
+        int, typer.Option(help="Most reports this run (DART: ~20k requests/day)")
+    ] = 8000,
+    first_year: Annotated[int, typer.Option(help="Oldest business year to load")] = 2015,
+) -> None:
+    """Load Korean listed companies' financial statements from DART, newest reports first;
+    each run continues where the last one stopped (within the daily request quota)."""
+    from fin_intel.models import Issuer, SyncState
+    from fin_intel.providers import DartProvider
+
+    store = default_store()
+    provider = DartProvider(raw_store=store)
+    with session_factory()() as session:
+        fresh = session.scalar(
+            select(SyncState.last_success).where(
+                SyncState.provider == "dart", SyncState.dataset == "corp_codes"
+            )
+        )
+    if fresh is not None and fresh.tzinfo is None:  # SQLite returns naive datetimes
+        fresh = fresh.replace(tzinfo=UTC)
+    if fresh is None or fresh < datetime.now(UTC) - timedelta(days=7):
+        _run("sync-dart", ["corp codes"], lambda s, _: ingest.sync_dart_corps(s, provider))
+    with session_factory()() as session:
+        listed = session.execute(
+            select(Issuer.source_id, Issuer.fiscal_month).where(
+                Issuer.source == "dart", Issuer.home_ticker.is_not(None)
+            )
+        ).all()
+    corps = sorted(c for c, _ in listed if not corp or c in corp)
+    profiles = [c for c, month in listed if month is None and c in corps]
+    if profiles:
+        _run("sync-dart", profiles, lambda s, c: ingest.sync_dart_company(s, provider, c))
+    done = {k.rsplit("|", 1)[0] for k in store.latest_hashes("dart", "statements") if k}
+    periods = ingest.dart_periods(date.today(), first_year)
+    latest = periods[0] if periods else None
+    items = [
+        f"{c}|{year}|{report}"
+        for year, report in periods
+        for c in corps
+        if f"{c}|{year}|{report}" not in done
+    ][:limit]
+    if items:
+        _run(
+            "sync-dart",
+            items,
+            lambda s, item: ingest.sync_dart_report(
+                s,
+                provider,
+                item.split("|")[0],
+                int(item.split("|")[1]),
+                item.split("|")[2],
+                shares=(int(item.split("|")[1]), item.split("|")[2]) == latest
+                or item.endswith("11011"),
+            ),
+        )
+
+
 @app.command("fill-xbrl-gaps")
 def fill_xbrl_gaps(
     cik: Annotated[list[int] | None, typer.Option(help="Only these issuers")] = None,
@@ -516,6 +576,7 @@ def sync_daily() -> None:
         ("congressional trades", sync_congress),
         ("economic series", lambda: sync_economic(settings.fred_series_ids)),
         ("EIA energy data", sync_eia),
+        ("Korean filings (DART)", lambda: sync_dart(limit=6000)),
     ]
     if settings.watchlist_tickers:
         steps.append(("watchlist prices", lambda: sync_prices(settings.watchlist_tickers)))

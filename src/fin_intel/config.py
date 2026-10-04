@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     massive_api_key: str | None = None
     openfigi_api_key: str | None = None  # optional: raises OpenFIGI's limits
     eia_api_key: str = "DEMO_KEY"  # shared, rate-limited key; a free personal key lifts it
+    edinet_api_key: str | None = None  # Japan's EDINET (free registration)
+    opendart_api_key: str | None = None  # Korea's OpenDART (free registration)
     http_timeout: float = 30.0
     # When set, every API endpoint except /health requires the header `X-API-Key: <value>`.
     api_key: str | None = None

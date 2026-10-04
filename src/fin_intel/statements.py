@@ -60,6 +60,7 @@ LINE_ITEMS: dict[str, tuple[str, str, list[tuple[str, str]]]] = {
         [
             ("us-gaap", "OperatingIncomeLoss"),
             ("ifrs-full", "ProfitLossFromOperatingActivities"),
+            ("dart", "OperatingIncomeLoss"),  # Korea's standard operating profit line
         ],
     ),
     "interest_expense": (

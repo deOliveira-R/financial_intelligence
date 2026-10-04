@@ -16,10 +16,13 @@ def settings(monkeypatch):
     monkeypatch.setenv("FI_FRED_API_KEY", "fred-key")
     monkeypatch.setenv("FI_TIINGO_API_KEY", "tiingo-key")
     monkeypatch.setenv("FI_MASSIVE_API_KEY", "massive-key")
+    monkeypatch.setenv("FI_OPENDART_API_KEY", "dart-key")
+    monkeypatch.setenv("FI_EDINET_API_KEY", "edinet-key")
     get_settings.cache_clear()
     base._limiters.clear()
     # Mocked providers needn't wait out real rate limits (e.g. Massive's 5 calls/minute).
     from fin_intel.providers import (
+        DartProvider,
         EiaProvider,
         FedProvider,
         HouseProvider,
@@ -28,7 +31,14 @@ def settings(monkeypatch):
     )
     from fin_intel.providers.ratelimit import MINUTE, Limit
 
-    for provider in (MassiveProvider, HouseProvider, SenateProvider, EiaProvider, FedProvider):
+    for provider in (
+        MassiveProvider,
+        HouseProvider,
+        SenateProvider,
+        EiaProvider,
+        FedProvider,
+        DartProvider,
+    ):
         monkeypatch.setattr(provider, "limits", (Limit(10_000, MINUTE),))
     yield
     get_settings.cache_clear()

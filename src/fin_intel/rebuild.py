@@ -48,10 +48,21 @@ from fin_intel.models import (
 )
 from fin_intel.raw import RawStore
 
+# Every dataset that writes facts: wiping facts means replaying all of them, whichever
+# regulator they come from (issuer profiles first, for fiscal year ends).
+FACT_DATASETS = [
+    ("dart", "company"),
+    ("sec", "companyfacts"),
+    ("sec", "filing_xbrl"),
+    ("sec", "submissions"),
+    ("dart", "statements"),
+    ("dart", "share_counts"),
+]
+
 # target -> (datasets to replay, tables to wipe first, in foreign-key-safe order)
 TARGETS = {
     "fundamentals": (
-        [("sec", "companyfacts"), ("sec", "filing_xbrl"), ("sec", "submissions")],
+        FACT_DATASETS,
         [StatementItem, Fact, FiscalCalendar, Filing, Concept],
     ),
     "prices": (
