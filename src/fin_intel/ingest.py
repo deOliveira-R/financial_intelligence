@@ -559,7 +559,11 @@ def sync_crosslist(session: Session, openfigi: OpenFigiProvider, gleif: Any) -> 
         from fin_intel.providers.gleif import isins_by_lei
 
         session.commit()
-        mapping = isins_by_lei(gleif.fetch_mapping(), set(europeans))
+        try:
+            mapping = isins_by_lei(gleif.fetch_mapping(), set(europeans))
+        except ProviderError as exc:  # GLEIF throttles; the next run catches up
+            log.warning("cross-listings: skipping European ISINs: %s", exc)
+            mapping = {}
         countries = dict(
             session.execute(select(Issuer.lei, Issuer.country).where(Issuer.lei.in_(list(mapping))))
         )
