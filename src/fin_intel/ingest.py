@@ -537,6 +537,7 @@ def load_twse_table(session: Session, key: str, payload: Any) -> int:
     ).items():
         cik = world.ensure_issuer(session, "twse", company, home_ticker=company)
         rows += load_company_facts(session, cik, world.facts_payload(facts), supplement=True)
+        session.commit()  # one company at a time: a whole table would hold the write lock
     return rows
 
 

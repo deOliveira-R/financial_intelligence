@@ -21,7 +21,9 @@ def make_engine(url: str) -> Engine:
     if not (url.startswith("sqlite:///") and not url.startswith("sqlite:///:memory:")):
         return create_engine(url)
     Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(url, connect_args={"timeout": 30})
+    # Several long syncs write concurrently (one market each): wait for SQLite's single
+    # write lock rather than failing; loaders keep their transactions short.
+    engine = create_engine(url, connect_args={"timeout": 120})
 
     @event.listens_for(engine, "connect")
     def _sqlite_pragmas(dbapi_connection, _record) -> None:
