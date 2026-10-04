@@ -86,14 +86,16 @@ def apply_home(
 
 def us_jobs(session: Session) -> list[tuple[dict[str, str], int]]:
     """OpenFIGI jobs for US-traded securities that could be a foreign company's shares:
-    OTC ordinary lines and ADRs without a share class or issuer yet."""
+    OTC ordinary lines and ADRs without a share class or issuer yet, and SEC filers' ADRs
+    (to recognize companies that file with both the SEC and their home regulator)."""
     rows = session.scalars(
         select(Security).where(
             Security.active,
             Security.ticker.is_not(None),
             Security.security_type.in_(("OS", "ADRC")),
-            Security.share_class_figi.is_(None),
-            Security.cik.is_(None),
+            Security.figi_name.is_(None),
+            (Security.share_class_figi.is_(None) & Security.cik.is_(None))
+            | ((Security.security_type == "ADRC") & (Security.cik < 10**10)),
         )
     )
     return [
@@ -177,11 +179,10 @@ def link(session: Session, today: date | None = None) -> dict[str, int]:
     # Ratios rarely change, and OTC ordinary lines trade only now and then: compare each
     # ordinary-line trade with the ADR's close that day or the day before, over half a year.
     since = today - timedelta(days=RATIO_WINDOW_DAYS)
+    stats["same_as_sec"] = 0
     for adr in session.scalars(
         select(Security).where(Security.security_type == "ADRC", Security.active)
     ):
-        if adr.cik is not None and adr.cik < 10**10:
-            continue  # an SEC filer's ADR: valued from its own filings
         tokens = _tokens(adr.figi_name or adr.name)
         matches = [
             i for t, i in candidates.get(tokens[0] if tokens else "", []) if _same_name(tokens, t)
@@ -189,6 +190,13 @@ def link(session: Session, today: date | None = None) -> dict[str, int]:
         if len(matches) != 1:
             continue
         issuer = matches[0]
+        if adr.cik is not None and adr.cik < 10**10:
+            # An SEC filer's ADR: the home issuer is the same company, valued from its SEC
+            # filings (matched only on OpenFIGI's own names, not filers' names).
+            if adr.figi_name and issuer.same_as is None:
+                issuer.same_as = adr.cik
+                stats["same_as_sec"] += 1
+            continue
         if adr.cik is None:
             adr.cik = issuer.cik
             stats["adr"] += 1

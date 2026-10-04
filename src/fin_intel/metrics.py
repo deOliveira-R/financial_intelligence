@@ -33,7 +33,14 @@ from sqlalchemy.orm import Session
 
 from fin_intel import fx
 from fin_intel.db import upsert
-from fin_intel.models import CompanyMetrics, CorporateAction, DailyBar, Security, StatementItem
+from fin_intel.models import (
+    CompanyMetrics,
+    CorporateAction,
+    DailyBar,
+    Issuer,
+    Security,
+    StatementItem,
+)
 
 STALE_AFTER = timedelta(days=550)  # newest financials older than this: skip (likely gone)
 CURRENT_WINDOW = timedelta(days=400)  # inputs must be this close to the latest financials
@@ -122,8 +129,11 @@ def primary_securities(session: Session, as_of: date | None = None) -> dict[int,
     def rank(s: Security) -> tuple[bool, float]:
         return (s.currency is not None, activity.get(s.id, (0.0, 0))[0] or 0.0)
 
+    duplicates = set(session.scalars(select(Issuer.cik).where(Issuer.same_as.is_not(None))))
     out: dict[int, Security] = {}
     for s in session.scalars(select(Security).where(*conditions)):
+        if s.cik in duplicates:
+            continue  # the same company as an SEC filer, valued from its SEC filings
         dollars, days = activity.get(s.id, (0.0, 0))
         if historical and not days:
             continue

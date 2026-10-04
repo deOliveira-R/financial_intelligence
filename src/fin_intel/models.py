@@ -104,6 +104,9 @@ class Issuer(Base):
     share_class_figi: Mapped[str | None] = mapped_column(String(12), index=True)
     figi_name: Mapped[str | None] = mapped_column(String(128))  # OpenFIGI's name for it
     isin: Mapped[str | None] = mapped_column(String(12))
+    # The SEC filer this company is, when it files with both (TSMC, Toyota, ASML): metrics
+    # and screens use the SEC filer only, so the company appears once.
+    same_as: Mapped[int | None] = mapped_column(index=True)
 
 
 class Security(Base):

@@ -79,7 +79,7 @@ def test_link_ordinary_by_share_class_and_adr_by_name(session):
     session.commit()
 
     stats = crosslist.link(session, TODAY)
-    assert stats == {"ordinary": 1, "adr": 1, "adr_valued": 1}
+    assert stats == {"ordinary": 1, "adr": 1, "adr_valued": 1, "same_as_sec": 0}
     assert ordinary.cik == cik and adr.cik == cik and other.cik is None
     assert adr.shares_outstanding == pytest.approx(560e6 / 0.2)
 
@@ -182,3 +182,32 @@ def test_sync_maps_home_european_and_us_listings_then_links(session, raw_store):
     assert session.get(Issuer, sch).isin == "FR0000121972"
     # Replaying the stored mappings reproduces the links.
     rebuild(session, raw_store, "market")
+
+
+def test_home_issuer_of_an_sec_filer_is_marked_and_skipped(session):
+    from fin_intel.models import Issuer as I
+
+    session.add(I(cik=1046179, name="TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD"))
+    home = world.ensure_issuer(session, "twse", "2330", "TSMC", home_ticker="2330")
+    issuer = session.get(I, home)
+    issuer.share_class_figi, issuer.figi_name = "BBG001S6Q004", "TAIWAN SEMICONDUCTOR MANUFAC"
+    adr = Security(
+        ticker="TSM",
+        security_type="ADRC",
+        origin="sec",
+        cik=1046179,
+        figi_name="TAIWAN SEMICONDUCTOR-SP ADR",
+        mic="XNYS",
+    )
+    listing = Security(
+        ticker="2330.TW", security_type="CS", origin="twse", cik=home, mic="XTAI", currency="TWD"
+    )
+    session.add_all([adr, listing])
+    session.flush()
+    bars(session, adr, [300.0] * 6)
+    bars(session, listing, [2500.0] * 6)
+    session.commit()
+    assert crosslist.link(session, TODAY)["same_as_sec"] == 1
+    assert issuer.same_as == 1046179 and adr.cik == 1046179  # the ADR stays the SEC filer's
+    primary = metrics.primary_securities(session)
+    assert home not in primary and primary[1046179].ticker == "TSM"
