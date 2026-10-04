@@ -86,13 +86,25 @@ COUNTRIES = {
 
 
 def sec_country(submissions: dict[str, Any]) -> str | None:
-    """An SEC filer's country from its business address (US unless marked foreign)."""
-    address = (submissions.get("addresses") or {}).get("business") or {}
-    if not address:
-        return None
-    if not address.get("isForeignLocation"):
+    """An SEC filer's country: where it's incorporated (a US state code means the US), else
+    its business address if that's abroad. Foreign filers often list a US office as their
+    business address, so incorporation comes first."""
+    code = (submissions.get("stateOfIncorporation") or "").strip()
+    place = (submissions.get("stateOfIncorporationDescription") or "").strip().lower()
+    if len(code) == 2 and code.isalpha():
         return "US"
-    return COUNTRIES.get((address.get("country") or "").strip().lower())
+    if place:
+        if "canada" in place:
+            return "CA"
+        found = COUNTRIES.get(place) or COUNTRIES.get(place.split(",")[-1].strip())
+        if place == "virgin islands, british":
+            found = "VG"
+        if found:
+            return found
+    address = (submissions.get("addresses") or {}).get("business") or {}
+    if address.get("isForeignLocation"):
+        return COUNTRIES.get((address.get("country") or "").strip().lower())
+    return None
 
 
 def issuer_id(source: str, source_id: str) -> int:

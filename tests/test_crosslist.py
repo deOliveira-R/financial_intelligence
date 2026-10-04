@@ -233,15 +233,22 @@ def test_one_word_names_must_match_exactly():
     assert crosslist._same_name(mitsubishi, crosslist._tokens("MITSUBISHI CORP-SPONS ADR"))
 
 
-def test_sec_country_from_business_address():
-    assert (
-        world.sec_country({"addresses": {"business": {"isForeignLocation": 1, "country": "Japan"}}})
-        == "JP"
-    )
+def test_sec_country_prefers_incorporation():
+    sanofi = {
+        "stateOfIncorporation": "I0",
+        "stateOfIncorporationDescription": "France",
+        "addresses": {"business": {"isForeignLocation": 0}},
+    }  # a US office
+    assert world.sec_country(sanofi) == "FR"
+    assert world.sec_country({"stateOfIncorporation": "DE"}) == "US"
     assert (
         world.sec_country(
-            {"addresses": {"business": {"isForeignLocation": 0, "stateOrCountry": "CA"}}}
+            {
+                "stateOfIncorporation": "A1",
+                "stateOfIncorporationDescription": "British Columbia, Canada",
+            }
         )
-        == "US"
+        == "CA"
     )
-    assert world.sec_country({}) is None
+    abroad = {"addresses": {"business": {"isForeignLocation": 1, "country": "Japan"}}}
+    assert world.sec_country(abroad) == "JP" and world.sec_country({}) is None
