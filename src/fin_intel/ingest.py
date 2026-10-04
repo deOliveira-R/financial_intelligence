@@ -565,7 +565,9 @@ def sync_crosslist(session: Session, openfigi: OpenFigiProvider, gleif: Any) -> 
             log.warning("cross-listings: skipping European ISINs: %s", exc)
             mapping = {}
         countries = dict(
-            session.execute(select(Issuer.lei, Issuer.country).where(Issuer.lei.in_(list(mapping))))
+            session.execute(
+                select(Issuer.lei, Issuer.country).where(Issuer.lei.in_(list(mapping)))
+            ).all()
         )
         for lei, isins in mapping.items():
             # Shares carry the home country's prefix; banks also list thousands of bonds.
