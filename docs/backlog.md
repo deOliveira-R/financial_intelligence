@@ -50,6 +50,21 @@ next-day execution, costs, long/flat or long/short, per-year breakdown). Still t
 position sizing (e.g. volatility targeting), multi-asset rotation, parameter sweeps with
 walk-forward out-of-sample splits, and storing runs for comparison.
 
+## Global coverage (phase E)
+
+- **Prices outside the US:** home-market prices for valuations. Options: US ADRs and OTC
+  ADRs already in our Massive bars (most large foreign companies have one; needs a
+  home-listing <-> ADR map and ADR ratios), TWSE/TPEx daily closes (open data), Korea's
+  public-data portal (free key), J-Quants for Japan (free tier, delayed), or yfinance as a
+  fallback. Stooq now sits behind a JavaScript bot check: not used.
+- **Identity map:** one issuer per company across SEC, EDINET, DART, TWSE and ESEF (Toyota,
+  Sony, TSMC, ASML, SAP file with both SEC and their home regulator), by LEI, ISIN or name.
+- **Taiwan history:** the open data has only the latest quarter; backfill earlier quarters
+  from MOPS so income statements (year to date) can be split into quarters and TTM.
+- **Japanese mappings:** refine for IFRS filers with other concept names (Panasonic's debt,
+  Kawasaki Heavy's operating profit) and banks/insurers; non-consolidated-only filers.
+- **China and Hong Kong:** HKEX and CNINFO filings (mostly PDFs).
+
 ## Fundamentals and screening
 
 - **Captive finance arms:** Toyota (and Ford, GM, Caterpillar...) consolidate lending

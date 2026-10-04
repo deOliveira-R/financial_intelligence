@@ -54,7 +54,8 @@ Done (2026-10-03): insider transactions (quarterly data sets plus daily Form 4s)
 US filings miss much of the world's industrial backbone (Samsung, SK hynix, Tokyo Electron,
 Shin-Etsu, LVMH, Siemens, SAP, Infineon, BYD, CATL...). Done (2026-10-04): foreign filers
 whose latest 20-F SEC's company facts skipped (TSMC, Toyota, Sony and ~370 others) are read
-from the filings' XBRL. Next, home-market sources, free and official where possible:
+from the filings' XBRL. Loading since 2026-10-04: Korea (DART, ~4,000 listed companies),
+Japan (EDINET, ~3,900), Taiwan (TWSE/TPEx, ~1,950), Europe (ESEF, ~5,000). Sources:
 
 - **Europe and UK:** ESEF annual reports (filings.xbrl.org, ~26k filings as xBRL-JSON,
   keyed by LEI). Annual only; half-year reports aren't mandated in XBRL.
