@@ -111,7 +111,6 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
         "actions",
         "breadth",
         "fundamentals",
-        "metrics",
         "insiders",
         "congress",
         ("fred", ["GDP", *(series for series, _ in fx.SERIES.values())]),  # plus FX rates
@@ -119,5 +118,6 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
         "dart",
         "edinet",
         "tw prices",
+        "metrics",
         ("prices", ["AAPL", "MSFT"]),
     ]

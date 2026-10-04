@@ -720,7 +720,6 @@ def sync_daily() -> None:
         ("splits and dividends", lambda: sync_actions(since=recent)),
         ("market breadth", derive_breadth_cmd),
         ("fundamentals (SEC bulk, changed companies only)", sync_fundamentals_bulk),
-        ("company metrics", derive_metrics_cmd),
         ("insider transactions", sync_insiders),
         ("congressional trades", sync_congress),
         ("economic series", lambda: sync_economic(settings.fred_series_ids)),
@@ -728,6 +727,7 @@ def sync_daily() -> None:
         ("Korean filings (DART)", lambda: sync_dart(limit=6000)),
         ("Japanese filings (EDINET)", sync_edinet),
         ("Taiwanese prices", sync_tw_prices),
+        ("company metrics", derive_metrics_cmd),  # last: uses every market's new data
     ]
     if settings.watchlist_tickers:
         steps.append(("watchlist prices", lambda: sync_prices(settings.watchlist_tickers)))

@@ -1,6 +1,16 @@
 # Financial Intelligence
 
-A backend that combines free financial data sources into one stored, queryable dataset. It aims to cover what Alpha Vantage and similar providers offer. See [docs/data_sources.md](docs/data_sources.md) for the research behind the source choices.
+A backend that combines free financial data sources into one stored, queryable dataset, with research tools on top: US and international fundamentals, point-in-time company metrics and screens, insiders, 13F and congressional trades, macro, energy and positioning data, backtests.
+
+## Documentation
+
+- [CLAUDE.md](CLAUDE.md): onboarding (commands, conventions, rules, server)
+- [docs/capabilities.md](docs/capabilities.md): what the backend can do, by goal
+- [docs/architecture.md](docs/architecture.md): pipeline, modules, identity, point-in-time design, adding a source
+- [docs/data_sources.md](docs/data_sources.md): sources in use, known-unused, rejected, paid consolidators
+- [docs/roadmap.md](docs/roadmap.md), [docs/backlog.md](docs/backlog.md), [deploy/README.md](deploy/README.md)
+
+The design notes below cover the US core in detail; docs/architecture.md has the current overall picture.
 
 ## Design
 

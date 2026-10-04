@@ -1,145 +1,135 @@
-# Free Data Sources for Financial Intelligence
+# Data sources
 
-Research date: 2026-09-30. Free tiers change often, so check each limit again when we build its adapter.
+Every source the backend uses, the free ones we know of but don't use (yet), the ones we
+tried and rejected, and paid options that could replace many free feeds with one. Free
+tiers and prices change often: check them again before relying on a number here.
+Last reviewed 2026-10-04.
 
-## Goal
+**How we choose:** official and primary sources first (regulators, exchanges, central
+banks): they're free, authoritative, point-in-time and usually fine to redistribute.
+Commercial free tiers fill gaps. Anything we can compute (indicators, ratios, adjusted
+prices) we compute. No unofficial or scraped endpoints without saying so, and no getting
+around bot protection. The proof of concept stays on free data; if it makes money, a paid
+feed replaces the patchwork (and makes a commercial product possible).
 
-Build a backend that matches what Alpha Vantage (and similar providers such as FMP, Finnhub and Polygon/Massive) offer, using only free sources. No single free provider covers everything at a useful volume. The plan is to combine:
+## In use
 
-1. **Primary public sources** (government, exchanges, regulators). These are free, have high limits and are authoritative. They make up the core of the system.
-2. **Free tiers of commercial APIs.** Each has a small quota, so we use them for what they do best and to fill gaps.
-3. **Our own computation**, for anything derived from raw data: technical indicators, ratios, returns and screens. Alpha Vantage charges API calls for these, but we can compute them locally at no cost.
+### Fundamentals and filings
 
----
+| Source | What we take | Access and limits | Code | Licensing |
+|---|---|---|---|---|
+| SEC EDGAR: company facts (nightly bulk `companyfacts.zip`, per-company JSON) | XBRL financials of every SEC filer (10-K, 10-Q, 20-F, 40-F) | Free, no key; `User-Agent` with contact email required (`FI_SEC_USER_AGENT`); 10 req/s | `providers/sec.py`, `sync-fundamentals-bulk` | Public |
+| SEC EDGAR: filing archives | XBRL instances of filings the company facts API lacks (e.g. IFRS 2025 taxonomy 20-Fs: TSMC, Toyota, Sony) | Same | `xbrl.py`, `fill-xbrl-gaps` | Public |
+| SEC EDGAR: submissions | SIC code, filer category, country of incorporation, recent filings | Same | `sync-sic` | Public |
+| SEC: Insider Transactions Data Sets + daily Form 4 XML | Forms 3/4/5 transactions | Same | `insiders.py`, `sync-insiders` | Public |
+| SEC: Form 13F Data Sets | Institutional holdings, quarterly | Same | `thirteenf.py`, `sync-13f` | Public |
+| EDINET (Japan FSA) API v2 | Annual, quarterly and half-year reports' XBRL for ~4,000 listed companies (J-GAAP, IFRS) | Free key (`FI_EDINET_API_KEY`); we keep only the XBRL instance of each report package (~100 KB gzipped) | `providers/edinet.py`, `edinet.py`, `sync-edinet` | Public |
+| OpenDART (Korea FSS) | Financial statements (all accounts, quarterly) and share counts for ~4,000 listed companies | Free key (`FI_OPENDART_API_KEY`); ~20,000 requests/day, so backfills run over days | `providers/dart.py`, `dart.py`, `sync-dart` | Public |
+| TWSE / TPEx open data (Taiwan) | Company profiles; latest quarter's income statement and balance sheet for ~1,950 companies | Free, no key; latest quarter only | `providers/twse.py`, `taiwan.py`, `sync-twse` | Public |
+| filings.xbrl.org (ESEF) | European listed companies' annual reports as xBRL-JSON, fiscal years 2023+ | Free, no key | `providers/esef.py`, `esef.py`, `sync-esef` | Repository terms (check before redistributing) |
 
-## 1. Coverage map: Alpha Vantage category → our source
+### Prices and market data
 
-| Alpha Vantage category | Primary free source | Fallback / complement |
+| Source | What we take | Access and limits | Code | Licensing |
+|---|---|---|---|---|
+| Massive (formerly Polygon.io), free plan | Grouped daily bars for every US stock (OTC included), splits, dividends, reference tickers (types, FIGIs), delistings, ADR share counts | Free key (`FI_MASSIVE_API_KEY`); 5 calls/min; 2 years of history | `providers/massive.py`, `sync-market-daily`, `sync-reference` | Personal use |
+| Tiingo, free plan | Deep adjusted daily history per symbol (watchlist, SPY) | Free key (`FI_TIINGO_API_KEY`); 500 symbols/month, 1,000 req/day | `providers/tiingo.py`, `sync-prices` | Personal use |
+| TWSE / TPEx daily quotes | Daily prices of every Taiwanese stock since 2024-10 | Free; one request per exchange and day, about 1 per 3 s | `sync-tw-prices` | Public website data |
+
+### Macro, energy, positioning, calendar
+
+| Source | What we take | Access and limits | Code | Licensing |
+|---|---|---|---|---|
+| FRED / ALFRED (St. Louis Fed) | 53-series macro pack + exchange rates for 21 currencies, with full revision history; release dates | Free key (`FI_FRED_API_KEY`); ~120 req/min | `providers/fred.py`, `macro.py`, `fx.py`, `releases.py` | Public (some series have source restrictions) |
+| Federal Reserve Board website | FOMC meeting calendar | Free | `providers/fed.py` | Public |
+| EIA API v2 | 13 weekly petroleum and natural gas series | Free key (`FI_EIA_API_KEY`; the shared DEMO_KEY is rate-limited per IP) | `providers/eia.py`, `energy.py`, `sync-eia` | Public |
+| CFTC Public Reporting (Socrata) | Commitments of Traders: legacy, disaggregated, financial futures, 26 markets since 2006 | Free, no key | `providers/cftc.py`, `cot.py`, `sync-cot` | Public |
+
+### Ownership, politics, identifiers
+
+| Source | What we take | Access and limits | Code | Licensing |
+|---|---|---|---|---|
+| House Clerk financial disclosures | Yearly filing index; periodic transaction report PDFs (electronic filings parsed; paper scans skipped) | Free | `providers/congress.py`, `congress.py` | Public |
+| Senate eFD | Periodic transaction reports (HTML) after accepting the site's terms | Free | same | Public |
+| OpenFIGI | CUSIP → security (13F), ticker/ISIN → share-class FIGI (cross-listings) | Free; key (`FI_OPENFIGI_API_KEY`) raises limits ~100x | `providers/openfigi.py`, `crosslist.py` | Free to use |
+| GLEIF | ISIN ↔ LEI mapping (daily bulk file, ~32 MB) for European issuers | Free; the per-LEI API throttles hard, so we use the bulk file | `providers/gleif.py` | Open data (CC0) |
+
+## Known, not used (yet)
+
+| Source | Would give us | Why not yet |
 |---|---|---|
-| Daily OHLCV (stocks/ETFs) | Tiingo EOD, Stooq | yfinance, Massive (Polygon) free, Alpaca |
-| Adjusted prices, splits, dividends | Tiingo (adjusted), Massive free | yfinance, SEC filings |
-| Intraday bars | Alpaca (IEX feed, history back to 2016) | yfinance (short windows), Twelve Data |
-| Real-time quote | Finnhub `/quote`, Alpaca IEX WebSocket | Twelve Data |
-| Fundamentals (IS/BS/CF) | **SEC EDGAR XBRL API** (US) | FMP free, Tiingo (5y), yfinance |
-| Company overview / profile | SEC submissions + our own computed metrics | Finnhub `profile2`, FMP |
-| Earnings (EPS history, calendar) | SEC XBRL (actuals), Finnhub `stock/earnings` + calendar | Nasdaq.com (unofficial), yfinance |
-| Insider transactions | **SEC Form 4** (EDGAR) | Finnhub (may need a paid plan) |
-| Institutional holdings | **SEC 13F** (EDGAR) | — |
-| Listings / delisting status | SEC `company_tickers.json`, Nasdaq Trader symbol files | Alpha Vantage `LISTING_STATUS` (1 call) |
-| ETF holdings | SEC N-PORT filings | Issuer websites (CSV) |
-| Options chains | yfinance, CBOE delayed quotes (unofficial JSON) | Alpaca indicative feed |
-| Forex | ECB reference rates / Frankfurter, FRED | Twelve Data, Alpha Vantage |
-| Crypto | Exchange public APIs (Coinbase, Kraken, Binance/Binance.US) | CoinGecko Demo |
-| Commodities | FRED, EIA API | World Bank Pink Sheet |
-| Economic indicators | **FRED**, BLS, BEA, US Treasury | IMF, OECD, World Bank, ECB |
-| Technical indicators | **Computed locally** (pandas / TA-Lib / pandas-ta) | — |
-| News & sentiment | Finnhub `company-news`, GDELT, SEC 8-K RSS | Marketaux free, press-release RSS; sentiment computed with our own LLM/NLP |
-| Short interest / short volume | FINRA daily short-sale volume files, SEC fails-to-deliver | Exchange short-interest reports (twice a month) |
-| Positioning (futures) | CFTC Commitments of Traders | — |
-| Symbol / identifier mapping | OpenFIGI, SEC CIK ↔ ticker map | — |
+| BLS, BEA, US Treasury FiscalData | CPI and payroll detail, GDP by industry, auctions, daily yield curve | FRED carries the headline series; add when a strategy needs the detail |
+| ECB Data Portal / Frankfurter, IMF, OECD, World Bank | Euro-area and cross-country macro, reference FX | FRED FX suffices for conversion; add for non-US macro signals |
+| FINRA short-sale volume, SEC fails-to-deliver, exchange short interest | Short positioning | Speculation track; not started |
+| SEC N-PORT | ETF and fund holdings | Not needed yet |
+| Nasdaq Trader symbol directory | Daily list of US-listed symbols | SEC + Massive reference cover it |
+| Alpaca (free IEX feed) | Intraday bars since 2016, real-time IEX stream | No intraday use case yet |
+| Finnhub, Twelve Data, FMP and Alpha Vantage free tiers | Quotes, profiles, estimates, international prices | Quotas too small to build on; spot checks only |
+| CoinGecko, exchange APIs (Coinbase, Kraken) | Crypto OHLCV and metadata | Crypto not in scope yet |
+| congress.gov API (free key), Senate LDA lobbying API, USAspending, unitedstates/congress-legislators | Bills and policy areas, lobbying by industry, federal contracts, committee rosters | Planned to corroborate congressional signals (see backlog) |
+| GDELT, SEC 8-K feeds, company RSS | News and events | News/sentiment not started |
+| MOPS (Taiwan) | Historical quarterly statements | Backfill planned: the open data has only the latest quarter |
+| J-Quants (JPX), free tier | Japanese prices and fundamentals, 12-week delay | Delay makes it useless for current valuations; fine for backtests |
+| Depositary banks' DR directories (BNY, JPMorgan, Citi) | ADR ratios | Would value ~370 linked ADRs that lack an inferred ratio |
+| HKEX, CNINFO | Hong Kong and mainland China filings | Mostly PDFs; hard |
+| SEDAR+ (Canada), Companies House (UK) | Canadian and UK filings not in XBRL elsewhere | Canadian 40-F filers often lack XBRL; not started |
 
----
+## Tried and rejected, or blocked
 
-## 2. Primary public sources (the core)
+| Source | What happened |
+|---|---|
+| Stooq | Now behind a JavaScript proof-of-work bot check; not used (circumventing it isn't acceptable) |
+| data.go.kr (Korea's public-data portal: FSC stock prices) | Registration needs a Korean phone number |
+| KRX Open API | Registration failed (Korean-only site; sign-up didn't complete). Its terms were acceptable: non-commercial, no redistribution, 10,000 requests/day |
+| KRX public statistics endpoints | Now require login |
+| Naver Finance chart data | Works, but unofficial and against Naver's terms for automated collection; not used |
+| yfinance (Yahoo) | Unofficial, against Yahoo's terms for redistribution, breaks without warning; not used |
+| IEX Cloud, Quandl free datasets | Shut down or stale |
 
-### SEC EDGAR — fundamentals, filings, ownership
-- **Endpoints:** `data.sec.gov/submissions/CIK##########.json` (filing history and metadata), `/api/xbrl/companyfacts/CIK…json` (every XBRL fact a company has filed), `/api/xbrl/companyconcept/…` (one concept), `/api/xbrl/frames/{tag}/{unit}/{period}.json` (one concept across all companies for a period, useful for screens). Full-text search at `efts.sec.gov`. Bulk ZIPs (`companyfacts.zip`, `submissions.zip`) are refreshed nightly.
-- **Covers:** income statement, balance sheet and cash flow (10-K/10-Q), shares outstanding, Form 4 insider trades, 13F holdings, 8-K events, N-PORT fund holdings, and the ticker↔CIK map (`sec.gov/files/company_tickers.json`).
-- **Limits:** free, no API key. Every request must send a `User-Agent` header with a name and email. Maximum 10 requests per second per IP.
-- **Notes:** this is the best free source for fundamentals, and it's where the paid vendors get their data. Normalising XBRL takes work: companies use different tags, some use custom extensions, and fiscal periods don't line up. The `edgartools` Python library (also available as a skill in this environment) handles a lot of this.
+## Paid consolidators
 
-### FRED (St. Louis Fed) — macro and rates
-- More than 800k series: GDP, CPI, unemployment, Fed funds rate, the Treasury yield curve, credit spreads, FX, commodity prices, and more. **ALFRED** keeps point-in-time vintages, so backtests don't use revised data that wasn't known at the time.
-- Free API key. About 120 requests per minute.
-- Replaces Alpha Vantage's `REAL_GDP`, `CPI`, `FEDERAL_FUNDS_RATE`, `TREASURY_YIELD`, `UNEMPLOYMENT`, `INFLATION`, `RETAIL_SALES` and `DURABLES`, plus its commodity endpoints.
+Prices below are approximate list prices for personal plans (check current pricing and
+what "commercial" means for each). The regulators' feeds (SEC, EDINET, DART, ESEF, FRED,
+CFTC, EIA) stay regardless: they're free, authoritative, point-in-time and commercial-safe.
+A paid feed mainly replaces the price patchwork and the fragile parts.
 
-### BLS, BEA, US Treasury, EIA
-- **BLS API v2:** CPI detail, employment, wages, PPI. Free registration. v2 allows about 500 queries per day (v1 without registration is much lower). Up to 50 series per request.
-- **BEA API:** NIPA tables, GDP by industry, personal income. Free key. Limit is roughly 100 requests per minute.
-- **Treasury FiscalData API** (`api.fiscaldata.treasury.gov`): debt, auctions, average interest rates. No key. Daily par yield curve CSVs are on treasury.gov.
-- **EIA API v2:** oil, natural gas and electricity prices and inventories. Free key.
+### Many-to-one candidates
 
-### International macro / FX
-- **ECB Data Portal** (SDMX): euro reference FX rates, euro-area rates and money aggregates. No key. **Frankfurter** (`api.frankfurter.app`) wraps the ECB FX rates as simple JSON.
-- **IMF, OECD and World Bank** (SDMX/REST): cross-country macro data. No key.
-- Other central banks have similar APIs if we expand coverage (e.g. BCB SGS for Brazil, BoE, BoJ).
-
-### Market-structure data
-- **FINRA:** daily short-sale volume files (free CSV). Equity short interest twice a month.
-- **SEC fails-to-deliver:** twice-monthly files.
-- **CFTC Commitments of Traders:** weekly, via the Socrata API on `publicreporting.cftc.gov`.
-- **Nasdaq Trader symbol directory** (`nasdaqlisted.txt`, `otherlisted.txt`): the daily universe of US-listed symbols.
-- **OpenFIGI:** maps identifiers (ticker, ISIN, CUSIP, FIGI). Free. A key raises the rate limit.
-
----
-
-## 3. Free tiers of commercial APIs (fill gaps, within quota)
-
-| Provider | Free limit | Best for | Caveats |
+| Vendor | Coverage | Approx. price | Would retire |
 |---|---|---|---|
-| **Tiingo** | 1,000 req/day, 50 req/hr, 500 unique symbols/mo | Clean adjusted EOD history (30+ years), IEX intraday, news | The symbol cap limits how much of the universe we can backfill |
-| **Alpaca Market Data** (Basic) | 200 req/min | Intraday and minute bars since 2016 (US stocks), IEX real-time WebSocket | Free feed is IEX only (~2.5% of volume). The last 15 minutes of history are not available. Needs a free (paper) account |
-| **Massive** (formerly Polygon.io) | 5 req/min, EOD, 2 years of history | Grouped daily bars (whole market in one call), splits, dividends, ticker reference data | Low call rate. The old `api.polygon.io` host still works |
-| **Finnhub** | 60 req/min | Real-time US quotes, company profile, peers, earnings surprises, analyst recommendations, basic metrics, company news, WebSocket (50 symbols) | Candles (OHLCV) and many fundamentals endpoints are premium |
-| **Twelve Data** | 8 req/min, 800/day | Multi-asset (FX, crypto, ETFs, international) time series | Free stock data is delayed |
-| **Financial Modeling Prep** | 250 req/day | Pre-normalised statements, profiles | US only, 5 years of prices / 5 quarters of statements on the free tier, personal use only |
-| **Alpha Vantage** | 25 req/day, 5/min | Occasional gap-filling (e.g. `LISTING_STATUS`, news sentiment) | Too little quota to rely on |
-| **EODHD** | 20 req/day | International EOD spot checks | Very small quota |
-| **CoinGecko** (Demo) | 100 req/min, 10k/month | Crypto metadata, market cap, rankings | Monthly cap |
-| **Stooq** | Free CSV, but needs an API key since 2026 (obtained via CAPTCHA) | Long daily history for global indices, FX, bonds and stocks | No official SLA. URL format changed in 2026 |
-| **yfinance** (Yahoo, unofficial) | No official limit. IP throttling at heavy use (~2k/hr) | Wide global coverage, options chains, quick fallback | Unofficial and against Yahoo's terms for redistribution. Breaks without warning. Never make it the only source for anything |
+| **EODHD** (All-World / All-In-One) | End-of-day prices for 70+ exchanges (Tokyo, KRX, TWSE, Euronext, LSE, Xetra, HKEX…), splits and dividends, delisted tickers, standardized global fundamentals, earnings/IPO calendars, some macro | ~€20/month (prices) to ~€100/month (all-in-one) | Massive EOD and Tiingo for prices, TWSE price scraping, the US OTC/ADR valuation workaround (`crosslist.py` as a price source), the Korea gap, Stooq. Cheapest way to value every market |
+| **Financial Modeling Prep** (Premium / Ultimate) | Global prices and standardized fundamentals, insider trades, 13F, **House and Senate trades**, ETF holdings, earnings estimates and transcripts, calendars | ~$30–150/month | Everything EODHD would, plus our congress PDF/HTML parsers, and a second source for insiders and 13F |
+| **Sharadar** (via Nasdaq Data Link) | US-only, backtesting-grade: point-in-time fundamentals since 1998, delisted companies, insiders, 13F, daily prices | Tens of dollars/month for personal use | The short-history problem for US screen and signal backtests; survivorship-free deep history |
+| **Massive (Polygon) paid** | Full US history, real-time, flat files, options, indices | ~$30–200/month; business plans much more | Tiingo history limits; 2-year cap; adds options. US only |
 
-**Crypto exchanges** (Coinbase Exchange, Kraken, Binance / Binance.US): public market-data REST and WebSocket endpoints need no key and have generous limits. They give real OHLCV and order-book data, which is better than aggregator data.
+### Specialists
 
-**Options:** there's no good free source. Practical choices are yfinance chains, CBOE's delayed-quote JSON (unofficial) and Alpaca's indicative feed. Greeks and IV should be computed locally (Black-Scholes) from the chain and our own rates (FRED).
+| Vendor | Coverage | Approx. price |
+|---|---|---|
+| Quiver Quantitative | Congress trades, lobbying, government contracts, insiders, alternative data | Low tens of dollars/month |
+| Norgate Data | Survivorship-free US (and Australian) prices with delistings and index membership | A few hundred dollars/year |
+| J-Quants (JPX) paid plans | Official Japanese prices and fundamentals, current | ~¥1,650–16,500/month |
+| TEJ, FnGuide, KRX Data Marketplace | Taiwanese and Korean prices and fundamentals | Varies |
+| Databento | Futures, options and equities market data (CME etc.), usage-based | Pay as you go |
+| ORATS, CBOE DataShop | Options history, implied volatility | ~$100+/month |
+| Estimize, Zacks (via Nasdaq Data Link) | Consensus earnings estimates | Varies |
+| Benzinga, RavenPack | News and sentiment | Varies, mostly enterprise |
 
-**Dead / avoid:** IEX Cloud (shut down Aug 2024); Quandl / Nasdaq Data Link free datasets (mostly gone or stale, e.g. WIKI prices stopped in 2018); Google Finance API (doesn't exist); Reddit and StockTwits APIs (restricted or closed to new developers).
+### Enterprise (for a commercial product)
 
----
+LSEG Workspace (Refinitiv, I/B/E/S estimates), Bloomberg (Terminal, B-PIPE, Data License),
+FactSet, S&P Capital IQ, Morningstar, Xignite, Barchart OnDemand. Typically $20,000+ a
+year and up, with explicit redistribution licensing: the route to selling data-derived
+products. Consolidators like EODHD, FMP and Polygon also sell commercial and
+redistribution licenses at business tiers, well below enterprise prices.
 
-## 4. Things we compute ourselves (no API needed)
+### Suggested path
 
-Alpha Vantage spends an API call on each of these. We derive them from data we already store:
-- **Technical indicators:** SMA, EMA, RSI, MACD, Bollinger Bands, ATR, ADX, Stochastic, OBV, VWAP and the rest of Alpha Vantage's ~50 indicators, using pandas, `TA-Lib` or `pandas-ta` on our own OHLCV.
-- **Adjusted prices:** from raw prices plus split and dividend events (cross-checked against Tiingo).
-- **Fundamental ratios and overview fields:** P/E, EV/EBITDA, margins, ROE, growth rates, market cap (price × SEC shares outstanding).
-- **News sentiment:** score headlines from Finnhub, GDELT and RSS with our own model, instead of paying for a sentiment feed.
-- **Options Greeks / IV**, returns, volatility, correlations, screens.
-
----
-
-## 5. Implications for the backend architecture
-
-- **Provider-adapter layer:** one adapter per source, all behind a common interface (e.g. `get_daily_bars(symbol, start, end)`). Each capability has an ordered list of providers to fall back through.
-- **Per-provider rate limiter and quota tracker:** token buckets for per-second/minute limits, plus daily, hourly and monthly counters (Tiingo hourly, CoinGecko monthly, Tiingo's symbol cap).
-- **Store first, serve from storage:** the API layer reads from our own database, never from upstream on each request. Backfill once, then update incrementally (nightly EOD job, SEC bulk ZIPs, FRED updates). This is the only way free quotas become enough.
-- **Bulk and grouped endpoints first:** SEC `companyfacts.zip` and `frames`, Massive grouped daily (whole market per call), BLS multi-series requests.
-- **Canonical identifiers:** use an internal security ID mapped to ticker, CIK, FIGI and exchange, so renames, delistings and ticker reuse don't corrupt history (and to limit survivorship bias).
-- **Cross-source validation:** compare closes and splits between sources and flag differences.
-- **Licensing:** most free tiers allow personal or internal use only. If we ever expose data to third parties, primary public sources (SEC, FRED, BLS, ECB) are the safe ones. Commercial free tiers and Yahoo generally don't allow redistribution.
-
-## 6. Suggested build order
-
-1. SEC EDGAR (fundamentals, ticker map, insiders, 13F) + FRED. These are free, with high limits and high value.
-2. Daily prices: Tiingo + Massive grouped daily + Stooq, with yfinance as a fallback. Corporate actions.
-3. Local indicator and ratio engine.
-4. Intraday and real-time: Alpaca IEX + Finnhub quotes and WebSocket.
-5. News (Finnhub, GDELT, SEC 8-K) + our own sentiment scoring.
-6. FX, crypto (exchange APIs), commodities (EIA/FRED), international macro.
-7. Options (yfinance/CBOE) + local Greeks; FINRA/CFTC market-structure data.
-
-## Sources
-
-- [Polygon.io is now Massive](https://fisd.net/polygon-io-is-now-massive/) · [Massive request limits](https://polygon.io/knowledge-base/article/what-is-the-request-limit-for-polygons-restful-apis) · [Polygon/Massive pricing 2026](https://qveris.ai/guides/polygon-pricing-optimized/)
-- [Alpha Vantage limits (Macroption)](https://www.macroption.com/alpha-vantage-api-limits/)
-- [Alpaca: About Market Data API](https://docs.alpaca.markets/us/docs/about-market-data-api) · [Alpaca historical stock data](https://docs.alpaca.markets/us/docs/historical-stock-data-1)
-- [SEC developer resources](https://www.sec.gov/about/developer-resources) · [Accessing EDGAR data](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data)
-- [FMP FAQs](https://site.financialmodelingprep.com/faqs)
-- [CoinGecko changelog](https://docs.coingecko.com/changelog) · [CoinGecko pricing](https://www.coingecko.com/en/api/pricing)
-- [Stooq now requires API key (pandas-datareader #1012)](https://github.com/pydata/pandas-datareader/issues/1012)
-- [Tiingo rate limits](https://apis.io/rate-limits/tiingo/tiingo-rate-limits/)
-- [Finnhub free tier status](https://freeapi.watch/finnhub/) · [Finnhub candles not free (#546)](https://github.com/finnhubio/Finnhub-API/issues/546)
-- [EODHD API limits](https://eodhd.com/financial-apis/api-limits) · [Twelve Data pricing](https://twelvedata.com/pricing)
-- [yfinance rate-limit discussion](https://github.com/ranaroussi/yfinance/discussions/2431)
-- [Economic data APIs guide (FRED/BLS/BEA)](https://www.datasetiq.com/blog/api-access-economic-data-guide)
-- [Free stock API comparison 2026 (dev.to)](https://dev.to/nexgendata/best-free-stock-market-apis-and-data-tools-in-2026-a-developers-honest-comparison-1926)
+1. **Proof of concept (now):** free sources as above.
+2. **First paid step:** one global consolidator (EODHD or FMP) for prices everywhere,
+   keeping the regulators for fundamentals. This values Korea, Japan and Europe fully, and
+   lets `crosslist.py` become a cross-check instead of a price source. Add Sharadar if US
+   backtests need deeper, survivorship-free history.
+3. **Commercial product:** a redistribution license from the chosen consolidator (or an
+   enterprise vendor), and an audit of every feature built on personal-use data (Massive,
+   Tiingo, ESEF repository terms).
