@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from fin_intel import (
     congress,
     cot,
+    crosslist,
     dart,
     derive,
     energy,
@@ -492,6 +493,81 @@ def sync_dart_report(
     return result["rows"]
 
 
+# --- cross-listings ------------------------------------------------------------------------
+
+
+def load_listings(session: Session, key: str, request: list[dict], response: list[dict]) -> int:
+    """Apply an OpenFIGI mapping made for cross-listings. The key says what for:
+    `home|...` (home tickers), `isin|<LEI>` (one European issuer's ISINs), `us|...`."""
+    kind = key.split("|", 1)[0]
+    if kind == "isin":
+        cik = world.issuer_id("esef", key.split("|")[1])
+        return crosslist.apply_home(session, [(job, cik) for job in request], response)
+    targets: list[int | None] = []
+    if kind == "us":
+        tickers = [job["idValue"].replace("/", "-") for job in request]
+        ids = dict(
+            session.execute(
+                select(Security.ticker, Security.id).where(Security.ticker.in_(tickers))
+            ).all()
+        )
+        targets = [ids.get(t) for t in tickers]
+    else:
+        sources = {"JT": "edinet", "KS": "dart", "KQ": "dart", "TT": "twse"}
+        for job in request:
+            source = sources.get(job.get("exchCode", ""))
+            home = _home_id(session, source, job["idValue"]) if source else None
+            targets.append(world.issuer_id(source, home) if source and home else None)
+    pairs = [(job, t) for job, t in zip(request, targets, strict=True) if t]
+    results = [r for r, t in zip(response, targets, strict=False) if t]
+    apply = crosslist.apply_us if kind == "us" else crosslist.apply_home
+    return apply(session, pairs, results)
+
+
+def _home_id(session: Session, source: str, ticker: str) -> str:
+    """The regulator id of the issuer with this home ticker (DART and EDINET ids differ
+    from tickers; TWSE's are the tickers)."""
+    found = session.scalar(
+        select(Issuer.source_id).where(Issuer.source == source, Issuer.home_ticker == ticker)
+    )
+    return found or ticker
+
+
+def sync_crosslist(session: Session, openfigi: OpenFigiProvider, gleif: Any) -> dict[str, int]:
+    """Find foreign issuers' share classes (home tickers; ISINs via GLEIF for European
+    issuers), the share classes of US OTC lines and ADRs, then link them."""
+    stats: dict[str, int] = defaultdict(int)
+
+    def run(kind: str, pairs: list, apply: Callable) -> None:
+        for i in range(0, len(pairs), openfigi.batch):
+            batch = pairs[i : i + openfigi.batch]
+            session.commit()  # fetch-then-load
+            key = f"{kind}|{batch[0][0]['idValue']}"
+            results = openfigi.map_jobs([job for job, _ in batch], key)
+            stats[kind] += apply(session, batch, results)
+            session.commit()
+
+    run("home", crosslist.home_jobs(session), crosslist.apply_home)
+    europeans = session.execute(
+        select(Issuer.cik, Issuer.lei).where(
+            Issuer.source == "esef", Issuer.lei.is_not(None), Issuer.share_class_figi.is_(None)
+        )
+    ).all()
+    for cik, lei in europeans:
+        session.commit()
+        isins = [r["attributes"]["isin"] for r in (gleif.fetch_isins(lei) or {}).get("data") or []]
+        if not isins:
+            continue
+        jobs = [({"idType": "ID_ISIN", "idValue": isin}, cik) for isin in isins[: openfigi.batch]]
+        results = openfigi.map_jobs([job for job, _ in jobs], f"isin|{lei}")
+        stats["isin"] += crosslist.apply_home(session, jobs, results)
+        session.commit()
+    run("us", crosslist.us_jobs(session), crosslist.apply_us)
+    stats.update(crosslist.link(session))
+    session.commit()
+    return dict(stats)
+
+
 # --- Europe (ESEF) -------------------------------------------------------------------------
 
 
@@ -903,6 +979,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("sec", "insider_dataset"): lambda s, k, p, t: load_insider_dataset(s, p),
     ("sec", "form4"): lambda s, k, p, t: load_form4(s, k, p),
     ("sec", "13f_dataset"): lambda s, k, p, t: load_13f_dataset(s, p),
+    ("openfigi", "listings"): lambda s, k, p, t: load_listings(s, k, p["request"], p["response"]),
     ("openfigi", "mapping"): lambda s, k, p, t: load_openfigi_mapping(
         s, p["request"], p["response"]
     ),
@@ -954,7 +1031,7 @@ BINARY_DATASETS = {
     ("fed", "fomc_calendar"),
 }
 # Datasets whose response only means something with its request (recorded as params).
-REQUEST_DATASETS = {("openfigi", "mapping")}
+REQUEST_DATASETS = {("openfigi", "mapping"), ("openfigi", "listings")}
 # Datasets where each response is a full snapshot, so only the latest one matters.
 SNAPSHOT_DATASETS = {
     ("sec", "companyfacts"),

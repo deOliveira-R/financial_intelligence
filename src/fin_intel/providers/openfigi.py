@@ -27,3 +27,7 @@ class OpenFigiProvider(Provider):
         """One result per CUSIP, in order: {"data": [...]} or {"warning": ...}."""
         jobs = [{"idType": "ID_CUSIP", "idValue": c} for c in cusips]
         return self.post_json("/mapping", jobs, dataset="mapping", key=cusips[0])
+
+    def map_jobs(self, jobs: list[dict[str, str]], key: str) -> list[dict[str, Any]]:
+        """Any mapping jobs (tickers on an exchange, ISINs), one result per job, in order."""
+        return self.post_json("/mapping", jobs, dataset="listings", key=key)

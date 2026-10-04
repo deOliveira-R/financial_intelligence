@@ -123,6 +123,7 @@ TARGETS = {
             ("massive", "dividends"),
             ("massive", "ticker_details"),
             ("twse", "prices"),
+            ("openfigi", "listings"),
         ],
         [CompanyMetrics, DailyBar, CorporateAction, TickerHistory, Security],
     ),
@@ -206,6 +207,11 @@ def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
             security = get_security(session, tx.symbol)
             tx.security_id = security.id if security else None
     session.commit()
+    if target in ("market", "all"):
+        from fin_intel import crosslist
+
+        crosslist.link(session)  # US listings of foreign issuers (needs securities and bars)
+        session.commit()
     if target in ("market", "prices", "all"):
         # Derived from bars and statements: refresh now rather than at the next daily sync.
         breadth.compute(session)

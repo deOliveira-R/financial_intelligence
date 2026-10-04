@@ -13,6 +13,7 @@ from fin_intel.providers.errors import (
 from fin_intel.providers.esef import EsefProvider
 from fin_intel.providers.fed import FedProvider
 from fin_intel.providers.fred import FredProvider
+from fin_intel.providers.gleif import GleifProvider
 from fin_intel.providers.massive import MassiveProvider
 from fin_intel.providers.openfigi import OpenFigiProvider
 from fin_intel.providers.sec import SecProvider
@@ -27,6 +28,7 @@ __all__ = [
     "EsefProvider",
     "FedProvider",
     "FredProvider",
+    "GleifProvider",
     "HouseProvider",
     "MassiveProvider",
     "NotConfiguredError",

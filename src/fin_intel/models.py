@@ -99,6 +99,11 @@ class Issuer(Base):
     lei: Mapped[str | None] = mapped_column(String(20), index=True)
     home_ticker: Mapped[str | None] = mapped_column(String(16))  # e.g. 005930 (Samsung)
     fiscal_month: Mapped[int | None]  # month the fiscal year ends, when known
+    # The home listing's share class (OpenFIGI): the same on every exchange, so it finds
+    # the company's shares traded elsewhere (e.g. OTC in the US). See crosslist.py.
+    share_class_figi: Mapped[str | None] = mapped_column(String(12), index=True)
+    figi_name: Mapped[str | None] = mapped_column(String(128))  # OpenFIGI's name for it
+    isin: Mapped[str | None] = mapped_column(String(12))
 
 
 class Security(Base):
@@ -133,6 +138,7 @@ class Security(Base):
     shares_as_of: Mapped[date | None] = mapped_column(Date)
     # Trading currency of the listing's prices (None: US dollars).
     currency: Mapped[str | None] = mapped_column(String(3))
+    figi_name: Mapped[str | None] = mapped_column(String(128))  # OpenFIGI's name (crosslist.py)
 
 
 class TickerHistory(Base):

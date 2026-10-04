@@ -85,32 +85,53 @@ def _latest_instant(
     return (rows[-1].value, rows[-1].period_end) if rows else None
 
 
+FOREIGN_ISSUERS = 10**10  # ids at or above: issuers from other regulators (world.py)
+MIN_TRADING_DAYS = 5  # an OTC line must trade this many days a month to price a company
+
+
 def primary_securities(session: Session, as_of: date | None = None) -> dict[int, Security]:
     """Per issuer, its main listed share: common stock (or ADR) on a major exchange, the
     one with the highest recent dollar volume when there are several. For a past `as_of`,
-    the listings trading then (with a bar in the month before), active now or not."""
+    the listings trading then (with a bar in the month before), active now or not.
+
+    Companies known from other regulators can also be priced by a linked US listing (an
+    OTC ordinary line or an ADR, crosslist.py) that trades at least MIN_TRADING_DAYS a
+    month; their home-market listing wins when we have one."""
     historical = as_of is not None and as_of < date.today()
     end = as_of or date.today()
-    volume = dict(
-        session.execute(
-            select(DailyBar.security_id, func.avg(DailyBar.close * DailyBar.volume))
+    activity = {
+        sid: (dollars, days)
+        for sid, dollars, days in session.execute(
+            select(
+                DailyBar.security_id,
+                func.avg(DailyBar.close * DailyBar.volume),
+                func.count(),
+            )
             .where(DailyBar.date > end - timedelta(days=30), DailyBar.date <= end)
             .group_by(DailyBar.security_id)
-        ).all()
-    )
+        )
+    }
     conditions = [
         Security.cik.is_not(None),
         Security.security_type.in_(PRIMARY_TYPES),
-        Security.mic.in_(PRIMARY_MICS),
+        Security.mic.in_(PRIMARY_MICS) | (Security.cik >= FOREIGN_ISSUERS),
     ]
     if not historical:
         conditions.append(Security.active)
+
+    def rank(s: Security) -> tuple[bool, float]:
+        return (s.currency is not None, activity.get(s.id, (0.0, 0))[0] or 0.0)
+
     out: dict[int, Security] = {}
     for s in session.scalars(select(Security).where(*conditions)):
-        if historical and s.id not in volume:
+        dollars, days = activity.get(s.id, (0.0, 0))
+        if historical and not days:
+            continue
+        us_line_for_foreign = s.cik >= FOREIGN_ISSUERS and s.currency is None
+        if us_line_for_foreign and days < MIN_TRADING_DAYS:
             continue
         current = out.get(s.cik)
-        if current is None or volume.get(s.id, 0) > volume.get(current.id, 0):
+        if current is None or rank(s) > rank(current):
             out[s.cik] = s
     return out
 

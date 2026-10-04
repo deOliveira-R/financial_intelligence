@@ -440,6 +440,23 @@ def sync_tw_prices(
         )
 
 
+@app.command("sync-crosslist")
+def sync_crosslist() -> None:
+    """Link companies from other regulators to their US listings (OTC ordinary lines by
+    share class, ADRs by name), so they can be valued with US prices (crosslist.py)."""
+    from fin_intel.providers import GleifProvider, OpenFigiProvider
+
+    store = default_store()
+    openfigi, gleif = OpenFigiProvider(raw_store=store), GleifProvider(raw_store=store)
+
+    def work(session: Session, _: str) -> int:
+        stats = ingest.sync_crosslist(session, openfigi, gleif)
+        typer.echo(", ".join(f"{k} {v}" for k, v in stats.items()))
+        return sum(stats.values())
+
+    _run("sync-crosslist", ["all"], work)
+
+
 @app.command("sync-twse")
 def sync_twse() -> None:
     """Load Taiwan's listed (TWSE) and OTC (TPEx) companies: profiles, then the latest
@@ -732,6 +749,7 @@ def sync_weekly() -> None:
         ("filings missing from SEC company facts", fill_xbrl_gaps),
         ("Taiwanese companies (TWSE/TPEx)", sync_twse),
         ("European annual reports (ESEF)", sync_esef),
+        ("cross-listings of foreign companies", sync_crosslist),
         ("economic release calendar", sync_calendar),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
