@@ -84,6 +84,11 @@ class SecProvider(Provider):
             text = self.get_bytes(url, dataset="daily_index", key=day.isoformat()).decode("latin-1")
         except NotFoundError:
             return []
+        except ProviderError as exc:
+            # A day without an index (a holiday) is answered with S3's AccessDenied.
+            if "HTTP 403" in str(exc) and "AccessDenied" in str(exc):
+                return []
+            raise
         return parse_daily_index(text)
 
     def fetch_submission(self, accession: str, path: str) -> bytes:

@@ -265,3 +265,14 @@ def test_holiday_index_is_empty(session, raw_store):
             ingest.sync_insider_day(session, SecProvider(raw_store=raw_store), date(2026, 9, 7))
             == 0
         )
+
+
+def test_holiday_index_answered_with_access_denied(session, raw_store):
+    # What SEC actually returns for a day without an index (S3 behind it).
+    body = '<?xml version="1.0"?><Error><Code>AccessDenied</Code></Error>'
+    with respx.mock:
+        respx.get(
+            "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.20260703.idx"
+        ).respond(403, text=body)
+        sec = SecProvider(raw_store=raw_store)
+        assert ingest.sync_insider_day(session, sec, date(2026, 7, 3)) == 0
