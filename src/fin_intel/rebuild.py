@@ -51,7 +51,7 @@ from fin_intel.raw import RawStore
 # target -> (datasets to replay, tables to wipe first, in foreign-key-safe order)
 TARGETS = {
     "fundamentals": (
-        [("sec", "companyfacts"), ("sec", "submissions")],
+        [("sec", "companyfacts"), ("sec", "filing_xbrl"), ("sec", "submissions")],
         [StatementItem, Fact, FiscalCalendar, Filing, Concept],
     ),
     "prices": (

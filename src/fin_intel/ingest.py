@@ -20,7 +20,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import congress, cot, derive, energy, insiders, releases, thirteenf
+from fin_intel import congress, cot, derive, energy, insiders, releases, thirteenf, xbrl
 from fin_intel.db import upsert
 from fin_intel.models import (
     Concept,
@@ -374,6 +374,15 @@ def _mark_delisted(security: Security, delisted_on: date) -> None:
         security.active = False
 
 
+def load_filing_xbrl(session: Session, key: str, body: bytes) -> int:
+    """Facts from one filing's XBRL instance (where SEC's company facts lack them)."""
+    cik, accession, filed, form = key.split("|")
+    payload = xbrl.parse_instance(body, accession, form, date.fromisoformat(filed))
+    if not payload["facts"]:
+        return 0
+    return load_company_facts(session, int(cik), payload, supplement=True)
+
+
 def load_submissions(session: Session, cik: int, payload: Any) -> int:
     """A filer's SIC code and category (SEC submissions)."""
     issuer = session.get(Issuer, cik)
@@ -495,11 +504,16 @@ def load_massive_actions(session: Session, dataset: str, payload: Any) -> int:
 # --- fundamentals ----------------------------------------------------------------------
 
 
-def load_company_facts(session: Session, cik: int, payload: Any) -> int:
+def load_company_facts(session: Session, cik: int, payload: Any, supplement: bool = False) -> int:
+    """SEC company facts for one filer. With `supplement` (facts read from one filing's
+    XBRL), names and concept labels already known aren't overwritten."""
     filings, concepts, facts = sec.parse_company_facts(cik, payload)
-    upsert(session, Issuer, [{"cik": cik, "name": payload.get("entityName")}], key=["cik"])
+    keep = [] if supplement else None
+    upsert(
+        session, Issuer, [{"cik": cik, "name": payload.get("entityName")}], key=["cik"], update=keep
+    )
     upsert(session, Filing, filings, key=["accession"])
-    upsert(session, Concept, concepts, key=["taxonomy", "name"])
+    upsert(session, Concept, concepts, key=["taxonomy", "name"], update=keep)
 
     filing_ids = dict(
         session.execute(select(Filing.accession, Filing.id).where(Filing.cik == cik)).all()
@@ -562,6 +576,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("sec", "company_tickers"): lambda s, k, p, t: load_company_tickers(s, p, t.date()),
     ("sec", "companyfacts"): lambda s, k, p, t: load_company_facts(s, int(k), p),
     ("sec", "submissions"): lambda s, k, p, t: load_submissions(s, int(k), p),
+    ("sec", "filing_xbrl"): lambda s, k, p, t: load_filing_xbrl(s, k, p),
     ("tiingo", "metadata"): lambda s, k, p, t: load_tiingo_metadata(s, k, p, t.date()),
     ("tiingo", "daily_prices"): lambda s, k, p, t: load_tiingo_daily(s, k, p),
     ("massive", "tickers"): lambda s, k, p, t: load_massive_tickers(s, k, p, t.date()),
@@ -613,6 +628,7 @@ SYMBOL_KEYED_DATASETS = [
 ]
 # Datasets whose loaders take the raw body (bytes) rather than parsed JSON.
 BINARY_DATASETS = {
+    ("sec", "filing_xbrl"),
     ("sec", "insider_dataset"),
     ("sec", "form4"),
     ("sec", "13f_dataset"),
@@ -846,6 +862,93 @@ def sync_reference_tickers(
             for page in delisted:
                 load_massive_delisted(session, page)
         deactivate_unseen_massive(session, market, today)
+    return result["rows"]
+
+
+THIN_FILING = 50  # a periodic report with fewer facts than this lacks its financials
+QUARTERLY_STALE, ANNUAL_STALE = timedelta(days=200), timedelta(days=430)
+
+
+def stale_issuers(session: Session) -> list[int]:
+    """Issuers of primary listings whose latest financials are older than their filing
+    rhythm allows (a quarter for 10-Q filers, a year for 20-F filers): a periodic report
+    is probably missing from SEC's company facts."""
+    from fin_intel import metrics
+    from fin_intel.models import StatementItem
+
+    ciks = list(metrics.primary_securities(session))
+    latest = dict(
+        session.execute(
+            select(StatementItem.cik, func.max(StatementItem.period_end))
+            .where(
+                StatementItem.cik.in_(ciks),
+                StatementItem.line_item.in_(("revenue", "net_income", "total_assets")),
+            )
+            .group_by(StatementItem.cik)
+        ).all()
+    )
+    quarterly = set(
+        session.scalars(
+            select(Filing.cik)
+            .where(Filing.form == "10-Q", Filing.filed >= _today() - timedelta(days=730))
+            .distinct()
+        )
+    )
+    today = _today()
+    return sorted(
+        cik
+        for cik in ciks
+        if latest.get(cik) is None
+        or today - latest[cik] > (QUARTERLY_STALE if cik in quarterly else ANNUAL_STALE)
+    )
+
+
+def sync_xbrl_gaps(session: Session, sec_provider: SecProvider, cik: int) -> int:
+    """Read the XBRL of an issuer's recent periodic reports that SEC's company facts are
+    missing (or nearly empty for), straight from each filing."""
+    with tracked(session, "sec", "xbrl_gaps", str(cik)) as result:
+        session.commit()  # fetch-then-load
+        submissions = sec_provider.fetch_submissions(cik)
+        load_submissions(session, cik, submissions)
+        recent = (submissions.get("filings") or {}).get("recent") or {}
+        since = (_today() - timedelta(days=730)).isoformat()
+        fact_counts = dict(
+            session.execute(
+                select(Filing.accession, func.count(Fact.filing_id))
+                .outerjoin(Fact, Fact.filing_id == Filing.id)
+                .where(Filing.cik == cik)
+                .group_by(Filing.accession)
+            ).all()
+        )
+        store = sec_provider.raw_store
+        read = (
+            {key.split("|")[1] for key in store.latest_hashes("sec", "filing_xbrl")}
+            if store
+            else set()
+        )
+        rows = 0
+        for accession, form, filed, is_xbrl in zip(
+            recent.get("accessionNumber", []),
+            recent.get("form", []),
+            recent.get("filingDate", []),
+            recent.get("isXBRL", []),
+            strict=False,
+        ):
+            if form not in xbrl.PERIODIC_FORMS or not is_xbrl or filed < since:
+                continue
+            if fact_counts.get(accession, 0) >= THIN_FILING or accession in read:
+                continue
+            session.commit()
+            index = sec_provider.fetch_filing_index(cik, accession)
+            names = [i["name"] for i in (index.get("directory") or {}).get("item", [])]
+            name = xbrl.instance_file(names)
+            if name is None:
+                continue
+            body = sec_provider.fetch_xbrl_instance(
+                cik, accession, name, form, date.fromisoformat(filed)
+            )
+            rows += load_filing_xbrl(session, f"{cik}|{accession}|{filed}|{form}", body)
+        result["rows"] = rows
     return result["rows"]
 
 

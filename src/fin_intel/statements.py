@@ -12,7 +12,8 @@ value per fiscal quarter, derived from year-to-date figures where a company repo
 those (10-Q cash flow statements); derived values are flagged.
 """
 
-from collections import defaultdict
+import re
+from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
@@ -337,13 +338,26 @@ def build_issuer(session: Session, cik: int) -> int:
             first_filed=first[key],
         )
 
-    # Per line item and period, the highest-priority concept with a value.
-    chosen: dict[tuple[str, date, date], tuple[int, _Value]] = {}
+    # The reporting currency: the one most periods are in. Foreign filers often add a
+    # convenience translation (TSMC's latest year in USD too), which mustn't displace it.
+    currencies = Counter(
+        (v.period_start, v.period_end, v.unit.split("/")[0])
+        for v in latest.values()
+        if re.fullmatch(r"[A-Z]{3}(/shares)?", v.unit)
+    )
+    by_currency = Counter(currency for _, _, currency in currencies)
+    main = by_currency.most_common(1)[0][0] if by_currency else None
+
+    # Per line item and period, the highest-priority concept with a value (in the
+    # reporting currency when the period has several).
+    chosen: dict[tuple[str, date, date], tuple[tuple[bool, int], _Value]] = {}
     for v in latest.values():
         item = CANDIDATES[by_concept[v.concept_id]]
         if not _belongs(item, v):
             continue
-        rank = LINE_ITEMS[item][2].index(by_concept[v.concept_id])
+        base = v.unit.split("/")[0]
+        foreign = main is not None and re.fullmatch(r"[A-Z]{3}", base) is not None and base != main
+        rank = (foreign, LINE_ITEMS[item][2].index(by_concept[v.concept_id]))
         key = (item, v.period_start, v.period_end)
         if key not in chosen or rank < chosen[key][0]:
             chosen[key] = (rank, v)

@@ -13,6 +13,7 @@ THIRTEENF_DATASETS_PAGE = "https://www.sec.gov/data-research/sec-markets-data/fo
 INSIDER_DATASETS_PAGE = (
     "https://www.sec.gov/data-research/sec-markets-data/insider-transactions-data-sets"
 )
+ARCHIVES = "https://www.sec.gov/Archives/edgar/data"
 BULK_COMPANY_FACTS_URL = "https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
 
 
@@ -95,6 +96,20 @@ class SecProvider(Provider):
         return self.get_bytes(
             f"https://www.sec.gov/Archives/{path}", dataset="form4", key=accession
         )
+
+    def fetch_filing_index(self, cik: int, accession: str) -> Any:
+        """The list of files in a filing."""
+        url = f"{ARCHIVES}/{cik}/{accession.replace('-', '')}/index.json"
+        return self.get(url, dataset="filing_index", key=accession)
+
+    def fetch_xbrl_instance(
+        self, cik: int, accession: str, name: str, form: str, filed: date
+    ) -> bytes:
+        """A filing's XBRL instance document. The raw key carries what the facts need
+        (cik, accession, filing date, form), so a rebuild can load it on its own."""
+        url = f"{ARCHIVES}/{cik}/{accession.replace('-', '')}/{name}"
+        key = f"{cik}|{accession}|{filed.isoformat()}|{form}"
+        return self.get_bytes(url, dataset="filing_xbrl", key=key)
 
     def fetch_submissions(self, cik: int) -> Any:
         """A filer's profile (SIC code, category, fiscal year end) and recent filings."""

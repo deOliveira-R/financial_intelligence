@@ -266,6 +266,24 @@ def sync_congress(
             _run("sync-congress", ids, lambda s, d: ingest.sync_senate_ptr(s, senate, d))
 
 
+@app.command("fill-xbrl-gaps")
+def fill_xbrl_gaps(
+    cik: Annotated[list[int] | None, typer.Option(help="Only these issuers")] = None,
+) -> None:
+    """Read recent periodic reports' XBRL straight from the filings for issuers whose
+    financials are stale (SEC's company facts can lag, e.g. new IFRS taxonomies)."""
+    sec = SecProvider(raw_store=default_store())
+    with session_factory()() as session:
+        ciks = cik or ingest.stale_issuers(session)
+    typer.echo(f"{len(ciks)} issuers with stale financials")
+    if ciks:
+        _run(
+            "fill-xbrl-gaps",
+            [str(c) for c in ciks],
+            lambda s, c: ingest.sync_xbrl_gaps(s, sec, int(c)),
+        )
+
+
 @app.command()
 def sync_sic() -> None:
     """Look up SIC codes (industry) of issuers with a primary listing that lack one (SEC
@@ -516,6 +534,7 @@ def sync_weekly() -> None:
         ("CFTC positioning", sync_cot),
         ("ADR share counts", sync_adr_shares),
         ("SIC codes of new issuers", sync_sic),
+        ("filings missing from SEC company facts", fill_xbrl_gaps),
         ("economic release calendar", sync_calendar),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
