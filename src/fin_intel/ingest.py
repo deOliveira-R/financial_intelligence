@@ -541,6 +541,57 @@ def load_twse_table(session: Session, key: str, payload: Any) -> int:
     return rows
 
 
+def load_tw_prices(session: Session, key: str, payload: Any) -> int:
+    """One trading day's quotes on TWSE or TPEx, for companies we have filings for (ETFs and
+    warrants are skipped). Each company's listing is created on first sight, priced in TWD.
+    Key: `twse|2026-10-02`."""
+    market, day = key.split("|")
+    bars = taiwan.parse_prices(payload, market)
+    if not bars:
+        return 0
+    issuers = dict(
+        session.execute(select(Issuer.source_id, Issuer.name).where(Issuer.source == "twse")).all()
+    )
+    tickers = {f"{b['code']}.{taiwan.SUFFIX[market]}": b for b in bars if b["code"] in issuers}
+    existing = dict(
+        session.execute(
+            select(Security.ticker, Security.id).where(Security.ticker.in_(list(tickers)))
+        ).all()
+    )
+    for ticker, bar in tickers.items():
+        if ticker not in existing:
+            security = Security(
+                ticker=ticker,
+                name=issuers[bar["code"]],
+                origin="twse",
+                mic=taiwan.MICS[market],
+                security_type="CS",
+                cik=world.issuer_id("twse", bar["code"]),
+                currency="TWD",
+            )
+            session.add(security)
+            session.flush()
+            existing[ticker] = security.id
+    rows = [
+        {
+            "security_id": existing[t],
+            "date": date.fromisoformat(day),
+            "source": "twse",
+            **{k: b[k] for k in ("open", "high", "low", "close", "volume")},
+        }
+        for t, b in tickers.items()
+    ]
+    return upsert(session, DailyBar, rows, key=["security_id", "date", "source"])
+
+
+def sync_tw_prices(session: Session, provider: Any, market: str, day: date) -> int:
+    with tracked(session, "twse", "prices", f"{market}|{day.isoformat()}") as result:
+        session.commit()
+        payload = provider.fetch_prices(market, day)
+        result["rows"] = load_tw_prices(session, f"{market}|{day.isoformat()}", payload)
+    return result["rows"]
+
+
 def sync_twse_table(
     session: Session, provider: Any, market: str, table: str, snapshot: date
 ) -> int:
@@ -836,6 +887,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("edinet", "documents"): lambda s, k, p, t: len(edinet_reports(p)),
     ("edinet", "instance"): lambda s, k, p, t: load_edinet_instance(s, k, p),
     ("twse", "table"): lambda s, k, p, t: load_twse_table(s, k, p),
+    ("twse", "prices"): lambda s, k, p, t: load_tw_prices(s, k, p),
     ("esef", "index"): lambda s, k, p, t: len(esef.filings(p)),
     ("esef", "report"): lambda s, k, p, t: load_esef_report(s, k, p),
     ("tiingo", "metadata"): lambda s, k, p, t: load_tiingo_metadata(s, k, p, t.date()),

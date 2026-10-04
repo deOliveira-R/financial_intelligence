@@ -134,3 +134,59 @@ def test_esef_report_loads(session):
         )
     )
     assert revenue == 32667300000.0
+
+
+def test_taiwan_prices_create_listings_and_value_in_dollars(session):
+    from datetime import date as d
+
+    from fin_intel import metrics
+    from fin_intel.models import CompanyMetrics, EconomicObservation, EconomicSeries, Security
+
+    world.ensure_issuer(session, "twse", "2330", "TSMC", home_ticker="2330")
+    session.commit()
+    full_year = dict(TSMC_IS, 季別="4", 年度="114")  # FY2025, so there's an annual figure
+    full_year["淨利（淨損）歸屬於母公司業主"] = "1695124900.00"
+    ingest.load_twse_table(session, "twse|t187ap06_ci|2026-03-31", [full_year])
+    ingest.load_twse_table(session, "twse|t187ap07_ci|2026-10-04", [TSMC_BS])
+    day = d.today()
+    quote = {
+        "tables": [
+            {
+                "fields": [
+                    "證券代號",
+                    "證券名稱",
+                    "成交股數",
+                    "開盤價",
+                    "最高價",
+                    "最低價",
+                    "收盤價",
+                ],
+                "data": [
+                    [
+                        "2330",
+                        "台積電",
+                        "15,792,206",
+                        "2,505.00",
+                        "2,515.00",
+                        "2,495.00",
+                        "2,500.00",
+                    ],
+                    ["0050", "元大台灣50", "1", "1", "1", "1", "1"],  # an ETF: no filings
+                ],
+            }
+        ]
+    }
+    assert ingest.load_tw_prices(session, f"twse|{day.isoformat()}", quote) == 1
+    tsmc = session.scalar(select(Security).where(Security.ticker == "2330.TW"))
+    assert (tsmc.currency, tsmc.mic, tsmc.cik) == ("TWD", "XTAI", world.issuer_id("twse", "2330"))
+    session.add(EconomicSeries(id="DEXTAUS", source="fred"))
+    session.flush()
+    session.add(EconomicObservation(series_id="DEXTAUS", date=day, value=32.0))
+    session.commit()
+
+    metrics.compute(session)
+    row = session.scalar(select(CompanyMetrics).where(CompanyMetrics.security_id == tsmc.id))
+    assert row.price == 2500.0 / 32  # USD
+    assert row.currency == "TWD"
+    # 25.93B shares x $78.13 = $2.03T; net income TWD 1.695T = $53B: P/E ~38
+    assert 37 < row.pe < 39

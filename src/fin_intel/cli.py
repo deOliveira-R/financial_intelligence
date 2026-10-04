@@ -403,6 +403,43 @@ def sync_esef(
         )
 
 
+@app.command("sync-tw-prices")
+def sync_tw_prices(
+    since: Annotated[str, typer.Option(help="First trading day, YYYY-MM-DD")] = "2024-10-01",
+) -> None:
+    """Load Taiwanese listed (TWSE) and OTC (TPEx) companies' daily prices, one request per
+    exchange and trading day; days already loaded are skipped (the last few rechecked)."""
+    from fin_intel.models import SyncState
+    from fin_intel.providers import TwseProvider
+
+    provider = TwseProvider(raw_store=default_store())
+    end = date.today()
+    with session_factory()() as session:
+        done = set(
+            session.scalars(
+                select(SyncState.key).where(
+                    SyncState.provider == "twse",
+                    SyncState.dataset == "prices",
+                    SyncState.last_success.is_not(None),
+                )
+            )
+        )
+    items = [
+        f"{market}|{d.isoformat()}"
+        for d in reversed(_weekdays(date.fromisoformat(since), end))
+        for market in ("twse", "tpex")
+        if f"{market}|{d.isoformat()}" not in done or (end - d).days <= 3
+    ]
+    if items:
+        _run(
+            "sync-tw-prices",
+            items,
+            lambda s, item: ingest.sync_tw_prices(
+                s, provider, item.split("|")[0], date.fromisoformat(item.split("|")[1])
+            ),
+        )
+
+
 @app.command("sync-twse")
 def sync_twse() -> None:
     """Load Taiwan's listed (TWSE) and OTC (TPEx) companies: profiles, then the latest
@@ -673,6 +710,7 @@ def sync_daily() -> None:
         ("EIA energy data", sync_eia),
         ("Korean filings (DART)", lambda: sync_dart(limit=6000)),
         ("Japanese filings (EDINET)", sync_edinet),
+        ("Taiwanese prices", sync_tw_prices),
     ]
     if settings.watchlist_tickers:
         steps.append(("watchlist prices", lambda: sync_prices(settings.watchlist_tickers)))

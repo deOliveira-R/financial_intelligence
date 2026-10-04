@@ -39,7 +39,7 @@ STALE_AFTER = timedelta(days=550)  # newest financials older than this: skip (li
 CURRENT_WINDOW = timedelta(days=400)  # inputs must be this close to the latest financials
 PRIMARY_TYPES = ("CS", "ADRC", "OS")
 ADR_SHARES_WINDOW = timedelta(days=120)  # depositary share counts older than this: unknown
-PRIMARY_MICS = ("XNYS", "XNAS", "XASE")
+PRIMARY_MICS = ("XNYS", "XNAS", "XASE", "XTAI", "ROCO")  # US, Taiwan (TWSE, TPEx)
 
 
 @dataclass(frozen=True)
@@ -174,6 +174,10 @@ def compute(session: Session, as_of: date | None = None) -> int:
         currency, items = in_dollars(rows, rates)
         items = split_adjusted(items, splits.get(security.id, []), as_of)
         price = prices[security.id][0]
+        if security.currency and security.currency != "USD":  # a home listing abroad
+            if security.currency not in rates:
+                continue
+            price *= rates[security.currency]
         row = _issuer_metrics(
             items,
             price,

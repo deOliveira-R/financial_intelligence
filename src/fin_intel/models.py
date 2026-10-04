@@ -131,6 +131,8 @@ class Security(Base):
     # financials count ordinary shares, which an ADR may bundle (or split).
     shares_outstanding: Mapped[float | None] = mapped_column(Float)
     shares_as_of: Mapped[date | None] = mapped_column(Date)
+    # Trading currency of the listing's prices (None: US dollars).
+    currency: Mapped[str | None] = mapped_column(String(3))
 
 
 class TickerHistory(Base):

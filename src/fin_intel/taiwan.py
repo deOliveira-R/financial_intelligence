@@ -160,6 +160,41 @@ def parse_table(rows: list[dict[str, Any]], statement: str, filed: date) -> dict
     return out
 
 
+MICS = {"twse": "XTAI", "tpex": "ROCO"}
+SUFFIX = {"twse": "TW", "tpex": "TWO"}
+
+
+def parse_prices(payload: Any, market: str) -> list[dict[str, Any]]:
+    """(code, open, high, low, close, volume in shares) from a daily quote table."""
+    tables = (payload or {}).get("tables") or []
+    fields_wanted = {
+        "twse": ("證券代號", "開盤價", "最高價", "最低價", "收盤價", "成交股數"),
+        "tpex": ("代號", "開盤", "最高", "最低", "收盤", "成交股數"),
+    }[market]
+    out = []
+    for t in tables:
+        fields = t.get("fields") or []
+        if not all(f in fields for f in fields_wanted):
+            continue
+        idx = [fields.index(f) for f in fields_wanted]
+        for row in t.get("data") or []:
+            c = str(row[idx[0]]).strip()
+            values = [_num(row[i]) for i in idx[1:]]
+            if not c or values[3] is None or values[3] <= 0:
+                continue  # no trade that day
+            out.append(
+                {
+                    "code": c,
+                    "open": values[0],
+                    "high": values[1],
+                    "low": values[2],
+                    "close": values[3],
+                    "volume": int(values[4] or 0),
+                }
+            )
+    return out
+
+
 def parse_profiles(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Company code, English short name and issued common shares from a profile table."""
     out = []
