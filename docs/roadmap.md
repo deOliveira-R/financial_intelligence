@@ -48,3 +48,23 @@ Done (2026-10-03): insider transactions (quarterly data sets plus daily Form 4s)
 - 13F holdings for a chosen list of managers (Berkshire, Scion, Pershing Square…), with quarter-over-quarter changes.
 - Form 4 insider transactions and cluster-buying signals; 13D/13G stakes.
 - Congressional trades (STOCK Act reports from the House Clerk and Senate eFD), if the official files parse reliably.
+
+## Phase E: global coverage
+
+US filings miss much of the world's industrial backbone (Samsung, SK hynix, Tokyo Electron,
+Shin-Etsu, LVMH, Siemens, SAP, Infineon, BYD, CATL...). Done (2026-10-04): foreign filers
+whose latest 20-F SEC's company facts skipped (TSMC, Toyota, Sony and ~370 others) are read
+from the filings' XBRL. Next, home-market sources, free and official where possible:
+
+- **Europe and UK:** ESEF annual reports (filings.xbrl.org, ~26k filings as xBRL-JSON,
+  keyed by LEI). Annual only; half-year reports aren't mandated in XBRL.
+- **Japan:** EDINET API v2 (free registration key): full XBRL for every listed company.
+- **Korea:** OpenDART (free key): financial statements of Samsung, SK hynix, Hyundai.
+- **Taiwan:** TWSE/TPEx open APIs (no key): latest quarter for every listed company;
+  history accumulates from our snapshots (MOPS for backfill).
+- **China and Hong Kong:** hardest (HKEX and CNINFO publish PDFs); later.
+- **Prices and FX:** a global price source (Stooq bulk files, or exchange APIs) for
+  listings outside the US; FX already comes from FRED.
+- **Identity:** map each company across listings (LEI, ISIN, home ticker, ADR) so a
+  company is one issuer whether we know it from SEC, ESEF or its home exchange.
+

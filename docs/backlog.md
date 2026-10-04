@@ -52,6 +52,11 @@ walk-forward out-of-sample splits, and storing runs for comparison.
 
 ## Fundamentals and screening
 
+- **Captive finance arms:** Toyota (and Ford, GM, Caterpillar...) consolidate lending
+  subsidiaries whose debt inflates EV and deflates ROIC (Toyota EV/EBIT 24 at P/E 11).
+  Exclude financial-services debt (segment data) or flag these issuers.
+- **Net-cash companies:** EV/EBIT goes negative when cash exceeds market cap (some Chinese
+  ADRs); screens should treat that explicitly rather than rank it as cheapest.
 - **ADR ratios:** an ADR can represent several ordinary shares (or a fraction), while
   financials report per ordinary share, so ADR market caps can be off by that ratio. Fix
   with each ADR's ratio (Massive ticker details or depositary filings). Financials in
