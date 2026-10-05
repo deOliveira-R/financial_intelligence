@@ -3,30 +3,44 @@
 Things deliberately deferred, to pick up when they become useful. The phases themselves are
 in [roadmap.md](roadmap.md).
 
-## Next: history depth and outcome labels (agreed 2026-10-04)
+## Next: history depth and outcome labels (agreed 2026-10-04, updated 2026-10-05)
 
-Breadth is enough for a proof of concept; hill-climbing signals needs depth (full market
-cycles) and outcome labels. In order:
+Breadth is enough for a proof of concept; hill-climbing signals needs depth and outcome
+labels. **No data purchases for now:** the system bootstraps on free data and should pay for
+itself before any subscription. Status and order:
 
-1. **Free backfills** (existing loaders, earlier start dates): insider data sets back to
-   2006 (`sync-insiders --since 2006q1`), 13F data sets back to 2013 (`sync-13f --files N`),
-   congressional reports back to 2012 (`sync-congress --since 2012`), full FRED release-date
-   history (`releases.HISTORY_DAYS`), Korea back to 2015 (daily `sync-dart` continues),
-   Japan (EDINET backfill to 2024-04 done; EDINET offers ~10 years).
-2. **Event labels from EDGAR**: 8-K item codes (earnings dates via item 2.02, M&A, guidance,
-   executive changes, bankruptcies, restatements), 13D/13G activist stakes, into an events
-   table; plus a forward-outcomes table (excess returns vs sector/equal-weight benchmarks,
-   drawdowns, re-ratings) as the target for hill-climbing.
-3. **Deep US prices**: survivorship-free history with delistings. Free route: slow Tiingo
-   backfill (~500 symbols/month: index members, sector ETFs; survivorship-biased). Paid:
-   Norgate (~$300/year) or Sharadar (tens of $/month), the recommended first purchase.
-   Then backfill point-in-time metrics to ~2009 (SEC XBRL starts there).
-4. **Filing text** for LLM analysis skills: 10-K/10-Q sections (risk factors, MD&A), 8-K
-   press releases, proxies (EDGAR, free); EDINET report text. Transcripts are paid.
-5. **Domain data**: FINRA short volume/interest history, CBOE put/call statistics, SEC N-PORT
+1. **Free backfills** (running on the server since 2026-10-05, unit `fin-intel-history`:
+   congress → `rebuild congress` → insiders → 13F → `sync-events`). Done: release calendar
+   back to 2000. In progress: congressional trades (House from 2014/2015, earlier indexes
+   list no PTRs; Senate from 2012), insiders back to 2006, 13F back to 2013 (older quarters:
+   filers above $1B plus `thirteenf.WATCHED`). Korea back to 2015 continues in the daily
+   `sync-dart`; Japan EDINET backfilled to 2024-04 (EDINET offers ~10 years).
+2. **Event labels**: done. `corporate_events` (8-K items, 13D/13G, late filings, delistings,
+   tender offers; full history via `sync-events`) and `forward_outcomes` (returns, excess vs
+   SPY/universe/sector, drawdowns, re-ratings per metrics snapshot; `derive-outcomes`).
+3. **Deep US prices, free and focused**: choose strategic industries (with the user) and
+   backfill ~500 symbols of deep history from Tiingo (its free 500-symbols/month cap):
+   their companies plus sector and macro ETFs. Survivorship-biased (current listings only),
+   acceptable for a focused universe. Then extend point-in-time metrics and outcomes back
+   (SEC XBRL starts in 2009). Paid options (Norgate, Sharadar) stay documented, not planned.
+4. **Yen carry trade pack**: the US-Japan rate differential and unwind risk.
+   - Add: Japan MoF daily JGB yield curve (1-40 years since 1974, free CSV:
+     mof.go.jp/english/policy/jgbs/reference/interest_rate/historical/jgbcme_all.csv plus
+     the current-month jgbcme.csv) as a `jgb:` timeseries source; FRED Japan call rate
+     (IRSTCI01JPM156N) and 3-month interbank (IR3TIB01JPM156N); BOJ policy meeting dates in
+     the release calendar; MoF weekly portfolio flows (Japanese investors' foreign bond and
+     equity purchases: repatriation risk).
+   - Already have: USD/JPY (DEXJPUS), CFTC yen positioning by group with COT index, US
+     yields, VIX/term structure, credit spreads, CHF/MXN/BRL/AUD rates, EWJ/DXJ.
+   - Compute: 2y and 10y differentials, carry-to-risk (differential / USD/JPY realized vol),
+     yen momentum, MXN/JPY and AUD/JPY crosses, a `carry` summary command and endpoint.
+   - Not free: USD/JPY implied vol, cross-currency basis, prime-broker positioning.
+5. **Filing text** for LLM analysis skills: 10-K/10-Q sections (risk factors, MD&A), 8-K
+   press releases, proxies (EDGAR); EDINET report text.
+6. **Domain data**: FINRA short volume/interest history, CBOE put/call statistics, SEC N-PORT
    (ETF holdings → index membership since 2019), World Bank commodity prices, freight-rate
    headlines (cyclicals like ZIM), policy data (bills, lobbying, contracts, committees).
-6. Then the dedicated signal-design session: hypotheses, analysis skills, evals,
+7. Then the dedicated signal-design session: hypotheses, analysis skills, evals,
    hill-climbing on the historical data.
 
 ## Data
