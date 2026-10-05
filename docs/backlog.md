@@ -9,12 +9,19 @@ Breadth is enough for a proof of concept; hill-climbing signals needs depth and 
 labels. **No data purchases for now:** the system bootstraps on free data and should pay for
 itself before any subscription. Status and order:
 
-1. **Free backfills** (running on the server since 2026-10-05, unit `fin-intel-history`:
-   congress → `rebuild congress` → insiders → 13F → `sync-events`). Done: release calendar
-   back to 2000. In progress: congressional trades (House from 2014/2015, earlier indexes
-   list no PTRs; Senate from 2012), insiders back to 2006, 13F back to 2013 (older quarters:
-   filers above $1B plus `thirteenf.WATCHED`). Korea back to 2015 continues in the daily
-   `sync-dart`; Japan EDINET backfilled to 2024-04 (EDINET offers ~10 years).
+1. **Free backfills.** Done (2026-10-05): release calendar back to 2000; congressional
+   trades since 2012 (59,969 trades; House PTRs start 2014/2015, the 2014-2017 PDF layout
+   is parsed; Senate since 2012); insiders back to 2006 (all 75 quarterly data sets, 7.35M
+   transactions). **To fix and rerun:**
+   - 13F before 2024: older data sets have no `COVERPAGE.tsv` (different layout), so
+     `thirteenf.parse_dataset` raised KeyError and `sync-13f --since 2013-01-01` stopped
+     after the 2024+ files. Inspect an older zip, adapt the parser (manager name and
+     amendment type may live elsewhere), rerun.
+   - `sync-events` never loaded: SEC answered 429 at the first request (likely throttling
+     after the day's bulk downloads). Make it resumable (skip filers with a recent
+     success), back off longer on 429, and run it alone (not after bulk SEC downloads).
+   - Korea back to 2015 continues in the daily `sync-dart`; Japan EDINET backfilled to
+     2024-04 (EDINET offers ~10 years).
 2. **Event labels**: done. `corporate_events` (8-K items, 13D/13G, late filings, delistings,
    tender offers; full history via `sync-events`) and `forward_outcomes` (returns, excess vs
    SPY/universe/sector, drawdowns, re-ratings per metrics snapshot; `derive-outcomes`).
