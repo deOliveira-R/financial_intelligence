@@ -205,8 +205,20 @@ def parse_form4(accession: str, filing_date: date, submission: bytes) -> list[di
     return _keyed(rows)
 
 
+EARLIEST = date(1990, 1, 1)
+
+
+def plausible(row: dict[str, Any]) -> bool:
+    """A transaction date that can be right: after 1990 and no later than a month after
+    the filing (filers mistype years: one data set has a trade in year 0024)."""
+    day, filed = row["trans_date"], row.get("filing_date")
+    if day is None or day < EARLIEST:
+        return False
+    return filed is None or day <= filed + timedelta(days=31)
+
+
 def load(session: Session, rows: list[dict[str, Any]]) -> int:
-    return upsert(session, InsiderTransaction, [r for r in rows if r["trans_date"]], key=["key"])
+    return upsert(session, InsiderTransaction, [r for r in rows if plausible(r)], key=["key"])
 
 
 # --- signals ---------------------------------------------------------------------------

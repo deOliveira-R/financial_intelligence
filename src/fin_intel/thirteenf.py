@@ -8,6 +8,13 @@ are in US dollars.
 Amendments are applied in filing order: an original report (13F-HR) or a RESTATEMENT
 amendment replaces the filer's positions for that quarter; a NEW HOLDINGS amendment adds
 to them. Holdings are as of the quarter end and filed up to 45 days later.
+
+Before 2023-01-03 values were reported in thousands of dollars; they're converted.
+
+History: a quarter has ~2.4M positions, mostly from thousands of small filers. Data sets
+covering filings before FULL_SINCE keep only filers with at least HISTORY_MIN_AUM in that
+report (96% of reported assets) plus WATCHED managers; recent data sets keep everyone.
+The raw files are complete, so a different threshold is one rebuild away.
 """
 
 import csv
@@ -23,6 +30,40 @@ from sqlalchemy.orm import Session
 
 from fin_intel.db import upsert
 from fin_intel.models import CusipMapping, InstitutionalFiler, InstitutionalPosition, Security
+
+VALUE_IN_DOLLARS_FROM = date(2023, 1, 3)
+FULL_SINCE = date(2025, 6, 1)  # data sets covering filings from here on: every filer
+HISTORY_MIN_AUM = 1e9
+COMMIT_EVERY = 200  # filings per transaction
+# Notable managers kept in history whatever their size (CIKs from their 13F filings).
+WATCHED = {
+    1067983,  # Berkshire Hathaway
+    1336528,  # Pershing Square
+    1649339,  # Scion Asset Management
+    1061768,  # Baupost
+    1656456,  # Appaloosa
+    1079114,  # Greenlight Capital
+    1040273,  # Third Point
+    921669,  # Carl Icahn
+    1709323,  # Himalaya Capital
+    1536411,  # Duquesne Family Office
+    1029160,  # Soros Fund Management
+    1167483,  # Tiger Global
+    1061165,  # Lone Pine
+    1418814,  # ValueAct
+    1791786,  # Elliott
+    1112520,  # Akre
+    1056831,  # Fairholme
+    1115373,  # Semper Augustus
+    1720792,  # Ruane, Cunniff & Goldfarb
+    860643,  # Gardner Russo & Quinn
+    1345471,  # Trian
+    1998597,  # JANA Partners
+    1517137,  # Starboard Value
+    1096343,  # Markel
+    949509,  # Oaktree
+    1549575,  # Dalal Street (Mohnish Pabrai)
+}
 
 
 def _date(value: str | None) -> date | None:
@@ -102,12 +143,32 @@ def parse_dataset(data: bytes) -> tuple[list[Filing], dict[str, list[dict[str, A
             entry["shares"] += _num(r.get("SSHPRNAMT"))
             entry["value"] += _num(r.get("VALUE"))
     ordered = sorted(filings.values(), key=lambda f: (f.filed or date.min, f.accession))
+    for f in ordered:
+        if f.filed and f.filed < VALUE_IN_DOLLARS_FROM:  # reported in thousands then
+            for p in positions.get(f.accession, {}).values():
+                p["value"] *= 1000
     return ordered, {a: list(p.values()) for a, p in positions.items()}
 
 
-def load(session: Session, data: bytes) -> int:
-    """Load one data set; returns positions written."""
+def load(session: Session, data: bytes, min_aum: float | None = None) -> int:
+    """Load one data set; returns positions written. With `min_aum`, reports of smaller
+    filers (outside WATCHED) are skipped entirely."""
     filings, positions = parse_dataset(data)
+    if min_aum is not None:
+        loaded = set(
+            session.execute(
+                select(InstitutionalPosition.filer_cik, InstitutionalPosition.period).distinct()
+            ).all()
+        )
+        kept: set[tuple[int, date]] = set()
+        selected = []
+        for f in filings:  # in filing order: originals before their amendments
+            big = sum(p["value"] for p in positions.get(f.accession, [])) >= min_aum
+            if f.replaces and (f.cik in WATCHED or big):
+                kept.add((f.cik, f.period))
+            if (f.cik, f.period) in kept or (not f.replaces and (f.cik, f.period) in loaded):
+                selected.append(f)  # amendments follow their original report
+        filings = selected
     upsert(
         session,
         InstitutionalFiler,
@@ -115,7 +176,7 @@ def load(session: Session, data: bytes) -> int:
         key=["cik"],
     )
     figis: dict[str, str] = {}
-    written = 0
+    written = n = 0
     for f in filings:
         rows = positions.get(f.accession, [])
         if f.replaces:
@@ -144,6 +205,8 @@ def load(session: Session, data: bytes) -> int:
             records,
             key=["filer_cik", "period", "cusip", "put_call"],
         )
+        if (n := n + 1) % COMMIT_EVERY == 0:
+            session.commit()  # a data set is millions of rows: don't hold the write lock
     # FIGIs some filers report: free mappings, no OpenFIGI call needed.
     upsert(
         session,

@@ -192,6 +192,9 @@ def sync_insiders(
 @app.command("sync-13f")
 def sync_13f(
     files: Annotated[int, typer.Option(help="Most recent 13F data set files to load")] = 4,
+    since: Annotated[
+        str | None, typer.Option(help="Load every data set from this date, e.g. 2013-01-01")
+    ] = None,
 ) -> None:
     """Load institutional holdings (13F data sets, three months each), then map their
     CUSIPs to securities via OpenFIGI (set FI_OPENFIGI_API_KEY to make that ~100x faster)."""
@@ -200,7 +203,11 @@ def sync_13f(
     store = default_store()
     sec = SecProvider(raw_store=store)
     available = sec.list_13f_datasets()
-    wanted = sorted(available)[-files:]
+    wanted = (
+        sorted(p for p in available if p.split("_")[-1] >= since)
+        if since
+        else sorted(available)[-files:]
+    )
     loaded = set(store.latest_hashes("sec", "13f_dataset"))
     pending = [p for p in wanted if p not in loaded]
     if pending:
@@ -254,7 +261,14 @@ def sync_congress(
             latest = session.scalar(
                 select(func.max(CongressReport.filed)).where(CongressReport.chamber == "senate")
             )
-        start = latest - timedelta(days=14) if latest else date(first, 1, 1)
+        # An explicit --since backfills from that year; otherwise pick up where we are.
+        start = (
+            date(since, 1, 1)
+            if since
+            else latest - timedelta(days=14)
+            if latest
+            else date(first, 1, 1)
+        )
         _run(
             "sync-congress",
             [start.isoformat()],

@@ -995,7 +995,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ),
     ("sec", "insider_dataset"): lambda s, k, p, t: load_insider_dataset(s, p),
     ("sec", "form4"): lambda s, k, p, t: load_form4(s, k, p),
-    ("sec", "13f_dataset"): lambda s, k, p, t: load_13f_dataset(s, p),
+    ("sec", "13f_dataset"): lambda s, k, p, t: load_13f_dataset(s, p, k),
     ("openfigi", "listings"): lambda s, k, p, t: load_listings(s, k, p["request"], p["response"]),
     ("openfigi", "mapping"): lambda s, k, p, t: load_openfigi_mapping(
         s, p["request"], p["response"]
@@ -1471,8 +1471,12 @@ def sync_insider_day(session: Session, sec_provider: SecProvider, day: date) -> 
 # --- institutional holdings (13F) -------------------------------------------------------------
 
 
-def load_13f_dataset(session: Session, body: bytes) -> int:
-    count = thirteenf.load(session, body)
+def load_13f_dataset(session: Session, body: bytes, period: str = "") -> int:
+    """`period` is the data set's key (`2013-01-01_2013-03-31`): data sets of filings before
+    thirteenf.FULL_SINCE keep only large and watched filers."""
+    end = period.split("_")[-1]
+    historical = bool(end) and date.fromisoformat(end) < thirteenf.FULL_SINCE
+    count = thirteenf.load(session, body, thirteenf.HISTORY_MIN_AUM if historical else None)
     thirteenf.link_securities(session)
     return count
 
@@ -1486,7 +1490,7 @@ def load_openfigi_mapping(session: Session, request: list[dict], response: list[
 def sync_13f_dataset(session: Session, sec_provider: SecProvider, period: str, url: str) -> int:
     with tracked(session, "sec", "13f_dataset", period) as result:
         body = sec_provider.fetch_13f_dataset(period, url)
-        result["rows"] = load_13f_dataset(session, body)
+        result["rows"] = load_13f_dataset(session, body, period)
     return result["rows"]
 
 
@@ -1586,7 +1590,7 @@ def sync_release_calendar(
                 select(EconomicSeries.release_id).where(EconomicSeries.release_id.is_not(None))
             )
         )
-        since = _today() - timedelta(days=releases.HISTORY_DAYS)
+        since = releases.HISTORY_START
         rows = 0
         for release_id in sorted(ids):
             session.commit()

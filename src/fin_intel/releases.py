@@ -19,7 +19,9 @@ from fin_intel.models import EconomicRelease, EconomicReleaseDate, EconomicSerie
 # are stored as a release of our own (an ID outside FRED's range).
 FOMC_RELEASE_ID = 900_001
 FOMC_LINK = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
-HISTORY_DAYS = 400  # past dates kept on each refresh (the rest of the schedule is future)
+# Release dates are kept from here on (each refresh re-reads them all: a release's dates can
+# move), so research can line signals up with past CPI, payrolls and FOMC days.
+HISTORY_START = date(2000, 1, 1)
 
 
 def load_series_release(session: Session, series_id: str, payload: dict[str, Any]) -> int:

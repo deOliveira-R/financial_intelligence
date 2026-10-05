@@ -177,3 +177,32 @@ def test_openfigi_mapping_links_securities_and_rebuilds(session, raw_store):
         rebuild(session, raw_store, "holdings")
     assert session.scalar(select(func.count()).select_from(InstitutionalPosition)) == before
     assert session.get(CusipMapping, AAPL).security_id is not None  # re-linked from raw
+
+
+def test_history_keeps_large_and_watched_filers_in_dollars(session):
+    small = 9_999_999
+    filings = [
+        ("S1", small, "13F-HR", "31-MAR-2014", "15-MAY-2014", "", "SMALL FUND"),
+        ("S2", small, "13F-HR/A", "31-MAR-2014", "20-MAY-2014", "NEW HOLDINGS", "SMALL FUND"),
+        ("L1", 8_888_888, "13F-HR", "31-MAR-2014", "15-MAY-2014", "", "LARGE FUND"),
+        ("W1", 1649339, "13F-HR", "31-MAR-2014", "15-MAY-2014", "", "SCION"),  # watched
+    ]
+    rows = [
+        ("S1", 1, "APPLE INC", AAPL, 900_000, 10, "", ""),  # $900M (reported in thousands)
+        ("S2", 2, "COCA COLA CO", KO, 1_000, 10, "", ""),
+        ("L1", 3, "APPLE INC", AAPL, 2_000_000, 20, "", ""),  # $2B
+        ("W1", 4, "APPLE INC", AAPL, 5_000, 1, "", ""),
+    ]
+    thirteenf.load(session, dataset(filings, rows), min_aum=1e9)
+    held = {(p.filer_cik, p.cusip): p.value for p in session.scalars(select(InstitutionalPosition))}
+    assert held == {(8_888_888, AAPL): 2e9, (1649339, AAPL): 5e6}  # small filer skipped
+    # Without a threshold (recent data sets) everyone is kept, still converted to dollars.
+    thirteenf.load(session, dataset(filings, rows))
+    assert (
+        session.scalar(
+            select(InstitutionalPosition.value).where(
+                InstitutionalPosition.filer_cik == small, InstitutionalPosition.cusip == KO
+            )
+        )
+        == 1e6
+    )

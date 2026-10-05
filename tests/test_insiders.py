@@ -276,3 +276,10 @@ def test_holiday_index_answered_with_access_denied(session, raw_store):
         ).respond(403, text=body)
         sec = SecProvider(raw_store=raw_store)
         assert ingest.sync_insider_day(session, sec, date(2026, 7, 3)) == 0
+
+
+def test_implausible_dates_are_dropped():
+    good = {"trans_date": date(2026, 9, 1), "filing_date": date(2026, 9, 3)}
+    assert insiders.plausible(good)
+    assert not insiders.plausible({"trans_date": date(24, 10, 2), "filing_date": date(2026, 9, 3)})
+    assert not insiders.plausible({"trans_date": date(2027, 9, 1), "filing_date": date(2026, 9, 3)})
