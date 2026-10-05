@@ -131,6 +131,16 @@ _HOUSE_ROW = re.compile(
     r"(?P<notified>\d{2}/\d{2}/\d{4})\s*"
     r"(?P<amount>Over \$[\d,]+|\$[\d,]+(?:\s*-\s*\$[\d,]+)?)"
 )
+# The 2014-2017 layout: no asset-type code, the type glued to the ticker, unpadded dates
+# ("(BRK.B)S 07/2/2015 07/2/2015 $15,001 - $50,000"), and some letters' case garbled.
+_LEGACY_ROW = re.compile(
+    r"\((?P<ticker>[A-Za-z][A-Za-z0-9.\-/]{0,9})\)\s*"
+    r"(?P<type>S \(partial\)|P|S|E)\s*"
+    r"(?P<date>\d{1,2}/\d{1,2}/\d{4})\s+"
+    r"(?P<notified>\d{1,2}/\d{1,2}/\d{4})\s+"
+    r"(?P<amount>Over \$[\d,]+|\$[\d,]+(?:\s*-\s*\$[\d,]+)?)"
+)
+_LEGACY_BREAKS = re.compile(r"(Account|New S|amount|\$[\d,]+)\s*")
 # Field labels lose their letters in extraction ("F      S     : New" is Filing Status).
 _FIELD = re.compile(r"^[A-Z](?:\s+[A-Z])?\s+:\s?(.*)$")
 _HEADER = re.compile(r"ID Owner Asset Transaction.*?\$200\?", re.S)
@@ -159,9 +169,9 @@ def parse_house_ptr(doc_id: str, data: bytes) -> tuple[dict[str, Any], list[dict
     """The filer and transactions of one House PTR PDF. A scanned (paper) report has no
     text and yields no transactions."""
     text = _house_text(data)
-    name = re.search(r"Name:\s*(?:Hon\.\s*)?(.+)", text)
+    name = re.search(r"Name:\s*(?:Hon\.\s*)?(.+?)(?:\s+Status:|\n|$)", text, re.I)
     state = re.search(r"State/District:\s*(\S+)", text)
-    signed = re.search(r"Digitally Signed:.*?,\s*(\d{2}/\d{2}/\d{4})", text)
+    signed = re.search(r"Digitally Signed:.*?,\s*(\d{1,2}/\d{1,2}/\d{4})", text, re.S)
     report = {
         "doc_id": doc_id,
         "chamber": "house",
@@ -175,6 +185,8 @@ def parse_house_ptr(doc_id: str, data: bytes) -> tuple[dict[str, Any], list[dict
     text = re.sub(r"^(Filing ID #\d+|\* For the complete list.*)$", _BOUNDARY, text, flags=re.M)
 
     matches = list(_HOUSE_ROW.finditer(text))
+    if not matches:
+        return report, _keyed(_legacy_rows(doc_id, text))
     rows = []
     previous_end = 0
     for i, m in enumerate(matches):
@@ -215,6 +227,38 @@ def parse_house_ptr(doc_id: str, data: bytes) -> tuple[dict[str, Any], list[dict
             after = text[m.end() :].split(_BOUNDARY)[0]
             rows[-1]["comment"] = _description([ln.strip() for ln in after.split("\n")])
     return report, _keyed(rows)
+
+
+def _legacy_rows(doc_id: str, text: str) -> list[dict[str, Any]]:
+    """Transactions from the older (2014-2017) PTR layout. Asset names are approximate
+    (the text before the ticker since the previous row's end); tickers and amounts are exact."""
+    rows, previous = [], 0
+    for m in _LEGACY_ROW.finditer(text):
+        # Words wrap mid-word in this layout ("Berkshire Hathaw" / "ay Inc."): join lines.
+        before = text[previous : m.start()].replace("\n", "")
+        asset = _LEGACY_BREAKS.split(before)[-1].strip() if before else ""
+        owner = re.match(r"^(SP|JT|DC)\s+", asset)
+        if owner:
+            asset = asset[owner.end() :]
+        amount_min, amount_max = _amount(m.group("amount"))
+        rows.append(
+            {
+                "doc_id": doc_id,
+                "chamber": "house",
+                "owner": OWNERS[owner.group(1) if owner else ""],
+                "ticker": _ticker(m.group("ticker")),
+                "asset_name": asset[:120] or None,
+                "asset_type": None,
+                "trans_type": HOUSE_TYPES[m.group("type")],
+                "trans_date": _date(m.group("date")),
+                "notified": _date(m.group("notified")),
+                "amount_min": amount_min,
+                "amount_max": amount_max,
+                "comment": None,
+            }
+        )
+        previous = m.end()
+    return rows
 
 
 def _description(lines: list[str]) -> str | None:

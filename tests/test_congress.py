@@ -287,3 +287,16 @@ def test_most_traded(session):
     assert popular[0].ticker == "INTC"
     assert (popular[0].members, popular[0].purchases, popular[0].sales) == (2, 1, 1)
     assert session.scalar(select(func.count()).select_from(CongressTrade)) == 5
+
+
+def test_parse_house_ptr_legacy_layout():
+    pdf = (FIXTURES / "20003367.pdf").read_bytes()  # 2015: no asset-type codes
+    report, rows = congress.parse_house_ptr("20003367", pdf)
+    assert (report["name"], report["filed"]) == ("Brad Ashford", date(2015, 7, 8))
+    assert [(r["ticker"], r["trans_type"], r["amount_min"]) for r in rows] == [
+        ("BRK-B", "sale", 15_001),
+        ("COST", "purchase", 1_001),
+        ("UNP", "purchase", 15_001),
+    ]
+    assert rows[1]["asset_name"] == "Costco Wholesale Corporation"
+    assert rows[0]["trans_date"] == date(2015, 7, 2)
