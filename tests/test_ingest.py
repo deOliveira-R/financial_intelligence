@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 import pytest
@@ -149,6 +149,32 @@ def test_persistent_429_raises_quota_error(monkeypatch):
     respx.get("https://api.stlouisfed.org/fred/series/observations").respond(429)
     with pytest.raises(QuotaExceededError):
         FredProvider().fetch_observations("GDP")
+
+
+@respx.mock
+def test_retry_waits_longer_for_sec_and_honors_retry_after(monkeypatch):
+    waits = []
+    monkeypatch.setattr("fin_intel.providers.base.time.sleep", waits.append)
+    respx.get("https://data.sec.gov/submissions/CIK0000000001.json").mock(
+        side_effect=[
+            httpx.Response(429),
+            httpx.Response(429, headers={"Retry-After": "120"}),
+            httpx.Response(200, json={"cik": "1"}),
+        ]
+    )
+    SecProvider().fetch_submissions(1)
+    assert waits == [15.0, 120.0]
+
+
+def test_synced_since(session):
+    now = datetime.now(UTC)
+    rows = [("events", "1", now), ("events", "2", now - timedelta(9)), ("events", "3", None)]
+    session.add_all(
+        SyncState(provider="sec", dataset=d, key=k, last_attempt=now, last_success=ok)
+        for d, k, ok in [*rows, ("sic", "4", now)]
+    )
+    session.commit()
+    assert ingest.synced_since(session, "sec", "events", now - timedelta(days=6)) == {"1"}
 
 
 @respx.mock

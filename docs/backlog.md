@@ -12,14 +12,13 @@ itself before any subscription. Status and order:
 1. **Free backfills.** Done (2026-10-05): release calendar back to 2000; congressional
    trades since 2012 (59,969 trades; House PTRs start 2014/2015, the 2014-2017 PDF layout
    is parsed; Senate since 2012); insiders back to 2006 (all 75 quarterly data sets, 7.35M
-   transactions). **To fix and rerun:**
-   - 13F before 2024: older data sets have no `COVERPAGE.tsv` (different layout), so
-     `thirteenf.parse_dataset` raised KeyError and `sync-13f --since 2013-01-01` stopped
-     after the 2024+ files. Inspect an older zip, adapt the parser (manager name and
-     amendment type may live elsewhere), rerun.
-   - `sync-events` never loaded: SEC answered 429 at the first request (likely throttling
-     after the day's bulk downloads). Make it resumable (skip filers with a recent
-     success), back off longer on 429, and run it alone (not after bulk SEC downloads).
+   transactions). Fixed 2026-10-06, rerunning on the server:
+   - 13F before 2024: the listing only matched date-range file names, so the quarterly
+     files (`2013q2`…`2023q4`) were never offered; one file (2025-06…08) keeps its tables
+     in a folder. Both handled; `sync-13f` now retries any period without a successful load.
+   - `sync-events`: SEC throttled it at the first request. SEC retries now wait 15 s
+     doubling to ~8 minutes (and honor `Retry-After`); filers synced within 6 days are
+     skipped, so a stopped run resumes.
    - Korea back to 2015 continues in the daily `sync-dart`; Japan EDINET backfilled to
      2024-04 (EDINET offers ~10 years).
 2. **Event labels**: done. `corporate_events` (8-K items, 13D/13G, late filings, delistings,

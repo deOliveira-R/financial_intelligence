@@ -519,15 +519,24 @@ def fill_xbrl_gaps(
 @app.command("sync-events")
 def sync_events(
     cik: Annotated[list[int] | None, typer.Option(help="Only these SEC filers")] = None,
+    refresh_days: Annotated[
+        int, typer.Option(help="Skip filers synced successfully within this many days")
+    ] = 6,
 ) -> None:
     """Load corporate events from SEC filings (8-K items such as earnings releases,
     acquisitions, restatements; 13D/13G stakes; late filings; delistings) for every SEC
-    filer with a primary listing, including the full history on first run."""
+    filer with a primary listing, including the full history on first run. Filers synced
+    recently are skipped, so a run stopped by SEC throttling resumes where it left off."""
     from fin_intel import metrics
 
     sec = SecProvider(raw_store=default_store())
     with session_factory()() as session:
         ciks = cik or sorted(c for c in metrics.primary_securities(session) if c < 10**10)
+        if not cik:
+            fresh = ingest.synced_since(
+                session, "sec", "events", datetime.now(UTC) - timedelta(days=refresh_days)
+            )
+            ciks = [c for c in ciks if str(c) not in fresh]
     if ciks:
         _run("sync-events", [str(c) for c in ciks], lambda s, c: ingest.sync_events(s, sec, int(c)))
 

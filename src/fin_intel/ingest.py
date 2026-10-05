@@ -802,6 +802,19 @@ def load_submissions_page(session: Session, key: str, payload: Any) -> int:
     return filing_events.load(session, filing_events.parse(payload or {}, cik))
 
 
+def synced_since(session: Session, provider: str, dataset: str, since: datetime) -> set[str]:
+    """Keys of a dataset last synced successfully at or after `since`."""
+    rows = session.execute(
+        select(SyncState.key, SyncState.last_success).where(
+            SyncState.provider == provider,
+            SyncState.dataset == dataset,
+            SyncState.last_success.is_not(None),
+        )
+    )
+    # SQLite returns naive datetimes; they're stored in UTC.
+    return {k for k, ok in rows if (ok if ok.tzinfo else ok.replace(tzinfo=UTC)) >= since}
+
+
 def sync_events(session: Session, sec_provider: SecProvider, cik: int) -> int:
     """A filer's events: its current submissions (recent filings, refreshed each run) and
     every older page not stored yet."""

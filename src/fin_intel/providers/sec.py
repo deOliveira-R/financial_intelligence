@@ -23,6 +23,10 @@ class SecProvider(Provider):
     name = "sec"
     base_url = "https://data.sec.gov"
     limits = (Limit(8, SECOND),)  # SEC allows 10/s; stay under it
+    # SEC throttles for minutes once tripped (often after bulk downloads): 15 s, 30 s, ...
+    # 4 min, about 8 minutes in all, before giving up.
+    max_retries = 5
+    retry_base = 15.0
 
     def headers(self) -> dict[str, str]:
         user_agent = get_settings().sec_user_agent

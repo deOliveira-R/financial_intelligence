@@ -35,6 +35,8 @@ class Provider:
     base_url: ClassVar[str]
     limits: ClassVar[tuple[Limit, ...]]
     max_retries: ClassVar[int] = 3
+    retry_base: ClassVar[float] = 1.0  # seconds before the first retry, doubling after
+    max_retry_delay: ClassVar[float] = 600.0  # cap on a server's Retry-After
 
     def __init__(self, client: httpx.Client | None = None, raw_store: RawStore | None = None):
         self.client = client or httpx.Client(timeout=get_settings().http_timeout)
@@ -123,6 +125,7 @@ class Provider:
         request_url = httpx.URL(url).copy_merge_params({**public_params, **self.auth_params()})
         headers = self.headers() | (extra_headers or {})
         body = json_body if form_body is None else form_body
+        resp: httpx.Response | None = None
         for attempt in range(self.max_retries + 1):
             self.limiter.acquire()
             try:
@@ -143,7 +146,9 @@ class Provider:
                     )
                 if resp.status_code not in RETRY_STATUSES or attempt == self.max_retries:
                     break
-            delay = 2**attempt
+            delay = self.retry_base * 2**attempt
+            if resp is not None and (after := resp.headers.get("Retry-After", "")).isdigit():
+                delay = max(delay, min(float(after), self.max_retry_delay))
             log.warning("%s: retrying %s in %ss", self.name, url, delay)
             time.sleep(delay)
         if resp.status_code == 429:
