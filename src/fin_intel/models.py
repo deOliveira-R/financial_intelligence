@@ -608,3 +608,30 @@ class CorporateEvent(Base):
     filed: Mapped[date] = mapped_column(Date, index=True)
     accepted: Mapped[datetime | None] = mapped_column(DateTime)
     report_date: Mapped[date | None] = mapped_column(Date)
+
+
+class ForwardOutcome(Base):
+    """Derived: what happened after a company's metrics snapshot (outcomes.py), the label
+    signals are scored against. Returns are total returns from the next close; excess
+    returns are against SPY, the snapshot's universe median and its sector median.
+    Columns stay empty until their horizon has passed."""
+
+    __tablename__ = "forward_outcomes"
+
+    security_id: Mapped[int] = mapped_column(ForeignKey("securities.id"), primary_key=True)
+    as_of: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    cik: Mapped[int] = mapped_column(index=True)
+    sector: Mapped[str | None] = mapped_column(String(16))
+    ret_1m: Mapped[float | None] = mapped_column(Float)
+    ret_3m: Mapped[float | None] = mapped_column(Float)
+    ret_6m: Mapped[float | None] = mapped_column(Float)
+    ret_12m: Mapped[float | None] = mapped_column(Float)
+    excess_spy_3m: Mapped[float | None] = mapped_column(Float)
+    excess_spy_12m: Mapped[float | None] = mapped_column(Float)
+    excess_universe_3m: Mapped[float | None] = mapped_column(Float)
+    excess_universe_12m: Mapped[float | None] = mapped_column(Float)
+    excess_sector_3m: Mapped[float | None] = mapped_column(Float)
+    excess_sector_12m: Mapped[float | None] = mapped_column(Float)
+    max_drawdown_12m: Mapped[float | None] = mapped_column(Float)
+    pe_change_12m: Mapped[float | None] = mapped_column(Float)  # log(P/E later / P/E now)
+    ev_ebit_change_12m: Mapped[float | None] = mapped_column(Float)

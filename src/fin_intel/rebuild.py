@@ -38,6 +38,7 @@ from fin_intel.models import (
     Fact,
     Filing,
     FiscalCalendar,
+    ForwardOutcome,
     InsiderTransaction,
     InstitutionalFiler,
     InstitutionalPosition,
@@ -130,12 +131,13 @@ TARGETS = {
             ("twse", "prices"),
             ("openfigi", "listings"),
         ],
-        [CompanyMetrics, DailyBar, CorporateAction, TickerHistory, Security],
+        [ForwardOutcome, CompanyMetrics, DailyBar, CorporateAction, TickerHistory, Security],
     ),
     # Everything: reference data in fetch order (so renames happen as they did), then the rest.
     "all": (
         list(LOADERS),
         [
+            ForwardOutcome,
             CompanyMetrics,
             StatementItem,
             Fact,

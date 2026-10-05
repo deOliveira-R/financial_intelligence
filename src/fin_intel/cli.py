@@ -782,6 +782,7 @@ def sync_weekly() -> None:
         ("European annual reports (ESEF)", sync_esef),
         ("cross-listings of foreign companies", sync_crosslist),
         ("economic release calendar", sync_calendar),
+        ("forward outcomes", derive_outcomes_cmd),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
     _steps("sync-weekly", steps)
@@ -819,6 +820,17 @@ def derive_metrics_cmd(
     day = date.fromisoformat(as_of) if as_of else None
     with session_factory()() as session:
         typer.echo(f"metrics: {metrics.compute(session, day)} companies")
+
+
+@app.command("derive-outcomes")
+def derive_outcomes_cmd() -> None:
+    """Forward outcomes (returns, excess returns vs SPY / universe / sector, drawdowns,
+    re-ratings) after every company metrics snapshot: the labels signals are scored
+    against. Run after backfill-metrics; recent snapshots fill in as time passes."""
+    from fin_intel import outcomes
+
+    with session_factory()() as session:
+        typer.echo(f"outcomes: {outcomes.compute(session)} rows")
 
 
 @app.command("backfill-metrics")
