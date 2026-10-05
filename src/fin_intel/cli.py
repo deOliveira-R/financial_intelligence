@@ -507,6 +507,22 @@ def fill_xbrl_gaps(
         )
 
 
+@app.command("sync-events")
+def sync_events(
+    cik: Annotated[list[int] | None, typer.Option(help="Only these SEC filers")] = None,
+) -> None:
+    """Load corporate events from SEC filings (8-K items such as earnings releases,
+    acquisitions, restatements; 13D/13G stakes; late filings; delistings) for every SEC
+    filer with a primary listing, including the full history on first run."""
+    from fin_intel import metrics
+
+    sec = SecProvider(raw_store=default_store())
+    with session_factory()() as session:
+        ciks = cik or sorted(c for c in metrics.primary_securities(session) if c < 10**10)
+    if ciks:
+        _run("sync-events", [str(c) for c in ciks], lambda s, c: ingest.sync_events(s, sec, int(c)))
+
+
 @app.command()
 def sync_sic() -> None:
     """Look up SIC codes (industry) of issuers with a primary listing that lack one (SEC
@@ -760,6 +776,7 @@ def sync_weekly() -> None:
         ("CFTC positioning", sync_cot),
         ("ADR share counts", sync_adr_shares),
         ("SIC codes of new issuers", sync_sic),
+        ("corporate events (SEC filings)", sync_events),
         ("filings missing from SEC company facts", fill_xbrl_gaps),
         ("Taiwanese companies (TWSE/TPEx)", sync_twse),
         ("European annual reports (ESEF)", sync_esef),
@@ -994,13 +1011,18 @@ def event_study_cmd(
     min_amount: Annotated[float, typer.Option(help="congress: minimum reported amount")] = 0,
     cik: Annotated[int | None, typer.Option(help="13f: one filer")] = None,
     min_insiders: Annotated[int, typer.Option(help="insiders: cluster size")] = 3,
+    item: Annotated[str | None, typer.Option(help="8k: item, e.g. 2.02 (earnings)")] = None,
+    form: Annotated[str | None, typer.Option(help="8k: form, e.g. 'SC 13D'")] = None,
 ) -> None:
-    """Average returns vs SPY after disclosed trades (from the next trading day)."""
+    """Average returns vs SPY after disclosed trades or corporate events (from the next
+    trading day): insiders, congress, 13f, 8k."""
     from fin_intel import events
 
     with session_factory()() as session:
         try:
-            found = events.from_source(session, source, member, min_amount, cik, min_insiders)
+            found = events.from_source(
+                session, source, member, min_amount, cik, min_insiders, item, form
+            )
         except ValueError as exc:
             raise typer.BadParameter(str(exc)) from None
         result = events.study(session, found)

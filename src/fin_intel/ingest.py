@@ -28,6 +28,7 @@ from fin_intel import (
     derive,
     energy,
     esef,
+    filing_events,
     insiders,
     releases,
     taiwan,
@@ -788,7 +789,38 @@ def load_submissions(session: Session, cik: int, payload: Any) -> int:
     issuer.sic_description = payload.get("sicDescription") or None
     issuer.filer_category = payload.get("category") or ""  # "" marks it looked up
     issuer.country = world.sec_country(payload) or issuer.country
+    recent = (payload.get("filings") or {}).get("recent") or {}
+    filing_events.load(session, filing_events.parse(recent, cik))
     return 1
+
+
+def load_submissions_page(session: Session, key: str, payload: Any) -> int:
+    """Events from an older page of a filer's submissions. Key: `cik|page name`."""
+    cik = int(key.split("|")[0])
+    if session.get(Issuer, cik) is None:
+        return 0
+    return filing_events.load(session, filing_events.parse(payload or {}, cik))
+
+
+def sync_events(session: Session, sec_provider: SecProvider, cik: int) -> int:
+    """A filer's events: its current submissions (recent filings, refreshed each run) and
+    every older page not stored yet."""
+    with tracked(session, "sec", "events", str(cik)) as result:
+        session.commit()  # fetch-then-load
+        payload = sec_provider.fetch_submissions(cik)
+        store = sec_provider.raw_store
+        stored = set(store.latest_hashes("sec", "submissions_page")) if store else set()
+        pages = [
+            f["name"]
+            for f in (payload.get("filings") or {}).get("files") or []
+            if f.get("name") and f"{cik}|{f['name']}" not in stored
+        ]
+        older = [(name, sec_provider.fetch_submissions_page(cik, name)) for name in pages]
+        rows = load_submissions(session, cik, payload)
+        for name, page in older:
+            rows += load_submissions_page(session, f"{cik}|{name}", page)
+        result["rows"] = rows
+    return result["rows"]
 
 
 def load_massive_ticker_details(session: Session, ticker: str, payload: Any, today: date) -> int:
@@ -972,6 +1004,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("sec", "company_tickers"): lambda s, k, p, t: load_company_tickers(s, p, t.date()),
     ("sec", "companyfacts"): lambda s, k, p, t: load_company_facts(s, int(k), p),
     ("sec", "submissions"): lambda s, k, p, t: load_submissions(s, int(k), p),
+    ("sec", "submissions_page"): lambda s, k, p, t: load_submissions_page(s, k, p),
     ("sec", "filing_xbrl"): lambda s, k, p, t: load_filing_xbrl(s, k, p),
     ("dart", "corp_codes"): lambda s, k, p, t: load_dart_corp_codes(s, p),
     ("dart", "company"): lambda s, k, p, t: load_dart_company(s, k, p),

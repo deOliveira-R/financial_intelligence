@@ -135,6 +135,30 @@ def new_positions(session: Session, filer_cik: int | None = None) -> list[Event]
     return out
 
 
+def filing_events(
+    session: Session, item: str | None = None, form: str | None = None
+) -> list[Event]:
+    """Corporate events from SEC filings (filing_events.py), e.g. item 2.02 (earnings
+    releases) or form SC 13D (activist stakes), for companies with a primary listing."""
+    from fin_intel import metrics
+    from fin_intel.models import CorporateEvent
+
+    tickers = {cik: s.ticker for cik, s in metrics.primary_securities(session).items() if s.ticker}
+    stmt = select(
+        CorporateEvent.cik, CorporateEvent.filed, CorporateEvent.form, CorporateEvent.item
+    )
+    if item:
+        stmt = stmt.where(CorporateEvent.item == item)
+    if form:
+        stmt = stmt.where(CorporateEvent.form.startswith(form))
+    seen, out = set(), []
+    for cik, filed, f, i in session.execute(stmt):
+        if cik in tickers and (cik, filed) not in seen:
+            seen.add((cik, filed))
+            out.append(Event(tickers[cik], filed, i or f))
+    return out
+
+
 def from_source(
     session: Session,
     source: str,
@@ -142,6 +166,8 @@ def from_source(
     min_amount: float = 0,
     cik: int | None = None,
     min_insiders: int = 3,
+    item: str | None = None,
+    form: str | None = None,
 ) -> list[Event]:
     if source == "insiders":
         return insider_clusters(session, min_insiders=min_insiders)
@@ -149,7 +175,9 @@ def from_source(
         return congress_purchases(session, min_amount, member)
     if source == "13f":
         return new_positions(session, cik)
-    raise ValueError(f"unknown event source {source!r}; one of insiders, congress, 13f")
+    if source == "8k":
+        return filing_events(session, item, form)
+    raise ValueError(f"unknown event source {source!r}; one of insiders, congress, 13f, 8k")
 
 
 # --- the study -------------------------------------------------------------------------

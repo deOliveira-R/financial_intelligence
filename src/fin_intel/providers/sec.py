@@ -111,6 +111,10 @@ class SecProvider(Provider):
         key = f"{cik}|{accession}|{filed.isoformat()}|{form}"
         return self.get_bytes(url, dataset="filing_xbrl", key=key)
 
+    def fetch_submissions_page(self, cik: int, name: str) -> Any:
+        """An older page of a filer's submissions (`CIK0000320193-submissions-001.json`)."""
+        return self.get(f"/submissions/{name}", dataset="submissions_page", key=f"{cik}|{name}")
+
     def fetch_submissions(self, cik: int) -> Any:
         """A filer's profile (SIC code, category, fiscal year end) and recent filings."""
         return self.get(f"/submissions/CIK{cik:010d}.json", dataset="submissions", key=str(cik))

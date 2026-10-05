@@ -815,11 +815,16 @@ def event_study(
     min_amount: float = 0,
     cik: int | None = None,
     min_insiders: int = 3,
+    item: str | None = Query(None, description="8k: item, e.g. 2.02 (earnings releases)"),
+    form: str | None = Query(None, description="8k: form, e.g. SC 13D"),
 ) -> events.Study:
     """Average returns vs SPY 5, 21, 63 and 126 trading days after disclosed trades:
-    source = insiders (cluster buys), congress (purchases) or 13f (new positions)."""
+    source = insiders (cluster buys), congress (purchases), 13f (new positions) or 8k
+    (corporate events from SEC filings, filtered by `item` or `form`)."""
     try:
-        found = events.from_source(session, source, member, min_amount, cik, min_insiders)
+        found = events.from_source(
+            session, source, member, min_amount, cik, min_insiders, item, form
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
     result = events.study(session, found)

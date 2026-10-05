@@ -26,6 +26,7 @@ from fin_intel.models import (
     CongressReport,
     CongressTrade,
     CorporateAction,
+    CorporateEvent,
     CotPosition,
     CusipMapping,
     DailyBar,
@@ -95,6 +96,10 @@ TARGETS = {
         [("cftc", "legacy"), ("cftc", "disaggregated"), ("cftc", "tff")],
         [CotPosition],
     ),
+    "events": (
+        [("sec", "submissions"), ("sec", "submissions_page")],
+        [CorporateEvent],
+    ),
     "economic": (
         [
             ("fred", "series"),
@@ -154,6 +159,7 @@ TARGETS = {
             CongressTrade,
             CongressReport,
             CotPosition,
+            CorporateEvent,
         ],
     ),
 }

@@ -592,3 +592,19 @@ class CotPosition(Base):
     long: Mapped[float | None] = mapped_column(Float)
     short: Mapped[float | None] = mapped_column(Float)
     spread: Mapped[float | None] = mapped_column(Float)
+
+
+class CorporateEvent(Base):
+    """A dated corporate event from SEC filings (filing_events.py): one row per 8-K item, or
+    per filing for other event forms (13D/13G stakes, late filings, delistings, tender
+    offers...). `accepted` is when the filing became public."""
+
+    __tablename__ = "corporate_events"
+
+    accession: Mapped[str] = mapped_column(String(32), primary_key=True)
+    item: Mapped[str] = mapped_column(String(8), primary_key=True)  # "" for non-8-K forms
+    cik: Mapped[int] = mapped_column(index=True)
+    form: Mapped[str] = mapped_column(String(24), index=True)
+    filed: Mapped[date] = mapped_column(Date, index=True)
+    accepted: Mapped[datetime | None] = mapped_column(DateTime)
+    report_date: Mapped[date | None] = mapped_column(Date)
