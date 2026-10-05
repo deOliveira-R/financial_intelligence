@@ -93,9 +93,11 @@ class Filing:
 def parse_dataset(data: bytes) -> tuple[list[Filing], dict[str, list[dict[str, Any]]]]:
     """Filings with holdings, and their positions summed per (CUSIP, option type)."""
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        # Some files keep their tables in a folder ("01JUN2025-31AUG2025_form13f/...").
+        members = {n.rsplit("/", 1)[-1]: n for n in archive.namelist()}
 
         def rows(name: str):
-            with archive.open(name) as f:
+            with archive.open(members[name]) as f:
                 text = io.TextIOWrapper(f, encoding="utf-8", errors="replace", newline="")
                 yield from csv.DictReader(text, delimiter="\t", quoting=csv.QUOTE_NONE)
 

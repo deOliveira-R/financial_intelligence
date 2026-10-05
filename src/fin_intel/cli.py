@@ -208,7 +208,16 @@ def sync_13f(
         if since
         else sorted(available)[-files:]
     )
-    loaded = set(store.latest_hashes("sec", "13f_dataset"))
+    with session_factory()() as session:
+        loaded = set(
+            session.scalars(
+                select(SyncState.key).where(
+                    SyncState.provider == "sec",
+                    SyncState.dataset == "13f_dataset",
+                    SyncState.last_success.is_not(None),
+                )
+            )
+        )
     pending = [p for p in wanted if p not in loaded]
     if pending:
         _run("sync-13f", pending, lambda s, p: ingest.sync_13f_dataset(s, sec, p, available[p]))

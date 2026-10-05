@@ -19,13 +19,13 @@ def tsv(header, rows):
     return "\t".join(header) + "\n" + "".join("\t".join(map(str, r)) + "\n" for r in rows)
 
 
-def dataset(filings, holdings):
+def dataset(filings, holdings, folder=""):
     """filings: (accession, cik, type, period, filed, amendment, name);
     holdings: (accession, sk, issuer, cusip, value, shares, putcall, figi)"""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr(
-            "SUBMISSION.tsv",
+            folder + "SUBMISSION.tsv",
             tsv(
                 ["ACCESSION_NUMBER", "FILING_DATE", "SUBMISSIONTYPE", "CIK", "PERIODOFREPORT"],
                 [
@@ -35,14 +35,14 @@ def dataset(filings, holdings):
             ),
         )
         z.writestr(
-            "COVERPAGE.tsv",
+            folder + "COVERPAGE.tsv",
             tsv(
                 ["ACCESSION_NUMBER", "AMENDMENTTYPE", "FILINGMANAGER_NAME"],
                 [(a, amend, name) for a, _, _, _, _, amend, name in filings],
             ),
         )
         z.writestr(
-            "INFOTABLE.tsv",
+            folder + "INFOTABLE.tsv",
             tsv(
                 [
                     "ACCESSION_NUMBER",
@@ -89,6 +89,29 @@ def test_rows_are_summed_per_position(session):
     assert got[(date(2026, 3, 31), AAPL, "PUT")] == (1, 100)
     # The FIGI a filer reported is kept as a free mapping hint.
     assert session.get(CusipMapping, KO).figi == "BBG000BMX289"
+
+
+def test_tables_inside_a_folder(session):
+    data = dataset(Q1, Q1_ROWS, folder="01JUN2025-31AUG2025_form13f/")
+    filings, held = thirteenf.parse_dataset(data)
+    assert [f.accession for f in filings] == ["B1"]
+    assert len(held["B1"]) == 3
+
+
+@respx.mock
+def test_lists_quarterly_and_date_range_files(raw_store):
+    respx.get("https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets").respond(
+        text='<a href="/files/x/form-13f-data-sets/01jan2024-29feb2024_form13f.zip">a</a>'
+        '<a href="/files/x/form-13f-data-sets/2023q4_form13f.zip">b</a>'
+        '<a href="/files/x/form-13f-data-sets/2013q2_form13f.zip">c</a>'
+    )
+    listed = SecProvider(raw_store=raw_store).list_13f_datasets()
+    assert sorted(listed) == [
+        "2013-04-01_2013-06-30",
+        "2023-10-01_2023-12-31",
+        "2024-01-01_2024-02-29",
+    ]
+    assert listed["2023-10-01_2023-12-31"].endswith("/2023q4_form13f.zip")
 
 
 def test_amendments(session):

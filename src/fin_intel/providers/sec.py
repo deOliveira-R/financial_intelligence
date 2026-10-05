@@ -1,5 +1,5 @@
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -60,7 +60,8 @@ class SecProvider(Provider):
         }
 
     def list_13f_datasets(self) -> dict[str, str]:
-        """{"2026-06-01_2026-08-31": url, ...}: each file covers three months of filings."""
+        """{"2026-06-01_2026-08-31": url, ...}: each file covers three months of filings.
+        Files before 2024 are named by calendar quarter of filing ("2023q4_form13f.zip")."""
         html = self.get_bytes(THIRTEENF_DATASETS_PAGE, dataset="13f_dataset_index").decode()
         out = {}
         for m in re.finditer(
@@ -68,6 +69,11 @@ class SecProvider(Provider):
         ):
             start = datetime.strptime(m.group(2), "%d%b%Y").date()
             end = datetime.strptime(m.group(3), "%d%b%Y").date()
+            out[f"{start}_{end}"] = "https://www.sec.gov" + m.group(1)
+        for m in re.finditer(r'href="(/files/[^"]*/(\d{4})q([1-4])_form13f\.zip)"', html):
+            year, quarter = int(m.group(2)), int(m.group(3))
+            start = date(year, quarter * 3 - 2, 1)
+            end = date(year + quarter // 4, quarter % 4 * 3 + 1, 1) - timedelta(days=1)
             out[f"{start}_{end}"] = "https://www.sec.gov" + m.group(1)
         return out
 
