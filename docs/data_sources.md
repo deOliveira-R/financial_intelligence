@@ -58,6 +58,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 | Cboe public CDN | Options volume and put/call ratios: total, equity, index since 2006 (archive files), plus ETP, SPX and VIX options since October 2019 (daily JSON) | Free, no key | `providers/cboe.py`, `putcall.py`, `sync-cboe` | Website terms (informational) |
 | FINRA Query API (public datasets) | Consolidated short interest for every exchange-listed and OTC stock, twice a month since December 2017: short position, average volume, days to cover | Free, no credentials; 5,000 records a page | `providers/finra.py`, `shortinterest.py`, `sync-short-interest` | Public |
 | USAspending.gov API | Federal contract obligations by industry (NAICS), monthly since October 2007 | Free, no key | `providers/usaspending.py`, `contracts.py`, `sync-contracts` | Public |
+| unitedstates/congress-legislators | Every member of Congress's terms (party, state, district), current committees and assignments | Free, public domain JSON | `providers/legislators.py`, `congress_members.py`, `sync-legislators` | Public domain |
 | OpenFIGI | CUSIP → security (13F), ticker/ISIN → share-class FIGI (cross-listings) | Free; key (`FI_OPENFIGI_API_KEY`) raises limits ~100x | `providers/openfigi.py`, `crosslist.py` | Free to use |
 | GLEIF | ISIN ↔ LEI mapping (daily bulk file, ~32 MB) for European issuers | Free; the per-LEI API throttles hard, so we use the bulk file | `providers/gleif.py` | Open data (CC0) |
 

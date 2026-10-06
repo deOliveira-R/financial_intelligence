@@ -759,12 +759,24 @@ def congress_trades(
     ticker: str | None = None,
     since: Annotated[date | None, Query(description="Transaction date on or after")] = None,
     type: str | None = Query(None, description="purchase, sale or exchange"),
+    party: str | None = Query(None, description="Democrat, Republican, Independent"),
+    committee: str | None = Query(
+        None, description="Current committee, e.g. SSAS (Senate Armed Services), HSIF"
+    ),
     limit: int = Query(200, le=2000),
 ) -> list[congress.Trade]:
     """Members of Congress's reported trades (PTRs), newest transaction first. Amounts are
-    the reported range; `filed` minus `trans_date` is the disclosure lag (up to 45 days)."""
+    the reported range; `filed` minus `trans_date` is the disclosure lag (up to 45 days).
+    Committee filters use today's rosters (a look-ahead for past trades)."""
     return congress.trades(
-        session, member=member, ticker=ticker, since=since, trans_type=type, limit=limit
+        session,
+        member=member,
+        ticker=ticker,
+        since=since,
+        trans_type=type,
+        party=party,
+        committee=committee,
+        limit=limit,
     )
 
 

@@ -28,7 +28,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fin_intel.db import upsert
-from fin_intel.models import CongressReport, CongressTrade
+from fin_intel.models import (
+    CommitteeMembership,
+    CongressReport,
+    CongressReportMember,
+    CongressTrade,
+)
 
 log = logging.getLogger(__name__)
 
@@ -405,6 +410,8 @@ class Trade:
     amount_max: float | None
     comment: str | None
     doc_id: str
+    bioguide: str | None = None  # the member, when the report could be linked
+    party: str | None = None
 
 
 def trades(
@@ -414,12 +421,25 @@ def trades(
     ticker: str | None = None,
     since: date | None = None,
     trans_type: str | None = None,
+    party: str | None = None,
+    committee: str | None = None,
     limit: int = 200,
 ) -> list[Trade]:
-    """Recent trades, newest first, filtered by member name, ticker, date or type."""
-    query = select(CongressTrade, CongressReport).join(
-        CongressReport, CongressReport.doc_id == CongressTrade.doc_id
+    """Recent trades, newest first, filtered by member name, ticker, date, type, party, or
+    current committee (thomas id, e.g. SSAS for Senate Armed Services; subcommittees
+    included). Committee rosters are today's, a look-ahead for past trades."""
+    query = (
+        select(CongressTrade, CongressReport, CongressReportMember)
+        .join(CongressReport, CongressReport.doc_id == CongressTrade.doc_id)
+        .outerjoin(CongressReportMember, CongressReportMember.doc_id == CongressTrade.doc_id)
     )
+    if party:
+        query = query.where(CongressReportMember.party.ilike(f"{party}%"))
+    if committee:
+        members = select(CommitteeMembership.bioguide).where(
+            CommitteeMembership.committee.startswith(committee.upper())
+        )
+        query = query.where(CongressReportMember.bioguide.in_(members))
     if member:
         query = query.where(CongressReport.name.ilike(f"%{member}%"))
     if ticker:
@@ -447,8 +467,10 @@ def trades(
             amount_max=t.amount_max,
             comment=t.comment,
             doc_id=t.doc_id,
+            bioguide=m.bioguide if m else None,
+            party=m.party if m else None,
         )
-        for t, r in session.execute(query.limit(limit))
+        for t, r, m in session.execute(query.limit(limit))
     ]
 
 

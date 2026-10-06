@@ -52,8 +52,8 @@ itself before any subscription. Status and order:
    (`funds.py`), IMF commodity prices and freight indexes (FRED macro pack). Next:
    - Policy: lobbying spend by issue area (Senate LDA: needs the user's free key from
      lda.gov/api/register), bills by policy area (congress.gov: free api.data.gov key),
-     committee rosters (unitedstates/congress-legislators, no key); company-level contract
-     recipients (name matching to issuers, conservative).
+     historical committee rosters (congress.gov; current rosters are loaded), company-level
+     contract recipients (name matching to issuers, conservative).
    - Shipping rates (container, dry bulk, tankers): no free API found (Drewry, Freightos,
      Baltic indices are licensed); deep-sea freight PPI is the free proxy.
    - Lithium and cobalt prices: not on FRED; miners and LIT as proxies.

@@ -51,8 +51,11 @@ only on exceptions), the speculation track high-attention with its own signals.
 - **Institutions (13F):** every filer's quarterly holdings, summed per security, with
   quarter-over-quarter changes; CUSIPs mapped to securities via OpenFIGI.
   `/holdings/managers?q=berkshire`, `/holdings/managers/{cik}`, `/holdings/security/{ticker}`.
-- **Congress:** House (PDF) and Senate (eFD) periodic transaction reports since 2024:
-  member, owner, ticker, type, amount range, dates. `/congress/trades`, `/congress/popular`.
+- **Congress:** House (PDF) and Senate (eFD) periodic transaction reports since 2012:
+  member, owner, ticker, type, amount range, dates. Each report is linked to the member
+  (House by district and date, senators by unique name), with party; current committee
+  rosters filter trades (`/congress/trades?committee=SSAS&party=republican`; today's
+  rosters, so a look-ahead for past trades). `/congress/trades`, `/congress/popular`.
 - **Policy activity:** federal contract obligations by industry (NAICS), monthly since
   October 2007 (`gov:3364` in specs: aerospace; `gov:336414`: guided missiles), known 90
   days after the month (DoD's reporting delay). `sync-contracts`.

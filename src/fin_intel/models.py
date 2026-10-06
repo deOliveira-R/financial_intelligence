@@ -556,6 +556,61 @@ class CongressReport(Base):
     transactions: Mapped[int | None]
 
 
+class LegislatorTerm(Base):
+    """One term of a member of Congress (unitedstates/congress-legislators)."""
+
+    __tablename__ = "legislator_terms"
+
+    bioguide: Mapped[str] = mapped_column(String(8), primary_key=True)
+    start: Mapped[date] = mapped_column(Date, primary_key=True)
+    end: Mapped[date] = mapped_column(Date)
+    chamber: Mapped[str] = mapped_column(String(8))  # house or senate
+    state: Mapped[str] = mapped_column(String(2))
+    district: Mapped[int | None]  # House; 0 for at-large
+    party: Mapped[str | None] = mapped_column(String(32))
+    first: Mapped[str | None] = mapped_column(String(64))
+    last: Mapped[str | None] = mapped_column(String(64))
+    nickname: Mapped[str | None] = mapped_column(String(64))
+    full_name: Mapped[str | None] = mapped_column(String(128))
+
+
+class Committee(Base):
+    """A current congressional committee or subcommittee."""
+
+    __tablename__ = "committees"
+
+    id: Mapped[str] = mapped_column(String(8), primary_key=True)  # thomas id, e.g. SSAS
+    name: Mapped[str] = mapped_column(String(256))
+    chamber: Mapped[str | None] = mapped_column(String(8))
+    parent: Mapped[str | None] = mapped_column(String(8))
+    jurisdiction: Mapped[str | None] = mapped_column(Text)
+
+
+class CommitteeMembership(Base):
+    """Current committee assignments (a snapshot: historical rosters aren't in the source)."""
+
+    __tablename__ = "committee_memberships"
+
+    committee: Mapped[str] = mapped_column(String(8), primary_key=True)
+    bioguide: Mapped[str] = mapped_column(String(8), primary_key=True, index=True)
+    title: Mapped[str | None] = mapped_column(String(64))
+    rank: Mapped[int | None]
+    side: Mapped[str | None] = mapped_column(String(16))  # majority or minority
+
+
+class CongressReportMember(Base):
+    """Derived: the member of Congress who filed a report (congress_members.py), matched
+    by House district and date or, for senators, by name among those serving then."""
+
+    __tablename__ = "congress_report_members"
+
+    doc_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    bioguide: Mapped[str] = mapped_column(String(8), index=True)
+    party: Mapped[str | None] = mapped_column(String(32))
+    state: Mapped[str | None] = mapped_column(String(2))
+    method: Mapped[str] = mapped_column(String(8))  # district or name
+
+
 class CongressTrade(Base):
     """One transaction in a PTR. Amounts are the reported range's bounds (dollars);
     amount_max is None for the open-ended top range."""

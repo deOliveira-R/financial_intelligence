@@ -29,6 +29,7 @@ def settings(monkeypatch):
         FedProvider,
         FinraProvider,
         HouseProvider,
+        LegislatorsProvider,
         MassiveProvider,
         MofProvider,
         SenateProvider,
@@ -48,6 +49,7 @@ def settings(monkeypatch):
         UsaspendingProvider,
         FinraProvider,
         CboeProvider,
+        LegislatorsProvider,
     ):
         monkeypatch.setattr(provider, "limits", (Limit(10_000, MINUTE),))
     yield

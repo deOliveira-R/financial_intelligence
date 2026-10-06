@@ -307,6 +307,11 @@ def sync_congress(
             ids = [r.doc_id for r in congress.pending_reports(session, "senate")]
         if ids:
             _run("sync-congress", ids, lambda s, d: ingest.sync_senate_ptr(s, senate, d))
+    from fin_intel import congress_members
+
+    with session_factory()() as session:  # new reports to their members (no network)
+        congress_members.link(session)
+        session.commit()
 
 
 @app.command("sync-dart")
@@ -684,6 +689,16 @@ def fund_holdings(
         typer.echo(f"  {r['weight'] or 0:6.2f}%  {r['cusip'] or r['isin'] or '':12}  {r['name']}")
 
 
+@app.command("sync-legislators")
+def sync_legislators() -> None:
+    """Load members of Congress (terms since 1789), current committees and assignments,
+    and link each trading report to the member who filed it."""
+    from fin_intel.providers import LegislatorsProvider
+
+    provider = LegislatorsProvider(raw_store=default_store())
+    _run("sync-legislators", ["all"], lambda s, _: ingest.sync_legislators(s, provider))
+
+
 @app.command("sync-cboe")
 def sync_cboe() -> None:
     """Load Cboe options volume and put/call ratios: the archive since 2006 on first run,
@@ -1031,6 +1046,7 @@ def sync_weekly() -> None:
         ("federal contract obligations (USAspending)", sync_contracts),
         ("short interest (FINRA)", sync_short_interest),
         ("index ETF holdings (N-PORT)", sync_funds),
+        ("members of Congress and committees", sync_legislators),
         ("forward outcomes", derive_outcomes_cmd),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))

@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from fin_intel import (
     congress,
+    congress_members,
     contracts,
     cot,
     crosslist,
@@ -71,6 +72,7 @@ from fin_intel.providers import (
     FinraProvider,
     FredProvider,
     HouseProvider,
+    LegislatorsProvider,
     MassiveProvider,
     MofProvider,
     NotFoundError,
@@ -1120,6 +1122,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("finra", "short_interest"): lambda s, k, p, t: load_short_interest(s, p),
     ("sec", "nport"): lambda s, k, p, t: funds.load(s, k, p),
     ("sec", "filing_document"): lambda s, k, p, t: filing_text.load(s, k, p),
+    ("legislators", "file"): lambda s, k, p, t: load_legislators_file(s, k, p),
     ("cboe", "pc_archive"): lambda s, k, p, t: load_cboe(s, "pc_archive", k, p),
     ("cboe", "daily_options"): lambda s, k, p, t: load_cboe(s, "daily_options", k, p),
     ("mof", "jgb_curve"): lambda s, k, p, t: load_mof(s, "jgb_curve", p),
@@ -1186,6 +1189,7 @@ SNAPSHOT_DATASETS = {
     ("mof", "flows"),
     ("usaspending", "naics_month"),  # per month and page; months are revised
     ("finra", "short_interest"),  # per date and page; revised for a few weeks
+    ("legislators", "file"),  # each file is complete
 }
 
 
@@ -1891,6 +1895,26 @@ def fund_series(sec_provider: SecProvider) -> dict[str, dict]:
         if r.get("symbol") in funds.FUNDS and r.get("seriesId"):
             out[r["symbol"]] = {"cik": int(r["cik"]), "series_id": r["seriesId"]}
     return out
+
+
+def load_legislators_file(session: Session, file: str, payload: Any) -> int:
+    if file in ("current", "historical"):
+        return congress_members.load_legislators(session, payload)
+    if file == "committees":
+        return congress_members.load_committees(session, payload)
+    return congress_members.load_memberships(session, payload)
+
+
+def sync_legislators(session: Session, provider: LegislatorsProvider) -> int:
+    """Members of Congress and current committees, then which member filed each report."""
+    with tracked(session, "legislators", "file", "all") as result:
+        session.commit()  # fetch-then-load
+        files = [
+            (f, provider.fetch(f)) for f in ("historical", "current", "committees", "membership")
+        ]
+        rows = sum(load_legislators_file(session, f, payload) for f, payload in files)
+        result["rows"] = rows + congress_members.link(session)
+    return result["rows"]
 
 
 def sync_cboe(session: Session, cboe: CboeProvider, today: date) -> int:

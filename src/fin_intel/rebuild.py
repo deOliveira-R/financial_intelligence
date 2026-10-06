@@ -21,9 +21,12 @@ from fin_intel.ingest import (
     get_security,
 )
 from fin_intel.models import (
+    Committee,
+    CommitteeMembership,
     CompanyMetrics,
     Concept,
     CongressReport,
+    CongressReportMember,
     CongressTrade,
     CorporateAction,
     CorporateEvent,
@@ -46,6 +49,7 @@ from fin_intel.models import (
     InstitutionalFiler,
     InstitutionalPosition,
     Issuer,
+    LegislatorTerm,
     PortfolioTransaction,
     Security,
     ShortInterest,
@@ -94,8 +98,21 @@ TARGETS = {
         [InstitutionalPosition, InstitutionalFiler, CusipMapping],
     ),
     "congress": (
-        [("house", "fd_index"), ("house", "ptr"), ("senate", "search"), ("senate", "ptr")],
-        [CongressTrade, CongressReport],
+        [
+            ("house", "fd_index"),
+            ("house", "ptr"),
+            ("senate", "search"),
+            ("senate", "ptr"),
+            ("legislators", "file"),
+        ],
+        [
+            CongressReportMember,
+            CongressTrade,
+            CongressReport,
+            CommitteeMembership,
+            Committee,
+            LegislatorTerm,
+        ],
     ),
     "policy": ([("usaspending", "naics_month")], [FederalObligation]),
     "shorts": ([("finra", "short_interest")], [ShortInterest]),
@@ -171,8 +188,12 @@ TARGETS = {
             InstitutionalPosition,
             InstitutionalFiler,
             CusipMapping,
+            CongressReportMember,
             CongressTrade,
             CongressReport,
+            CommitteeMembership,
+            Committee,
+            LegislatorTerm,
             CotPosition,
             CorporateEvent,
             FederalObligation,
@@ -232,6 +253,11 @@ def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
             security = get_security(session, tx.symbol)
             tx.security_id = security.id if security else None
     session.commit()
+    if target in ("congress", "all"):
+        from fin_intel import congress_members
+
+        congress_members.link(session)  # reports to members (needs both loaded)
+        session.commit()
     if target in ("market", "all"):
         from fin_intel import crosslist
 
