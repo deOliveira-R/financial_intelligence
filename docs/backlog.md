@@ -50,8 +50,9 @@ itself before any subscription. Status and order:
    (USAspending, `contracts.py`), FINRA short interest since 2017-12 (`shortinterest.py`),
    Cboe put/call since 2006 (`putcall.py`), index ETF holdings from N-PORT since 2019
    (`funds.py`), IMF commodity prices and freight indexes (FRED macro pack). Next:
-   - Policy: lobbying spend by issue area (Senate LDA: needs the user's free key from
-     lda.gov/api/register), bills by policy area (congress.gov: free api.data.gov key),
+   - Policy: lobbying loaded (Senate LDA, since 2015; `lobbying.py`). Next: bills by policy
+     area (congress.gov: free api.data.gov key, `FI_CONGRESS_API_KEY`), lobbying clients
+     matched to issuers,
      historical committee rosters (congress.gov; current rosters are loaded), company-level
      contract recipients (name matching to issuers, conservative).
    - Shipping rates (container, dry bulk, tankers): no free API found (Drewry, Freightos,

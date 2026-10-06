@@ -35,6 +35,7 @@ from fin_intel import (
     funds,
     insiders,
     japan,
+    lobbying,
     putcall,
     releases,
     shortinterest,
@@ -72,6 +73,7 @@ from fin_intel.providers import (
     FinraProvider,
     FredProvider,
     HouseProvider,
+    LdaProvider,
     LegislatorsProvider,
     MassiveProvider,
     MofProvider,
@@ -1123,6 +1125,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("sec", "nport"): lambda s, k, p, t: funds.load(s, k, p),
     ("sec", "filing_document"): lambda s, k, p, t: filing_text.load(s, k, p),
     ("legislators", "file"): lambda s, k, p, t: load_legislators_file(s, k, p),
+    ("lda", "filings"): lambda s, k, p, t: lobbying.load_page(s, p),
     ("cboe", "pc_archive"): lambda s, k, p, t: load_cboe(s, "pc_archive", k, p),
     ("cboe", "daily_options"): lambda s, k, p, t: load_cboe(s, "daily_options", k, p),
     ("mof", "jgb_curve"): lambda s, k, p, t: load_mof(s, "jgb_curve", p),
@@ -1895,6 +1898,48 @@ def fund_series(sec_provider: SecProvider) -> dict[str, dict]:
         if r.get("symbol") in funds.FUNDS and r.get("seriesId"):
             out[r["symbol"]] = {"cik": int(r["cik"]), "series_id": r["seriesId"]}
     return out
+
+
+LOBBYING_SETTLED = timedelta(days=150)  # late reports and amendments arrive for months
+
+
+def sync_lobbying_quarter(session: Session, lda: LdaProvider, year: int, quarter: int) -> int:
+    """Every filing of a quarter, page by page (25 a page; ~1,100 pages a quarter)."""
+    with tracked(session, "lda", "filings", f"{year}-Q{quarter}") as result:
+        rows, page = 0, 1
+        while True:
+            session.commit()  # fetch-then-load, a page at a time
+            payload = lda.fetch_quarter(year, quarter, page)
+            rows += lobbying.load_page(session, payload)
+            if not payload.get("next"):
+                break
+            page += 1
+        result["rows"] = rows
+    return result["rows"]
+
+
+def lobbying_quarters_due(session: Session, first_year: int, today: date) -> list[tuple[int, int]]:
+    """Quarters never loaded, or loaded before late filings settled."""
+    loaded = {
+        k: ok.date()
+        for k, ok in session.execute(
+            select(SyncState.key, SyncState.last_success).where(
+                SyncState.provider == "lda",
+                SyncState.dataset == "filings",
+                SyncState.last_success.is_not(None),
+            )
+        )
+    }
+    due = []
+    for year in range(first_year, today.year + 1):
+        for quarter in range(1, 5):
+            end = lobbying.quarter_end(year, quarter)
+            if end >= today:
+                continue
+            ok = loaded.get(f"{year}-Q{quarter}")
+            if ok is None or ok - end < LOBBYING_SETTLED:
+                due.append((year, quarter))
+    return due
 
 
 def load_legislators_file(session: Session, file: str, payload: Any) -> int:

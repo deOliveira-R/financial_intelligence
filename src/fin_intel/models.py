@@ -611,6 +611,38 @@ class CongressReportMember(Base):
     method: Mapped[str] = mapped_column(String(8))  # district or name
 
 
+class LobbyingReport(Base):
+    """A quarterly lobbying report (LD-2) from the Senate LDA database (lobbying.py).
+    `amount` is the registrant's income from the client (lobbying firms) or the client's
+    own expenses (in-house lobbying). Amendments are separate rows; the latest posted for a
+    registrant, client and quarter counts."""
+
+    __tablename__ = "lobbying_reports"
+
+    filing_uuid: Mapped[str] = mapped_column(String(36), primary_key=True)
+    year: Mapped[int] = mapped_column(index=True)
+    quarter: Mapped[int]
+    filing_type: Mapped[str] = mapped_column(String(4))
+    registrant_id: Mapped[int | None]
+    registrant: Mapped[str | None] = mapped_column(String(256))
+    client_id: Mapped[int | None] = mapped_column(index=True)
+    client: Mapped[str | None] = mapped_column(String(256), index=True)
+    client_description: Mapped[str | None] = mapped_column(Text)
+    amount: Mapped[float | None] = mapped_column(Float)
+    posted: Mapped[date | None] = mapped_column(Date)
+
+
+class LobbyingIssue(Base):
+    """An issue area a lobbying report covers (general issue code: DEF, ENG, HCR, TAX...)."""
+
+    __tablename__ = "lobbying_issues"
+
+    filing_uuid: Mapped[str] = mapped_column(String(36), primary_key=True)
+    code: Mapped[str] = mapped_column(String(3), primary_key=True, index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    entities: Mapped[str | None] = mapped_column(Text)  # government bodies lobbied
+
+
 class CongressTrade(Base):
     """One transaction in a PTR. Amounts are the reported range's bounds (dollars);
     amount_max is None for the open-ended top range."""

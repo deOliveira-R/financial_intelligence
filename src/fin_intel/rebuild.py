@@ -50,6 +50,8 @@ from fin_intel.models import (
     InstitutionalPosition,
     Issuer,
     LegislatorTerm,
+    LobbyingIssue,
+    LobbyingReport,
     PortfolioTransaction,
     Security,
     ShortInterest,
@@ -117,6 +119,7 @@ TARGETS = {
     "policy": ([("usaspending", "naics_month")], [FederalObligation]),
     "shorts": ([("finra", "short_interest")], [ShortInterest]),
     "funds": ([("sec", "nport")], [FundHolding]),
+    "lobbying": ([("lda", "filings")], [LobbyingIssue, LobbyingReport]),
     "texts": ([("sec", "filing_document")], [FilingText]),
     "cot": (
         [("cftc", "legacy"), ("cftc", "disaggregated"), ("cftc", "tff")],
@@ -200,6 +203,8 @@ TARGETS = {
             ShortInterest,
             FundHolding,
             FilingText,
+            LobbyingIssue,
+            LobbyingReport,
         ],
     ),
 }

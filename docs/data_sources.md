@@ -58,6 +58,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 | Cboe public CDN | Options volume and put/call ratios: total, equity, index since 2006 (archive files), plus ETP, SPX and VIX options since October 2019 (daily JSON) | Free, no key | `providers/cboe.py`, `putcall.py`, `sync-cboe` | Website terms (informational) |
 | FINRA Query API (public datasets) | Consolidated short interest for every exchange-listed and OTC stock, twice a month since December 2017: short position, average volume, days to cover | Free, no credentials; 5,000 records a page | `providers/finra.py`, `shortinterest.py`, `sync-short-interest` | Public |
 | USAspending.gov API | Federal contract obligations by industry (NAICS), monthly since October 2007 | Free, no key | `providers/usaspending.py`, `contracts.py`, `sync-contracts` | Public |
+| Senate LDA (lda.gov API) | Quarterly lobbying reports since 2008: registrant, client, amount, issue areas, bodies lobbied | Free key (`FI_LDA_API_KEY`); ~120 req/min, 25 filings a page | `providers/lda.py`, `lobbying.py`, `sync-lobbying` | Public |
 | unitedstates/congress-legislators | Every member of Congress's terms (party, state, district), current committees and assignments | Free, public domain JSON | `providers/legislators.py`, `congress_members.py`, `sync-legislators` | Public domain |
 | OpenFIGI | CUSIP → security (13F), ticker/ISIN → share-class FIGI (cross-listings) | Free; key (`FI_OPENFIGI_API_KEY`) raises limits ~100x | `providers/openfigi.py`, `crosslist.py` | Free to use |
 | GLEIF | ISIN ↔ LEI mapping (daily bulk file, ~32 MB) for European issuers | Free; the per-LEI API throttles hard, so we use the bulk file | `providers/gleif.py` | Open data (CC0) |
@@ -74,7 +75,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 | Alpaca (free IEX feed) | Intraday bars since 2016, real-time IEX stream | No intraday use case yet |
 | Finnhub, Twelve Data, FMP and Alpha Vantage free tiers | Quotes, profiles, estimates, international prices | Quotas too small to build on; spot checks only |
 | CoinGecko, exchange APIs (Coinbase, Kraken) | Crypto OHLCV and metadata | Crypto not in scope yet |
-| congress.gov API (free api.data.gov key), Senate LDA lobbying API (lda.gov, free key), unitedstates/congress-legislators | Bills and policy areas, lobbying spend by issue area, committee rosters | Planned to corroborate congressional signals. LDA without a key allows ~15 requests/minute at 25 filings a page (about 20,000 quarterly reports a quarter), so its history needs the key |
+| congress.gov API (free api.data.gov key) | Bills and their policy areas, sponsors, actions; historical committee rosters | Next policy source once the key is set (`FI_CONGRESS_API_KEY`) |
 | GDELT, SEC 8-K feeds, company RSS | News and events | News/sentiment not started |
 | MOPS (Taiwan) | Historical quarterly statements | Backfill planned: the open data has only the latest quarter |
 | J-Quants (JPX), free tier | Japanese prices and fundamentals, 12-week delay | Delay makes it useless for current valuations; fine for backtests |

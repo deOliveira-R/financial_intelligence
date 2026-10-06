@@ -59,6 +59,10 @@ only on exceptions), the speculation track high-attention with its own signals.
 - **Policy activity:** federal contract obligations by industry (NAICS), monthly since
   October 2007 (`gov:3364` in specs: aerospace; `gov:336414`: guided missiles), known 90
   days after the month (DoD's reporting delay). `sync-contracts`.
+- **Lobbying:** quarterly spend by issue area (DEF, ENG, HCR, TRD, TAX…; each report's
+  amount split across its issues) and by client, since 2015 (2008 available), known 45
+  days after the quarter. `lobbying --issue DEF`, `lobbying --client lockheed`,
+  `lobby:DEF` in specs.
 - **Event studies:** average returns vs SPY after disclosures (insider clusters, congress
   purchases, new 13F positions), from the next trading day. `event-study`, `/events/{source}`.
   Interpreting these signals properly (fair benchmarks, their own unit and horizon) is
@@ -91,7 +95,7 @@ only on exceptions), the speculation track high-attention with its own signals.
   `jp:out_bonds`).
 - **Time series engine:** specs like `px:SPY|sma:200`, `px:CPER/px:GLD|z:252`,
   `fred:DGS10-fred:DGS2`, `breadth:pct_above_200d`, `cot:gold:managed_money:index`,
-  `eia:crude_stocks|diff:1`, `jp:jgb10y`, `gov:3364`, `si:GME:dtc`, `cboe:equity_pc`, with causal transforms (sma, ema, rsi, macd, ret, diff, vol,
+  `eia:crude_stocks|diff:1`, `jp:jgb10y`, `gov:3364`, `si:GME:dtc`, `cboe:equity_pc`, `lobby:DEF`, with causal transforms (sma, ema, rsi, macd, ret, diff, vol,
   z, high, low, dd, yoy) on SPY's trading calendar. `timeseries`, `/timeseries`.
 - **Backtests:** rules on any specs (`px:SPY > px:SPY|sma:200 and breadth:… > 40`),
   decided at each close and held the next day, with costs, long/flat or long/short,

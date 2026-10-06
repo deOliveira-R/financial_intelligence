@@ -17,6 +17,7 @@ from fin_intel.providers.fed import FedProvider
 from fin_intel.providers.finra import FinraProvider
 from fin_intel.providers.fred import FredProvider
 from fin_intel.providers.gleif import GleifProvider
+from fin_intel.providers.lda import LdaProvider
 from fin_intel.providers.legislators import LegislatorsProvider
 from fin_intel.providers.massive import MassiveProvider
 from fin_intel.providers.mof import MofProvider
@@ -39,6 +40,7 @@ __all__ = [
     "FredProvider",
     "GleifProvider",
     "HouseProvider",
+    "LdaProvider",
     "LegislatorsProvider",
     "MassiveProvider",
     "MofProvider",

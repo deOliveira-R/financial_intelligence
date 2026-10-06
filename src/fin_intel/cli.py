@@ -689,6 +689,44 @@ def fund_holdings(
         typer.echo(f"  {r['weight'] or 0:6.2f}%  {r['cusip'] or r['isin'] or '':12}  {r['name']}")
 
 
+@app.command("sync-lobbying")
+def sync_lobbying(
+    since: Annotated[int, typer.Option(help="First year to load (quarterly since 2008)")] = 2015,
+) -> None:
+    """Load lobbying reports (Senate LDA) quarter by quarter; recent quarters are refetched
+    until late filings settle. Set FI_LDA_API_KEY (free) or this crawls."""
+    from fin_intel.providers import LdaProvider
+
+    lda = LdaProvider(raw_store=default_store())
+    with session_factory()() as session:
+        quarters = ingest.lobbying_quarters_due(session, since, date.today())
+    if quarters:
+        _run(
+            "sync-lobbying",
+            [f"{y}-Q{q}" for y, q in quarters],
+            lambda s, k: ingest.sync_lobbying_quarter(s, lda, int(k[:4]), int(k[-1])),
+        )
+
+
+@app.command("lobbying")
+def lobbying_cmd(
+    issue: Annotated[str | None, typer.Option(help="Issue code, e.g. DEF, ENG, HCR, TRD")] = None,
+    client: Annotated[str | None, typer.Option(help="Part of a client name")] = None,
+) -> None:
+    """Quarterly lobbying spend on an issue area, or by clients matching a name."""
+    from fin_intel import lobbying
+
+    with session_factory()() as session:
+        if issue:
+            for y, q, spend, n in lobbying.by_issue(session, issue)[-16:]:
+                typer.echo(f"{y}-Q{q}  ${spend / 1e6:8.1f}M  {n:6} reports")
+        if client:
+            for r in lobbying.by_client(session, client):
+                typer.echo(
+                    f"{r['year']}-Q{r['quarter']}  ${(r['spend'] or 0) / 1e6:7.2f}M  {r['client']}"
+                )
+
+
 @app.command("sync-legislators")
 def sync_legislators() -> None:
     """Load members of Congress (terms since 1789), current committees and assignments,
@@ -1047,6 +1085,7 @@ def sync_weekly() -> None:
         ("short interest (FINRA)", sync_short_interest),
         ("index ETF holdings (N-PORT)", sync_funds),
         ("members of Congress and committees", sync_legislators),
+        ("lobbying reports (Senate LDA)", sync_lobbying),
         ("forward outcomes", derive_outcomes_cmd),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))

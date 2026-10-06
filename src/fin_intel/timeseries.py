@@ -45,7 +45,20 @@ from fin_intel.models import (
 )
 from fin_intel.prices import adjustments
 
-SOURCES = ("px", "close", "volume", "fred", "breadth", "cot", "eia", "jp", "gov", "si", "cboe")
+SOURCES = (
+    "px",
+    "close",
+    "volume",
+    "fred",
+    "breadth",
+    "cot",
+    "eia",
+    "jp",
+    "gov",
+    "si",
+    "cboe",
+    "lobby",
+)
 _OPERATOR = re.compile(rf"([/-])(?=(?:{'|'.join(SOURCES)}):)")
 
 
@@ -151,6 +164,8 @@ def _load(
         return _short_interest(session, ident, days, pit)
     if source == "cboe":
         return _cboe(session, ident, days, pit)
+    if source == "lobby":
+        return _lobbying(session, ident, days, pit)
     if source == "cot":
         return _cot(session, ident.lower(), days, pit)
     if source == "breadth":
@@ -348,6 +363,23 @@ def _cboe(session: Session, ident: str, days: list[date], pit: bool) -> indicato
     if not rows:
         raise SpecError(f"no data for {series_id}; run fin-intel sync-cboe")
     return _step([(putcall.available_on(d) if pit else d, v) for d, v in rows], days)
+
+
+def _lobbying(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+    """`lobby:DEF` quarterly spend on an issue area, `lobby:DEF:count` its reports."""
+    from fin_intel import lobbying
+
+    code, _, field = ident.partition(":")
+    if field not in ("", "COUNT"):
+        raise SpecError(f"lobby:{ident}: field is empty (spend) or count")
+    rows = lobbying.by_issue(session, code)
+    if not rows:
+        raise SpecError(f"no lobbying data for issue {code}; run fin-intel sync-lobbying")
+    known = [
+        (lobbying.available_on(y, q) if pit else lobbying.quarter_end(y, q), n if field else s)
+        for y, q, s, n in rows
+    ]
+    return _step(known, days)
 
 
 def _step(known: list[tuple[date, float]], days: list[date]) -> indicators.Series:
