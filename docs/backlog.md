@@ -78,10 +78,11 @@ itself before any subscription. Status and order:
 - **Options:** yfinance or delayed CBOE chains, with Greeks computed ourselves.
 - **Sector breadth:** SIC codes are loaded; breadth per sector (% above 200-day) is next.
 
-- **Price outliers:** a few series have unadjusted reverse splits (one shows 117x in a
-  year) or stitch a post-bankruptcy listing onto the old one (WW). Flag implausible jumps
-  without a matching split, and break series at bankruptcies/relistings, before research
-  relies on means.
+- **Price outliers:** fixed 2026-10-06: a renamed company no longer receives its new
+  symbol's rows from before the rename (BNY Mellon got a muni fund's "BNY" bars on
+  alternate days), and price series start after an unexplained persistent 4x jump
+  (relistings like WW, unadjusted reverse splits). Remaining: one-day bad ticks (MCHB's
+  41,000), and relisted companies merged onto the old security (split them by FIGI).
 
 ## Trading strategy prototypes (phase B data)
 

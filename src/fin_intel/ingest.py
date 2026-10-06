@@ -902,13 +902,29 @@ class SymbolResolver:
             ).all()
         )
         self.past: dict[str, list[tuple[date, int]]] = defaultdict(list)
-        rows = session.execute(
-            select(TickerHistory.ticker, TickerHistory.last_seen, TickerHistory.security_id)
-            .join(Security, Security.id == TickerHistory.security_id)
-            .where((Security.ticker.is_(None)) | (Security.ticker != TickerHistory.ticker))
-        )
-        for symbol, last_seen, security_id in rows:
+        history = session.execute(
+            select(
+                TickerHistory.ticker,
+                TickerHistory.first_seen,
+                TickerHistory.last_seen,
+                TickerHistory.security_id,
+                Security.ticker,
+            ).join(Security, Security.id == TickerHistory.security_id)
+        ).all()
+        first_as_current = {
+            sid: first for symbol, first, _, sid, current in history if symbol == current
+        }
+        # Until when each current holder still traded under an earlier symbol (a rename,
+        # not an alias: the old symbol was last seen before the current one first was).
+        self.renamed_until: dict[int, date] = {}
+        for symbol, _, last_seen, security_id, current in history:
+            if symbol == current:
+                continue
             self.past[symbol].append((last_seen, security_id))
+            started = first_as_current.get(security_id)
+            if started is not None and last_seen < started:
+                previous = self.renamed_until.get(security_id, last_seen)
+                self.renamed_until[security_id] = max(previous, last_seen)
         for listings in self.past.values():
             listings.sort()
 
@@ -918,7 +934,12 @@ class SymbolResolver:
             if on <= last_seen:
                 return security_id
         if symbol in self.current:
-            return self.current[symbol]
+            holder = self.current[symbol]
+            if on <= self.renamed_until.get(holder, date.min):
+                # The holder still traded under its old symbol then: this symbol belonged to
+                # another company we don't know (BNY was a muni fund while BNY Mellon was BK).
+                return None
+            return holder
         # No current holder: its most recent past holder (an alias still in use since the
         # last reference sync, or a delisted listing).
         return past[-1][1] if past else None

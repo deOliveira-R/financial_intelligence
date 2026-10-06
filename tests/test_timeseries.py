@@ -187,3 +187,26 @@ def test_unknown_series_errors(session):
         timeseries.build(session, ["px:NOPE"])
     with pytest.raises(timeseries.SpecError, match="revision history"):
         timeseries.build(session, ["fred:NOPE"])
+
+
+def test_series_starts_after_an_unexplained_jump(session):
+    start = D("2026-01-01")
+    add_bars(session, "SPY", start, [100.0] * 20)
+    # A relisting on the old company's history: $0.25 to $40 overnight, and it holds.
+    add_bars(session, "WW", start, [0.3, 0.28, 0.27, 0.26, 0.25, 0.25] + [40.0] * 14)
+    dates, series = timeseries.build(session, ["px:WW"])
+    assert series["px:WW"][:6] == [None] * 6 and series["px:WW"][6] == 40.0
+    # The same jump on a split's ex-date is the split, already adjusted for.
+    gold = add_bars(session, "GLDX", start, [10.0] * 6 + [50.0] * 14)
+    session.add(
+        CorporateAction(
+            security_id=gold.id,
+            ex_date=start + timedelta(days=6),
+            action="split",
+            value=0.2,
+            source="massive",
+        )
+    )
+    session.commit()
+    _, series = timeseries.build(session, ["px:GLDX"])
+    assert series["px:GLDX"][0] == pytest.approx(50.0)  # adjusted, not cut

@@ -29,6 +29,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
+from statistics import median
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -186,6 +187,12 @@ def security_prices(
     for b in sorted(bars, key=lambda b: rank[b.source], reverse=True):
         merged[b.date] = b  # higher-priority sources overwrite
     series_bars = [merged[d] for d in sorted(merged)]
+    split_days = session.scalars(
+        select(CorporateAction.ex_date).where(
+            CorporateAction.security_id == security_id, CorporateAction.action == "split"
+        )
+    ).all()
+    series_bars = series_bars[_last_break(series_bars, split_days) :]
     if field == "px":
         actions: dict[tuple[date, str], tuple[int, float]] = {}
         for ex_date, action, value, src in session.execute(
@@ -208,6 +215,35 @@ def security_prices(
     else:
         by_date = {b.date: float(b.volume) if b.volume is not None else None for b in series_bars}
     return [by_date.get(d) for d in days]
+
+
+JUMP, JUMP_FLOOR, JUMP_WINDOW, SPLIT_SLACK = 4.0, 1.0, 5, 7
+
+
+def _last_break(bars: list[DailyBar], split_days: Sequence[date]) -> int:
+    """Index where a series' history should start: after its last unexplained jump.
+
+    A close at least JUMP times the day before, that holds (the median of the next
+    JUMP_WINDOW closes vs the previous ones), above JUMP_FLOOR dollars, with no split within
+    SPLIT_SLACK days, isn't a market move: it's an unadjusted reverse split or a company
+    relisted after bankruptcy on the old one's history. Returns across it would be fiction,
+    so the series starts after it. Falls aren't treated this way: real collapses happen
+    and dropping them would bias research toward survivors.
+    """
+    closes = [b.close for b in bars]
+    start = 0
+    for i in range(1, len(closes)):
+        prev, cur = closes[i - 1], closes[i]
+        if not prev or not cur or cur < JUMP_FLOOR or cur / prev < JUMP:
+            continue
+        before = [c for c in closes[max(0, i - JUMP_WINDOW) : i] if c]
+        after = [c for c in closes[i : i + JUMP_WINDOW] if c]
+        if len(after) < JUMP_WINDOW or not before or median(after) / median(before) < JUMP:
+            continue  # unconfirmed (too recent) or not held
+        if any(abs((d - bars[i].date).days) <= SPLIT_SLACK for d in split_days):
+            continue
+        start = i
+    return start
 
 
 def _breadth(session: Session, field: str, days: list[date]) -> indicators.Series:

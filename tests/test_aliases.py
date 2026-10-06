@@ -91,6 +91,34 @@ def test_resolver_falls_back_to_the_last_holder(session):
     assert resolver.resolve("NOPE", DAY2) is None
 
 
+def test_renamed_holder_doesnt_own_its_new_symbol_before_the_rename(session):
+    # BNY Mellon traded as BK until mid-2026; "BNY" was a municipal bond fund before that.
+    mellon = Security(ticker="BNY", origin="sec")
+    session.add(mellon)
+    session.flush()
+    session.add_all(
+        [
+            TickerHistory(
+                security_id=mellon.id,
+                ticker="BK",
+                first_seen=date(2024, 10, 1),
+                last_seen=date(2026, 5, 21),
+            ),
+            TickerHistory(
+                security_id=mellon.id,
+                ticker="BNY",
+                first_seen=date(2026, 7, 1),
+                last_seen=date(2026, 10, 4),
+            ),
+        ]
+    )
+    session.commit()
+    resolver = ingest.SymbolResolver(session)
+    assert resolver.resolve("BK", date(2025, 1, 23)) == mellon.id
+    assert resolver.resolve("BNY", date(2025, 1, 23)) is None  # the fund's row, not Mellon's
+    assert resolver.resolve("BNY", date(2026, 8, 3)) == mellon.id
+
+
 @respx.mock
 def test_market_rebuild_keeps_portfolio_links(session, raw_store):
     respx.get("https://www.sec.gov/files/company_tickers_exchange.json").respond(json=SEC)
