@@ -945,6 +945,9 @@ def sync_deep_history(
     from fin_intel import universe
 
     tiingo = TiingoProvider(raw_store=default_store())
+    # Wait out the hourly window (50 requests) rather than stopping; the daily cap still
+    # stops the run, and the next one resumes with what's left.
+    tiingo.limiter.max_wait = 3700
     with session_factory()() as session:
         done = ingest.synced_since(
             session, "tiingo", "daily_prices", datetime.min.replace(tzinfo=UTC)
