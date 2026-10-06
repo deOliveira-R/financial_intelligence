@@ -14,6 +14,8 @@ INSIDER_DATASETS_PAGE = (
     "https://www.sec.gov/data-research/sec-markets-data/insider-transactions-data-sets"
 )
 ARCHIVES = "https://www.sec.gov/Archives/edgar/data"
+FUND_TICKERS_URL = "https://www.sec.gov/files/company_tickers_mf.json"
+BROWSE_URL = "https://www.sec.gov/cgi-bin/browse-edgar"
 BULK_COMPANY_FACTS_URL = "https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
 
 
@@ -106,6 +108,50 @@ class SecProvider(Provider):
         return self.get_bytes(
             f"https://www.sec.gov/Archives/{path}", dataset="form4", key=accession
         )
+
+    def fetch_fund_tickers(self) -> Any:
+        """Mutual fund and ETF tickers with their trust CIK, series and class IDs."""
+        return self.get(FUND_TICKERS_URL, dataset="fund_tickers", key="all")
+
+    def fetch_series_filings(self, series_id: str, form: str = "NPORT-P") -> list[dict[str, str]]:
+        """A fund series' filings of one form (EDGAR's company browser, Atom): accession,
+        filing date and form (amendments included), newest first."""
+        out, start = [], 0
+        while True:
+            params = {
+                "action": "getcompany",
+                "CIK": series_id,
+                "type": form,
+                "owner": "include",
+                "count": "100",
+                "start": str(start),
+                "output": "atom",
+            }
+            atom = self.get_bytes(
+                BROWSE_URL, params, dataset="series_filings", key=f"{series_id}|{start}"
+            ).decode("utf-8", errors="replace")
+            entries = re.findall(r"<entry>(.*?)</entry>", atom, re.S)
+            for entry in entries:
+                fields = dict(re.findall(r"<([a-z-]+)>([^<]*)</\1>", entry))
+                if "accession-number" in fields:
+                    out.append(
+                        {
+                            "accession": fields["accession-number"],
+                            "filed": fields.get("filing-date", ""),
+                            "form": fields.get("filing-type", form),
+                        }
+                    )
+            if len(entries) < 100:
+                return out
+            start += 100
+
+    def fetch_nport(
+        self, ticker: str, series_id: str, cik: int, accession: str, filed: str
+    ) -> bytes:
+        """An N-PORT report's XML (holdings). The key carries the fund and filing date."""
+        url = f"{ARCHIVES}/{cik}/{accession.replace('-', '')}/primary_doc.xml"
+        key = f"{ticker}|{series_id}|{accession}|{filed}"
+        return self.get_bytes(url, dataset="nport", key=key)
 
     def fetch_filing_index(self, cik: int, accession: str) -> Any:
         """The list of files in a filing."""

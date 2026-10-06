@@ -609,6 +609,38 @@ def sync_japan(
     _run("sync-japan", ["mof"], lambda s, _: ingest.sync_japan(s, mof, history))
 
 
+@app.command("sync-funds")
+def sync_funds(
+    fund: Annotated[list[str] | None, typer.Option(help="Only these fund tickers")] = None,
+) -> None:
+    """Load index ETF holdings (N-PORT reports since 2019) for the tracked funds in
+    funds.py: point-in-time index membership and weights."""
+    sec = SecProvider(raw_store=default_store())
+    series = ingest.fund_series(sec)
+    tickers = [t.upper() for t in fund] if fund else sorted(series)
+    _run("sync-funds", tickers, lambda s, t: ingest.sync_fund(s, sec, t, series[t]))
+
+
+@app.command("fund-holdings")
+def fund_holdings(
+    fund: str,
+    as_of: Annotated[str | None, typer.Option(help="YYYY-MM-DD; default: latest")] = None,
+    limit: Annotated[int, typer.Option(help="Largest holdings to show")] = 25,
+) -> None:
+    """A tracked fund's holdings in its latest report public on a date (index membership)."""
+    from fin_intel import funds
+
+    with session_factory()() as session:
+        rows = funds.members(session, fund, date.fromisoformat(as_of) if as_of else None)
+    if not rows:
+        typer.echo(f"no holdings for {fund}; run sync-funds")
+        raise typer.Exit(1)
+    first = rows[0]
+    typer.echo(f"{fund.upper()}: {len(rows)} holdings, {first['period']} (filed {first['filed']})")
+    for r in rows[:limit]:
+        typer.echo(f"  {r['weight'] or 0:6.2f}%  {r['cusip'] or r['isin'] or '':12}  {r['name']}")
+
+
 @app.command("sync-cboe")
 def sync_cboe() -> None:
     """Load Cboe options volume and put/call ratios: the archive since 2006 on first run,
@@ -955,6 +987,7 @@ def sync_weekly() -> None:
         ("JGB history (MoF, monthly file)", lambda: sync_japan(history=True)),
         ("federal contract obligations (USAspending)", sync_contracts),
         ("short interest (FINRA)", sync_short_interest),
+        ("index ETF holdings (N-PORT)", sync_funds),
         ("forward outcomes", derive_outcomes_cmd),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))

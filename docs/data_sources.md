@@ -22,6 +22,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 | SEC EDGAR: filing archives | XBRL instances of filings the company facts API lacks (e.g. IFRS 2025 taxonomy 20-Fs: TSMC, Toyota, Sony) | Same | `xbrl.py`, `fill-xbrl-gaps` | Public |
 | SEC EDGAR: submissions | SIC code, filer category, country of incorporation, recent filings | Same | `sync-sic` | Public |
 | SEC: Insider Transactions Data Sets + daily Form 4 XML | Forms 3/4/5 transactions | Same | `insiders.py`, `sync-insiders` | Public |
+| SEC EDGAR: N-PORT reports | Holdings of ~26 index ETFs (S&P 500/400/600 via iShares, Russell, Nasdaq-100, sector SPDRs, semis, defense, biotech, uranium) since late 2019: point-in-time index membership and weights | Same; fund series from `company_tickers_mf.json` | `funds.py`, `sync-funds` | Public |
 | SEC: Form 13F Data Sets | Institutional holdings, quarterly | Same | `thirteenf.py`, `sync-13f` | Public |
 | EDINET (Japan FSA) API v2 | Annual, quarterly and half-year reports' XBRL for ~4,000 listed companies (J-GAAP, IFRS) | Free key (`FI_EDINET_API_KEY`); we keep only the XBRL instance of each report package (~100 KB gzipped) | `providers/edinet.py`, `edinet.py`, `sync-edinet` | Public |
 | OpenDART (Korea FSS) | Financial statements (all accounts, quarterly) and share counts for ~4,000 listed companies | Free key (`FI_OPENDART_API_KEY`); ~20,000 requests/day, so backfills run over days | `providers/dart.py`, `dart.py`, `sync-dart` | Public |
@@ -66,7 +67,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 | BLS, BEA, US Treasury FiscalData | CPI and payroll detail, GDP by industry, auctions, daily yield curve | FRED carries the headline series; add when a strategy needs the detail |
 | ECB Data Portal / Frankfurter, IMF, OECD, World Bank | Euro-area and cross-country macro, reference FX | FRED FX suffices for conversion; add for non-US macro signals |
 | FINRA daily short-sale volume (Reg SHO files), SEC fails-to-deliver | Daily short activity, settlement failures | Short interest is loaded; daily short volume is noisy (market makers), add if a strategy needs it |
-| SEC N-PORT | ETF and fund holdings | Not needed yet |
+| SEC N-PORT quarterly data sets | Every fund's holdings (~435 MB a quarter) | Tracked index ETFs are fetched filing by filing instead |
 | Nasdaq Trader symbol directory | Daily list of US-listed symbols | SEC + Massive reference cover it |
 | Alpaca (free IEX feed) | Intraday bars since 2016, real-time IEX stream | No intraday use case yet |
 | Finnhub, Twelve Data, FMP and Alpha Vantage free tiers | Quotes, profiles, estimates, international prices | Quotas too small to build on; spot checks only |

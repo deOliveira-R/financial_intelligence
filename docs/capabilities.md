@@ -33,6 +33,10 @@ only on exceptions), the speculation track high-attention with its own signals.
 - **Screener:** filters (`pe<15`, `roic>=0.15`…), sort, Greenblatt's magic-formula rank,
   presets (`magic`, `deep_value`, `quality`, `cash_cows`), sector include/exclude (SIC
   divisions; magic excludes financials and utilities). `fin-intel screen`, `/screener`.
+- **Index membership:** holdings and weights of index ETFs (IVV for the S&P 500, IJH, IJR,
+  Russell, Nasdaq-100, sector SPDRs, SMH/SOXX, ITA, XBI/IBB) from N-PORT since late 2019,
+  point in time (by filing date), survivorship-free. `fund-holdings IVV --as-of 2021-03-31`,
+  `/funds/{ticker}/holdings`.
 - **Screen backtests:** monthly point-in-time snapshots (`backfill-metrics`), then each
   screen's picks vs SPY and vs the universe (means and medians) at 3, 6 and 12 months
   (`screen-backtest`). About two years of history so far.

@@ -30,6 +30,7 @@ from fin_intel import (
     energy,
     esef,
     filing_events,
+    funds,
     insiders,
     japan,
     putcall,
@@ -1095,6 +1096,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("boj", "mpm_schedule"): lambda s, k, p, t: releases.load_boj(s, p),
     ("usaspending", "naics_month"): lambda s, k, p, t: contracts.load_page(s, k, p),
     ("finra", "short_interest"): lambda s, k, p, t: load_short_interest(s, p),
+    ("sec", "nport"): lambda s, k, p, t: funds.load(s, k, p),
     ("cboe", "pc_archive"): lambda s, k, p, t: load_cboe(s, "pc_archive", k, p),
     ("cboe", "daily_options"): lambda s, k, p, t: load_cboe(s, "daily_options", k, p),
     ("mof", "jgb_curve"): lambda s, k, p, t: load_mof(s, "jgb_curve", p),
@@ -1136,6 +1138,7 @@ BINARY_DATASETS = {
     ("mof", "jgb_curve"),
     ("mof", "flows"),
     ("cboe", "pc_archive"),
+    ("sec", "nport"),
 }
 # Datasets whose response only means something with its request (recorded as params).
 REQUEST_DATASETS = {("openfigi", "mapping"), ("openfigi", "listings")}
@@ -1787,6 +1790,47 @@ def short_interest_due(session: Session, finra: FinraProvider, today: date) -> l
                     break
         year, month = (year + 1, 1) if month == 12 else (year, month + 1)
     return sorted(due)
+
+
+def sync_fund(session: Session, sec_provider: SecProvider, ticker: str, series: dict) -> int:
+    """A tracked fund's N-PORT reports not stored yet (`series`: its fund_tickers entry)."""
+    with tracked(session, "sec", "nport", ticker) as result:
+        session.commit()  # fetch-then-load
+        store = sec_provider.raw_store
+        have = {k.split("|")[2] for k in store.latest_hashes("sec", "nport")} if store else set()
+        filings = [
+            f
+            for form in funds.FORMS
+            for f in sec_provider.fetch_series_filings(series["series_id"], form)
+            if f["accession"] not in have
+        ]
+        bodies = [
+            (
+                f"{ticker}|{series['series_id']}|{f['accession']}|{f['filed']}",
+                sec_provider.fetch_nport(
+                    ticker, series["series_id"], series["cik"], f["accession"], f["filed"]
+                ),
+            )
+            for f in sorted(filings, key=lambda f: f["filed"])
+        ]
+        rows = 0
+        for key, body in bodies:
+            rows += funds.load(session, key, body)
+            session.commit()  # per report
+        result["rows"] = rows
+    return result["rows"]
+
+
+def fund_series(sec_provider: SecProvider) -> dict[str, dict]:
+    """Tracked funds' trust CIK and series ID, from SEC's fund ticker list."""
+    payload = sec_provider.fetch_fund_tickers()
+    fields = payload["fields"]
+    out = {}
+    for row in payload["data"]:
+        r = dict(zip(fields, row, strict=False))
+        if r.get("symbol") in funds.FUNDS and r.get("seriesId"):
+            out[r["symbol"]] = {"cik": int(r["cik"]), "series_id": r["seriesId"]}
+    return out
 
 
 def sync_cboe(session: Session, cboe: CboeProvider, today: date) -> int:

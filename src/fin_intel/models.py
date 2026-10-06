@@ -594,6 +594,27 @@ class CotPosition(Base):
     spread: Mapped[float | None] = mapped_column(Float)
 
 
+class FundHolding(Base):
+    """One holding of a tracked fund (an index ETF) in an N-PORT report (funds.py).
+    `identifier` is the CUSIP, else the ISIN, else the holding's name."""
+
+    __tablename__ = "fund_holdings"
+
+    fund: Mapped[str] = mapped_column(String(16), primary_key=True)  # the fund's ticker
+    period: Mapped[date] = mapped_column(Date, primary_key=True)
+    identifier: Mapped[str] = mapped_column(String(128), primary_key=True)
+    series_id: Mapped[str] = mapped_column(String(16))
+    accession: Mapped[str] = mapped_column(String(32))
+    filed: Mapped[date] = mapped_column(Date)
+    cusip: Mapped[str | None] = mapped_column(String(9), index=True)
+    isin: Mapped[str | None] = mapped_column(String(12))
+    name: Mapped[str | None] = mapped_column(String(256))
+    shares: Mapped[float | None] = mapped_column(Float)
+    value_usd: Mapped[float | None] = mapped_column(Float)
+    weight: Mapped[float | None] = mapped_column(Float)  # percent of net assets
+    asset_category: Mapped[str | None] = mapped_column(String(8))
+
+
 class ShortInterest(Base):
     """A stock's short position on a FINRA settlement date (shortinterest.py)."""
 

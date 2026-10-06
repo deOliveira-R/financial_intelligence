@@ -14,6 +14,7 @@ from fin_intel import (
     congress,
     cot,
     events,
+    funds,
     ingest,
     insiders,
     portfolio,
@@ -846,6 +847,19 @@ def economic_calendar(
     """Scheduled economic releases (CPI, payrolls, GDP, FOMC decisions...) with the tracked
     series each one updates; `daily=true` adds daily releases (rates, spreads, VIX)."""
     return releases.upcoming(session, days, start, daily)
+
+
+# --- index ETF holdings ---------------------------------------------------------------------
+
+
+@api.get("/funds/{ticker}/holdings")
+def fund_holdings(session: SessionDep, ticker: str, as_of: date | None = None) -> list[dict]:
+    """A tracked index ETF's holdings in its latest N-PORT report public on `as_of`
+    (point-in-time index membership and weights), e.g. /funds/IVV/holdings for the S&P 500."""
+    rows = funds.members(session, ticker, as_of)
+    if not rows:
+        raise HTTPException(404, f"no holdings for {ticker}")
+    return rows
 
 
 # --- yen carry trade ------------------------------------------------------------------------

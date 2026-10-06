@@ -44,10 +44,10 @@ itself before any subscription. Status and order:
    judgment calls for the signal-design session to test.
 5. **Filing text** for LLM analysis skills: 10-K/10-Q sections (risk factors, MD&A), 8-K
    press releases, proxies (EDGAR); EDINET report text.
-6. **Domain data**: SEC N-PORT
-   (ETF holdings → index membership since 2019), World Bank commodity prices, freight-rate
+6. **Domain data**: World Bank commodity prices, freight-rate
    headlines (cyclicals like ZIM), policy data. Done: federal contract obligations by NAICS
-   (USAspending, `contracts.py`); FINRA short interest since 2017-12 (`shortinterest.py`); Cboe put/call since 2006 (`putcall.py`). Next in policy: lobbying spend by issue area (Senate LDA:
+   (USAspending, `contracts.py`); FINRA short interest since 2017-12 (`shortinterest.py`); Cboe put/call since 2006 (`putcall.py`); index ETF holdings from N-PORT since 2019
+   (`funds.py`). Next in policy: lobbying spend by issue area (Senate LDA:
    needs the user's free key from lda.gov/api/register), bills by policy area (congress.gov:
    free api.data.gov key), committee rosters (unitedstates/congress-legislators, no key);
    company-level contract recipients (name matching to issuers, conservative).

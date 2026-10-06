@@ -29,7 +29,13 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from fin_intel.db import upsert
-from fin_intel.models import CusipMapping, InstitutionalFiler, InstitutionalPosition, Security
+from fin_intel.models import (
+    CusipMapping,
+    FundHolding,
+    InstitutionalFiler,
+    InstitutionalPosition,
+    Security,
+)
 
 VALUE_IN_DOLLARS_FROM = date(2023, 1, 3)
 FULL_SINCE = date(2025, 6, 1)  # data sets covering filings from here on: every filer
@@ -243,19 +249,19 @@ def link_securities(session: Session) -> int:
 
 
 def unmapped_cusips(session: Session) -> list[str]:
-    """CUSIPs held in positions that aren't linked to a security and haven't been looked up
-    on OpenFIGI yet. A FIGI supplied by the filer may be an exchange-level one rather than
-    the composite FIGI our securities carry, so it doesn't count as resolved by itself."""
+    """CUSIPs held in 13F positions or tracked funds that aren't linked to a security and
+    haven't been looked up on OpenFIGI yet. A FIGI supplied by the filer may be an
+    exchange-level one rather than the composite FIGI our securities carry, so it doesn't
+    count as resolved by itself."""
     resolved = select(CusipMapping.cusip).where(
         CusipMapping.security_id.is_not(None) | CusipMapping.security_type.is_not(None)
     )
-    return list(
-        session.scalars(
-            select(InstitutionalPosition.cusip)
-            .distinct()
-            .where(InstitutionalPosition.cusip.not_in(resolved))
-        )
+    held = (
+        select(InstitutionalPosition.cusip)
+        .union(select(FundHolding.cusip).where(FundHolding.cusip.is_not(None)))
+        .subquery()
     )
+    return list(session.scalars(select(held.c.cusip).where(held.c.cusip.not_in(resolved))))
 
 
 def load_openfigi(session: Session, cusips: list[str], results: list[dict[str, Any]]) -> int:
