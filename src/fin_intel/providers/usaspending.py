@@ -12,7 +12,11 @@ class UsaspendingProvider(Provider):
 
     name = "usaspending"
     base_url = "https://api.usaspending.gov/api/v2"
-    limits = (Limit(2, SECOND),)
+    # No published limit, but it drops connections when pushed (2 requests/s for a few
+    # minutes did it): go slowly and back off for minutes.
+    limits = (Limit(1, 2 * SECOND),)
+    max_retries = 4
+    retry_base = 30.0
     page_size = 100
 
     def fetch_naics_month(self, month: date, page: int) -> Any:
