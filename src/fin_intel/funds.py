@@ -51,6 +51,20 @@ FUNDS = {
 FORMS = ("NPORT-P", "NPORT-P/A")
 
 
+def valid_cusip(cusip: str | None) -> bool:
+    """Nine characters with a correct check digit, and not a placeholder: some reports put
+    000000000 on holdings without a CUSIP, which would merge different securities."""
+    if not cusip or len(cusip) != 9 or not cusip.isalnum() or set(cusip) == {"0"}:
+        return False
+    total = 0
+    for i, ch in enumerate(cusip[:8].upper()):
+        v = int(ch) if ch.isdigit() else ord(ch) - 55
+        if i % 2:
+            v *= 2
+        total += v // 10 + v % 10
+    return cusip[8].isdigit() and (10 - total % 10) % 10 == int(cusip[8])
+
+
 def _strip(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
@@ -80,12 +94,13 @@ def parse(body: bytes) -> tuple[date | None, list[dict[str, Any]]]:
     for node in root.iter():
         if _strip(node.tag) != "invstOrSec":
             continue
-        cusip = _text(node, "cusip")
-        cusip = cusip.upper() if cusip and re.fullmatch(r"[0-9A-Za-z]{9}", cusip) else None
+        cusip = (_text(node, "cusip") or "").upper()
+        cusip = cusip if valid_cusip(cusip) else None
         isin = next(
             (c.get("value") for c in node.iter() if _strip(c.tag) == "isin" and c.get("value")),
             None,
         )
+        isin = isin.upper() if isin and re.fullmatch(r"[A-Za-z]{2}[0-9A-Za-z]{9}\d", isin) else None
         name = _text(node, "name")
         identifier = cusip or isin or name
         if not identifier:

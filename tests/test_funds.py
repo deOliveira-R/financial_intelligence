@@ -12,17 +12,30 @@ AAPL, MSFT = "037833100", "594918104"
 
 
 def nport(period, holdings):
+    """holdings: (name, cusip, shares, value, weight[, isin])"""
     lines = "".join(
-        f"""<invstOrSec><name>{name}</name><lei>X</lei><title>{name}</title><cusip>{cusip}</cusip>
-        <identifiers><isin value="US{cusip}0"/></identifiers><balance>{shares}</balance>
-        <units>NS</units><curCd>USD</curCd><valUSD>{value}</valUSD><pctVal>{weight}</pctVal>
-        <assetCat>EC</assetCat></invstOrSec>"""
-        for name, cusip, shares, value, weight in holdings
+        f"""<invstOrSec><name>{h[0]}</name><lei>X</lei><title>{h[0]}</title><cusip>{h[1]}</cusip>
+        <identifiers><isin value="{h[5] if len(h) > 5 else "US" + h[1] + "0"}"/></identifiers>
+        <balance>{h[2]}</balance><units>NS</units><curCd>USD</curCd><valUSD>{h[3]}</valUSD>
+        <pctVal>{h[4]}</pctVal><assetCat>EC</assetCat></invstOrSec>"""
+        for h in holdings
     )
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <edgarSubmission xmlns="http://www.sec.gov/edgar/nport"><formData><genInfo>
 <seriesId>S000004310</seriesId><repPdEnd>2027-03-31</repPdEnd><repPdDate>{period}</repPdDate>
 </genInfo><invstOrSecs>{lines}</invstOrSecs></formData></edgarSubmission>""".encode()
+
+
+def test_placeholder_cusips_fall_back_to_isin():
+    assert funds.valid_cusip(AAPL) and funds.valid_cusip("67066G104")
+    assert not funds.valid_cusip("000000000") and not funds.valid_cusip("037833101")
+    accenture = ("Accenture", "000000000", 1, 10, 3.0, "IE00B4BNMY34")
+    linde = ("Linde", "000000000", 2, 20, 0.9, "IE000S9YS762")
+    _, rows = funds.parse(nport("2020-12-31", [accenture, linde]))
+    assert [(r["cusip"], r["identifier"]) for r in rows] == [
+        (None, "IE00B4BNMY34"),
+        (None, "IE000S9YS762"),
+    ]
 
 
 def test_parse_sums_lots_and_amendments_win(session):
