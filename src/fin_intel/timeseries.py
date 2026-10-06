@@ -44,7 +44,7 @@ from fin_intel.models import (
 )
 from fin_intel.prices import adjustments
 
-SOURCES = ("px", "close", "volume", "fred", "breadth", "cot", "eia", "jp", "gov", "si")
+SOURCES = ("px", "close", "volume", "fred", "breadth", "cot", "eia", "jp", "gov", "si", "cboe")
 _OPERATOR = re.compile(rf"([/-])(?=(?:{'|'.join(SOURCES)}):)")
 
 
@@ -148,6 +148,8 @@ def _load(
         return _contracts(session, ident, days, pit)
     if source == "si":
         return _short_interest(session, ident, days, pit)
+    if source == "cboe":
+        return _cboe(session, ident, days, pit)
     if source == "cot":
         return _cot(session, ident.lower(), days, pit)
     if source == "breadth":
@@ -288,6 +290,24 @@ def _short_interest(session: Session, ident: str, days: list[date], pit: bool) -
     if not rows:
         raise SpecError(f"no short interest for {ticker}; run sync-short-interest")
     return _step([(shortinterest.available_on(d) if pit else d, v) for d, v in rows], days)
+
+
+def _cboe(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+    """`cboe:equity_pc`, `cboe:spx_puts`... (putcall.py)."""
+    from fin_intel import putcall
+
+    try:
+        series_id = putcall.resolve(ident)
+    except ValueError as exc:
+        raise SpecError(str(exc)) from None
+    rows = session.execute(
+        select(EconomicObservation.date, EconomicObservation.value)
+        .where(EconomicObservation.series_id == series_id, EconomicObservation.value.is_not(None))
+        .order_by(EconomicObservation.date)
+    ).all()
+    if not rows:
+        raise SpecError(f"no data for {series_id}; run fin-intel sync-cboe")
+    return _step([(putcall.available_on(d) if pit else d, v) for d, v in rows], days)
 
 
 def _step(known: list[tuple[date, float]], days: list[date]) -> indicators.Series:

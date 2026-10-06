@@ -53,6 +53,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 |---|---|---|---|---|
 | House Clerk financial disclosures | Yearly filing index; periodic transaction report PDFs (electronic filings parsed; paper scans skipped) | Free | `providers/congress.py`, `congress.py` | Public |
 | Senate eFD | Periodic transaction reports (HTML) after accepting the site's terms | Free | same | Public |
+| Cboe public CDN | Options volume and put/call ratios: total, equity, index since 2006 (archive files), plus ETP, SPX and VIX options since October 2019 (daily JSON) | Free, no key | `providers/cboe.py`, `putcall.py`, `sync-cboe` | Website terms (informational) |
 | FINRA Query API (public datasets) | Consolidated short interest for every exchange-listed and OTC stock, twice a month since December 2017: short position, average volume, days to cover | Free, no credentials; 5,000 records a page | `providers/finra.py`, `shortinterest.py`, `sync-short-interest` | Public |
 | USAspending.gov API | Federal contract obligations by industry (NAICS), monthly since October 2007 | Free, no key | `providers/usaspending.py`, `contracts.py`, `sync-contracts` | Public |
 | OpenFIGI | CUSIP → security (13F), ticker/ISIN → share-class FIGI (cross-listings) | Free; key (`FI_OPENFIGI_API_KEY`) raises limits ~100x | `providers/openfigi.py`, `crosslist.py` | Free to use |

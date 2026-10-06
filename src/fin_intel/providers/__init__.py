@@ -1,5 +1,6 @@
 from fin_intel.providers.base import Provider
 from fin_intel.providers.boj import BojProvider
+from fin_intel.providers.cboe import CboeProvider
 from fin_intel.providers.cftc import CftcProvider
 from fin_intel.providers.congress import HouseProvider, SenateProvider
 from fin_intel.providers.dart import DartProvider
@@ -26,6 +27,7 @@ from fin_intel.providers.usaspending import UsaspendingProvider
 
 __all__ = [
     "BojProvider",
+    "CboeProvider",
     "CftcProvider",
     "DartProvider",
     "EdinetProvider",

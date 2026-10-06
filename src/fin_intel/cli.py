@@ -609,6 +609,16 @@ def sync_japan(
     _run("sync-japan", ["mof"], lambda s, _: ingest.sync_japan(s, mof, history))
 
 
+@app.command("sync-cboe")
+def sync_cboe() -> None:
+    """Load Cboe options volume and put/call ratios: the archive since 2006 on first run,
+    then each trading day's statistics."""
+    from fin_intel.providers import CboeProvider
+
+    cboe = CboeProvider(raw_store=default_store())
+    _run("sync-cboe", ["cboe"], lambda s, _: ingest.sync_cboe(s, cboe, date.today()))
+
+
 @app.command("sync-short-interest")
 def sync_short_interest() -> None:
     """Load FINRA short interest (every stock, twice a month since December 2017): new
@@ -913,6 +923,7 @@ def sync_daily() -> None:
         ("economic series", lambda: sync_economic(settings.fred_series_ids)),
         ("EIA energy data", sync_eia),
         ("Japanese rates and flows (MoF)", sync_japan),
+        ("options put/call (Cboe)", sync_cboe),
         ("Korean filings (DART)", lambda: sync_dart(limit=6000)),
         ("Japanese filings (EDINET)", sync_edinet),
         ("Taiwanese prices", sync_tw_prices),

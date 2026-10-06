@@ -117,6 +117,8 @@ TARGETS = {
             ("boj", "mpm_schedule"),
             ("mof", "jgb_curve"),
             ("mof", "flows"),
+            ("cboe", "pc_archive"),
+            ("cboe", "daily_options"),
         ],
         [
             EconomicVintage,

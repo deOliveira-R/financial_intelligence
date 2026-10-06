@@ -32,6 +32,7 @@ from fin_intel import (
     filing_events,
     insiders,
     japan,
+    putcall,
     releases,
     shortinterest,
     taiwan,
@@ -59,6 +60,7 @@ from fin_intel.models import (
 )
 from fin_intel.providers import (
     BojProvider,
+    CboeProvider,
     CftcProvider,
     DartProvider,
     EdinetProvider,
@@ -1025,6 +1027,16 @@ def load_mof(session: Session, dataset: str, body: bytes) -> int:
     return upsert(session, EconomicObservation, observations, key=["series_id", "date"])
 
 
+def load_cboe(session: Session, dataset: str, key: str, payload: Any) -> int:
+    """An archive file (key: product) or a day's statistics (key: date)."""
+    if dataset == "pc_archive":
+        observations = putcall.parse_archive(key, payload)
+    else:
+        observations = putcall.parse_daily(date.fromisoformat(key), payload)
+    upsert(session, EconomicSeries, putcall.series_rows(), key=["id"])
+    return upsert(session, EconomicObservation, observations, key=["series_id", "date"])
+
+
 def load_fred_vintages(session: Session, series_id: str, payload: Any) -> int:
     rows = fred.parse_vintages(series_id, payload)
     return upsert(session, EconomicVintage, rows, key=["series_id", "date", "realtime_start"])
@@ -1083,6 +1095,8 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("boj", "mpm_schedule"): lambda s, k, p, t: releases.load_boj(s, p),
     ("usaspending", "naics_month"): lambda s, k, p, t: contracts.load_page(s, k, p),
     ("finra", "short_interest"): lambda s, k, p, t: load_short_interest(s, p),
+    ("cboe", "pc_archive"): lambda s, k, p, t: load_cboe(s, "pc_archive", k, p),
+    ("cboe", "daily_options"): lambda s, k, p, t: load_cboe(s, "daily_options", k, p),
     ("mof", "jgb_curve"): lambda s, k, p, t: load_mof(s, "jgb_curve", p),
     ("mof", "flows"): lambda s, k, p, t: load_mof(s, "flows", p),
     **{
@@ -1121,6 +1135,7 @@ BINARY_DATASETS = {
     ("boj", "mpm_schedule"),
     ("mof", "jgb_curve"),
     ("mof", "flows"),
+    ("cboe", "pc_archive"),
 }
 # Datasets whose response only means something with its request (recorded as params).
 REQUEST_DATASETS = {("openfigi", "mapping"), ("openfigi", "listings")}
@@ -1772,6 +1787,32 @@ def short_interest_due(session: Session, finra: FinraProvider, today: date) -> l
                     break
         year, month = (year + 1, 1) if month == 12 else (year, month + 1)
     return sorted(due)
+
+
+def sync_cboe(session: Session, cboe: CboeProvider, today: date) -> int:
+    """The archive files once, then every trading day's statistics not stored yet."""
+    with tracked(session, "cboe", "daily_options", "all") as result:
+        session.commit()  # fetch-then-load
+        latest = session.scalar(
+            select(func.max(EconomicObservation.date)).where(
+                EconomicObservation.series_id == "CBOE_TOTAL_PC"
+            )
+        )
+        rows = 0
+        if latest is None:
+            archives = [(p, cboe.fetch_archive(p)) for p in putcall.ARCHIVE_PRODUCTS]
+            rows += sum(load_cboe(session, "pc_archive", p, body) for p, body in archives)
+            session.commit()
+        day = max(putcall.DAILY_START, (latest or date.min) + timedelta(days=1))
+        while day < today:
+            if day.weekday() < 5:
+                payload = cboe.fetch_daily(day)
+                if payload is not None:
+                    rows += load_cboe(session, "daily_options", day.isoformat(), payload)
+                    session.commit()  # per day: progress survives an interruption
+            day += timedelta(days=1)
+        result["rows"] = rows
+    return result["rows"]
 
 
 def sync_contracts_month(session: Session, provider: UsaspendingProvider, month: date) -> int:

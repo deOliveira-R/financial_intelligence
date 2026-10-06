@@ -23,6 +23,7 @@ def settings(monkeypatch):
     # Mocked providers needn't wait out real rate limits (e.g. Massive's 5 calls/minute).
     from fin_intel.providers import (
         BojProvider,
+        CboeProvider,
         DartProvider,
         EiaProvider,
         FedProvider,
@@ -46,6 +47,7 @@ def settings(monkeypatch):
         MofProvider,
         UsaspendingProvider,
         FinraProvider,
+        CboeProvider,
     ):
         monkeypatch.setattr(provider, "limits", (Limit(10_000, MINUTE),))
     yield

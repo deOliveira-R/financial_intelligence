@@ -66,6 +66,8 @@ only on exceptions), the speculation track high-attention with its own signals.
   production, imports/exports, refinery utilization, products supplied, gas storage).
 - **Positioning:** CFTC Commitments of Traders for 26 markets since 2006, with a 3-year
   COT index per trader group. `/cot`, `/cot/{market}`.
+- **Options sentiment:** Cboe put/call ratios and volumes (equity, index, total since 2006;
+  SPX, VIX options, ETPs since 2019), known the next day. `cboe:equity_pc`.
 - **Short interest:** shares short and days to cover per stock, twice a month since
   December 2017 (FINRA), known 8 business days after settlement. `si:GME`, `si:GME:dtc`.
 - **Market internals:** daily breadth for US common stocks (advancers/decliners, A/D line,
@@ -80,7 +82,7 @@ only on exceptions), the speculation track high-attention with its own signals.
   `jp:out_bonds`).
 - **Time series engine:** specs like `px:SPY|sma:200`, `px:CPER/px:GLD|z:252`,
   `fred:DGS10-fred:DGS2`, `breadth:pct_above_200d`, `cot:gold:managed_money:index`,
-  `eia:crude_stocks|diff:1`, `jp:jgb10y`, `gov:3364`, `si:GME:dtc`, with causal transforms (sma, ema, rsi, macd, ret, diff, vol,
+  `eia:crude_stocks|diff:1`, `jp:jgb10y`, `gov:3364`, `si:GME:dtc`, `cboe:equity_pc`, with causal transforms (sma, ema, rsi, macd, ret, diff, vol,
   z, high, low, dd, yoy) on SPY's trading calendar. `timeseries`, `/timeseries`.
 - **Backtests:** rules on any specs (`px:SPY > px:SPY|sma:200 and breadth:… > 40`),
   decided at each close and held the next day, with costs, long/flat or long/short,
