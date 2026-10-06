@@ -46,6 +46,12 @@ MIGRATIONS = Path(__file__).parent / "migrations"
 BASELINE_REVISION = "0001"
 
 
+def include_name(name: str | None, type_: str, parent_names: dict) -> bool:
+    """For migration autogenerate: skip tables models don't declare on purpose (SQLite's
+    full-text index and its shadow tables)."""
+    return not (type_ == "table" and name is not None and name.startswith("filing_text_fts"))
+
+
 def alembic_config(connection: Connection | None = None) -> AlembicConfig:
     config = AlembicConfig()
     config.set_main_option("script_location", str(MIGRATIONS))

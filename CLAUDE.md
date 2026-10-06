@@ -103,6 +103,8 @@ cli.py, api.py          typer CLI; read-only FastAPI
   mis-scaled.
 - Foreign filers often add a USD convenience translation; statements keep the reporting
   currency, and metrics convert at FRED rates (no rate → no valuation).
+- Filing text search uses an FTS5 virtual table (`filing_text_fts`) created in migration
+  0030 with triggers; `db.include_name` keeps autogenerate and the drift test from seeing it.
 - `dict(session.execute(...))` breaks (Result has `.keys()`); use `.all()` first.
 - Massive's free plan: 5 calls/minute and 2 years of history. DART: ~20k requests/day.
 - Stooq, Naver and yfinance are deliberately not used (bot check / unofficial).

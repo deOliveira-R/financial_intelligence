@@ -30,6 +30,7 @@ from fin_intel import (
     energy,
     esef,
     filing_events,
+    filing_text,
     funds,
     insiders,
     japan,
@@ -1097,6 +1098,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("usaspending", "naics_month"): lambda s, k, p, t: contracts.load_page(s, k, p),
     ("finra", "short_interest"): lambda s, k, p, t: load_short_interest(s, p),
     ("sec", "nport"): lambda s, k, p, t: funds.load(s, k, p),
+    ("sec", "filing_document"): lambda s, k, p, t: filing_text.load(s, k, p),
     ("cboe", "pc_archive"): lambda s, k, p, t: load_cboe(s, "pc_archive", k, p),
     ("cboe", "daily_options"): lambda s, k, p, t: load_cboe(s, "daily_options", k, p),
     ("mof", "jgb_curve"): lambda s, k, p, t: load_mof(s, "jgb_curve", p),
@@ -1139,6 +1141,7 @@ BINARY_DATASETS = {
     ("mof", "flows"),
     ("cboe", "pc_archive"),
     ("sec", "nport"),
+    ("sec", "filing_document"),
 }
 # Datasets whose response only means something with its request (recorded as params).
 REQUEST_DATASETS = {("openfigi", "mapping"), ("openfigi", "listings")}
@@ -1817,6 +1820,42 @@ def sync_fund(session: Session, sec_provider: SecProvider, ticker: str, series: 
         for key, body in bodies:
             rows += funds.load(session, key, body)
             session.commit()  # per report
+        result["rows"] = rows
+    return result["rows"]
+
+
+def sync_filing_text(session: Session, sec_provider: SecProvider, cik: int, since: date) -> int:
+    """A company's 10-K/10-Q sections and earnings press releases filed since `since` that
+    haven't been fetched yet."""
+    with tracked(session, "sec", "filing_text", str(cik)) as result:
+        session.commit()  # fetch-then-load
+        store = sec_provider.raw_store
+        have = (
+            {k.split("|")[1] for k in store.latest_hashes("sec", "filing_document")}
+            if store
+            else set()
+        )
+        filings = [
+            f
+            for f in filing_text.wanted(sec_provider.fetch_submissions(cik), since)
+            if f["accession"] not in have
+        ]
+        documents = []
+        for f in filings:
+            if f["form"] in filing_text.FORMS:
+                targets = [(f["document"], "report")]
+            else:  # an earnings 8-K: its press release exhibits
+                page = sec_provider.fetch_index_page(cik, f["accession"])
+                targets = [(e.document, e.kind) for e in filing_text.exhibits(page)]
+            for document, kind in targets:
+                key = filing_text.document_key(
+                    cik, f["accession"], f["form"], f["filed"], f["period"], kind
+                )
+                body = sec_provider.fetch_document(cik, f["accession"], document, key)
+                documents.append((key, body))
+        rows = 0
+        for key, body in documents:
+            rows += filing_text.load(session, key, body)
         result["rows"] = rows
     return result["rows"]
 

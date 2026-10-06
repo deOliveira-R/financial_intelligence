@@ -609,6 +609,49 @@ def sync_japan(
     _run("sync-japan", ["mof"], lambda s, _: ingest.sync_japan(s, mof, history))
 
 
+@app.command("sync-filing-text")
+def sync_filing_text(
+    cik: Annotated[list[int] | None, typer.Option(help="Only these SEC filers")] = None,
+    since: Annotated[str, typer.Option(help="Filed on or after (YYYY-MM-DD)")] = "2023-01-01",
+) -> None:
+    """Fetch 10-K/10-Q narrative sections (risk factors, MD&A) and earnings press releases
+    as searchable text, for the deep-history universe's companies (or --cik)."""
+    from fin_intel import universe
+
+    sec = SecProvider(raw_store=default_store())
+    ciks = cik or sorted({m.cik for m in universe.read() if m.cik})
+    start = date.fromisoformat(since)
+    _run(
+        "sync-filing-text",
+        [str(c) for c in ciks],
+        lambda s, c: ingest.sync_filing_text(s, sec, int(c), start),
+    )
+
+
+@app.command("search-filings")
+def search_filings(
+    query: str,
+    ticker: Annotated[list[str] | None, typer.Option(help="Only these companies")] = None,
+    since: Annotated[str | None, typer.Option(help="Filed on or after (YYYY-MM-DD)")] = None,
+    limit: int = 20,
+) -> None:
+    """Full-text search over stored filing text, e.g. '"export controls" NEAR china'."""
+    from fin_intel import filing_text
+
+    with session_factory()() as session:
+        ciks = None
+        if ticker:
+            securities = [ingest.get_security(session, t) for t in ticker]
+            ciks = [s.cik for s in securities if s is not None and s.cik]
+        hits = filing_text.search(
+            session, query, ciks, date.fromisoformat(since) if since else None, limit
+        )
+    for h in hits:
+        typer.echo(
+            f"{h.filed} {h.form:5} {h.section:12} cik {h.cik} {h.accession}\n    {h.snippet}"
+        )
+
+
 @app.command("sync-funds")
 def sync_funds(
     fund: Annotated[list[str] | None, typer.Option(help="Only these fund tickers")] = None,

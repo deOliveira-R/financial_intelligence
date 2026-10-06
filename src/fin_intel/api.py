@@ -14,6 +14,7 @@ from fin_intel import (
     congress,
     cot,
     events,
+    filing_text,
     funds,
     ingest,
     insiders,
@@ -847,6 +848,40 @@ def economic_calendar(
     """Scheduled economic releases (CPI, payrolls, GDP, FOMC decisions...) with the tracked
     series each one updates; `daily=true` adds daily releases (rates, spreads, VIX)."""
     return releases.upcoming(session, days, start, daily)
+
+
+# --- filing text ----------------------------------------------------------------------------
+
+
+@api.get("/filings/search")
+def filing_search(
+    session: SessionDep,
+    q: str,
+    ticker: str | None = None,
+    since: date | None = None,
+    limit: int = Query(20, le=200),
+) -> list[filing_text.Hit]:
+    """Full-text search over 10-K/10-Q risk factors and MD&A and earnings press releases
+    (SQLite FTS5 syntax: words, "phrases", OR, NEAR)."""
+    ciks = None
+    if ticker:
+        security = ingest.get_security(session, ticker)
+        if security is None or not security.cik:
+            raise HTTPException(404, f"unknown ticker {ticker}")
+        ciks = [security.cik]
+    return filing_text.search(session, q, ciks, since, limit)
+
+
+@api.get("/filings/{accession}/text")
+def filing_sections(session: SessionDep, accession: str, section: str | None = None) -> list[dict]:
+    """A filing's stored sections as plain text (section: risk_factors, mdna, EX-99.1...)."""
+    rows = filing_text.get(session, accession, section)
+    if not rows:
+        raise HTTPException(404, f"no text for {accession}")
+    return [
+        {"section": r.section, "form": r.form, "filed": r.filed, "period": r.period, "text": r.text}
+        for r in rows
+    ]
 
 
 # --- index ETF holdings ---------------------------------------------------------------------

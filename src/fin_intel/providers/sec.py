@@ -153,6 +153,17 @@ class SecProvider(Provider):
         key = f"{ticker}|{series_id}|{accession}|{filed}"
         return self.get_bytes(url, dataset="nport", key=key)
 
+    def fetch_document(self, cik: int, accession: str, document: str, key: str) -> bytes:
+        """A document of a filing (the report itself or an exhibit); `key` describes it for
+        the loader (filing_text.py)."""
+        url = f"{ARCHIVES}/{cik}/{accession.replace('-', '')}/{document}"
+        return self.get_bytes(url, dataset="filing_document", key=key)
+
+    def fetch_index_page(self, cik: int, accession: str) -> bytes:
+        """A filing's index page, which lists each document with its type (EX-99.1...)."""
+        url = f"{ARCHIVES}/{cik}/{accession.replace('-', '')}/{accession}-index.htm"
+        return self.get_bytes(url, dataset="filing_index_page", key=accession)
+
     def fetch_filing_index(self, cik: int, accession: str) -> Any:
         """The list of files in a filing."""
         url = f"{ARCHIVES}/{cik}/{accession.replace('-', '')}/index.json"

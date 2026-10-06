@@ -594,6 +594,22 @@ class CotPosition(Base):
     spread: Mapped[float | None] = mapped_column(Float)
 
 
+class FilingText(Base):
+    """A narrative section of a filing as plain text (filing_text.py): 10-K/10-Q risk
+    factors and MD&A, 8-K earnings press releases. Indexed for full-text search in the
+    SQLite virtual table filing_text_fts (kept in sync by triggers; see migration 0030)."""
+
+    __tablename__ = "filing_texts"
+
+    accession: Mapped[str] = mapped_column(String(32), primary_key=True)
+    section: Mapped[str] = mapped_column(String(16), primary_key=True)  # mdna, EX-99.1...
+    cik: Mapped[int] = mapped_column(index=True)
+    form: Mapped[str] = mapped_column(String(16))
+    filed: Mapped[date] = mapped_column(Date, index=True)
+    period: Mapped[date | None] = mapped_column(Date)
+    text: Mapped[str] = mapped_column(Text)
+
+
 class FundHolding(Base):
     """One holding of a tracked fund (an index ETF) in an N-PORT report (funds.py).
     `identifier` is the CUSIP, else the ISIN, else the holding's name."""

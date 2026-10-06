@@ -22,6 +22,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 | SEC EDGAR: filing archives | XBRL instances of filings the company facts API lacks (e.g. IFRS 2025 taxonomy 20-Fs: TSMC, Toyota, Sony) | Same | `xbrl.py`, `fill-xbrl-gaps` | Public |
 | SEC EDGAR: submissions | SIC code, filer category, country of incorporation, recent filings | Same | `sync-sic` | Public |
 | SEC: Insider Transactions Data Sets + daily Form 4 XML | Forms 3/4/5 transactions | Same | `insiders.py`, `sync-insiders` | Public |
+| SEC EDGAR: filing documents | 10-K/10-Q narrative sections and 8-K earnings press releases as text | Same | `filing_text.py`, `sync-filing-text` | Public |
 | SEC EDGAR: N-PORT reports | Holdings of ~26 index ETFs (S&P 500/400/600 via iShares, Russell, Nasdaq-100, sector SPDRs, semis, defense, biotech, uranium) since late 2019: point-in-time index membership and weights | Same; fund series from `company_tickers_mf.json` | `funds.py`, `sync-funds` | Public |
 | SEC: Form 13F Data Sets | Institutional holdings, quarterly | Same | `thirteenf.py`, `sync-13f` | Public |
 | EDINET (Japan FSA) API v2 | Annual, quarterly and half-year reports' XBRL for ~4,000 listed companies (J-GAAP, IFRS) | Free key (`FI_EDINET_API_KEY`); we keep only the XBRL instance of each report package (~100 KB gzipped) | `providers/edinet.py`, `edinet.py`, `sync-edinet` | Public |

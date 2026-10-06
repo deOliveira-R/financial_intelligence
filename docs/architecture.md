@@ -58,6 +58,7 @@ Rules that hold everywhere:
 | Markets and macro | `prices.py`, `breadth.py`, `macro.py`, `energy.py`, `cot.py`, `releases.py`, `indicators.py`, `timeseries.py` | Prices stored unadjusted; adjustment computed on read |
 | Big players | `insiders.py`, `thirteenf.py`, `congress.py`, `events.py` | Forms 3/4/5, 13F, congressional PTRs, event studies |
 | Portfolio | `portfolio.py`, `importers.py` | Tax lots (FIFO), harvesting, wash-sale window, replacements |
+| Domain data | `japan.py`, `carry.py`, `contracts.py`, `shortinterest.py`, `putcall.py`, `funds.py`, `filing_text.py`, `universe.py` | JGB curve and flows, yen carry gauge, federal contracts, short interest, put/call, index ETF holdings, filing text (FTS5), deep-history universe |
 | Research | `backtest.py`, `screentest.py`, `events.py` | Rules on point-in-time series, screen backtests, disclosure event studies |
 
 ## Identity

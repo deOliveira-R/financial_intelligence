@@ -92,6 +92,15 @@ only on exceptions), the speculation track high-attention with its own signals.
   decided at each close and held the next day, with costs, long/flat or long/short,
   per-year breakdown. `backtest`, `/backtest`.
 
+## 5. Filing text (for language-model analysis)
+
+- 10-K risk factors and MD&A, 10-Q MD&A and risk factor updates, and earnings press
+  releases (8-K item 2.02 exhibits) as plain text, for the deep-history universe since 2023
+  (`sync-filing-text`, any company with `--cik`).
+- Full-text search with SQLite FTS5 (words, "phrases", OR, NEAR), with snippets:
+  `search-filings '"export controls" NEAR china'`, `/filings/search?q=...&ticker=NVDA`;
+  full sections at `/filings/{accession}/text`.
+
 ## Data operations
 
 - `sync-daily` (Mon–Fri after the US close): market bars, splits and dividends, breadth,

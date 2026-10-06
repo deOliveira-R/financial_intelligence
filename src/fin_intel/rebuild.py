@@ -38,6 +38,7 @@ from fin_intel.models import (
     Fact,
     FederalObligation,
     Filing,
+    FilingText,
     FiscalCalendar,
     ForwardOutcome,
     FundHolding,
@@ -99,6 +100,7 @@ TARGETS = {
     "policy": ([("usaspending", "naics_month")], [FederalObligation]),
     "shorts": ([("finra", "short_interest")], [ShortInterest]),
     "funds": ([("sec", "nport")], [FundHolding]),
+    "texts": ([("sec", "filing_document")], [FilingText]),
     "cot": (
         [("cftc", "legacy"), ("cftc", "disaggregated"), ("cftc", "tff")],
         [CotPosition],
@@ -176,6 +178,7 @@ TARGETS = {
             FederalObligation,
             ShortInterest,
             FundHolding,
+            FilingText,
         ],
     ),
 }
