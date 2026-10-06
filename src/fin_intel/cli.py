@@ -609,6 +609,25 @@ def sync_japan(
     _run("sync-japan", ["mof"], lambda s, _: ingest.sync_japan(s, mof, history))
 
 
+@app.command("sync-contracts")
+def sync_contracts(
+    limit: Annotated[int | None, typer.Option(help="Most months this run")] = None,
+) -> None:
+    """Load federal contract obligations by industry (NAICS) from USAspending, monthly
+    since October 2007; recent months are refetched until they settle."""
+    from fin_intel.providers import UsaspendingProvider
+
+    provider = UsaspendingProvider(raw_store=default_store())
+    with session_factory()() as session:
+        months = ingest.contract_months_due(session, date.today())[:limit]
+    if months:
+        _run(
+            "sync-contracts",
+            [m.isoformat() for m in months],
+            lambda s, m: ingest.sync_contracts_month(s, provider, date.fromisoformat(m)),
+        )
+
+
 @app.command()
 def carry(
     as_of: Annotated[str | None, typer.Option(help="YYYY-MM-DD; default: latest")] = None,
@@ -906,6 +925,7 @@ def sync_weekly() -> None:
         ("cross-listings of foreign companies", sync_crosslist),
         ("economic release calendar", sync_calendar),
         ("JGB history (MoF, monthly file)", lambda: sync_japan(history=True)),
+        ("federal contract obligations (USAspending)", sync_contracts),
         ("forward outcomes", derive_outcomes_cmd),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))

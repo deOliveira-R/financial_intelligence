@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from fin_intel import (
     congress,
+    contracts,
     cot,
     crosslist,
     dart,
@@ -71,6 +72,7 @@ from fin_intel.providers import (
     SecProvider,
     SenateProvider,
     TiingoProvider,
+    UsaspendingProvider,
     fred,
     massive,
     sec,
@@ -1071,6 +1073,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("fred", "release_dates"): lambda s, k, p, t: releases.load_release_dates(s, int(k), p),
     ("fed", "fomc_calendar"): lambda s, k, p, t: releases.load_fomc(s, p),
     ("boj", "mpm_schedule"): lambda s, k, p, t: releases.load_boj(s, p),
+    ("usaspending", "naics_month"): lambda s, k, p, t: contracts.load_page(s, k, p),
     ("mof", "jgb_curve"): lambda s, k, p, t: load_mof(s, "jgb_curve", p),
     ("mof", "flows"): lambda s, k, p, t: load_mof(s, "flows", p),
     **{
@@ -1130,6 +1133,7 @@ SNAPSHOT_DATASETS = {
     ("boj", "mpm_schedule"),  # per page: current and past years
     ("mof", "jgb_curve"),  # per key: the history file, each month's file
     ("mof", "flows"),
+    ("usaspending", "naics_month"),  # per month and page; months are revised
 }
 
 
@@ -1713,6 +1717,41 @@ def sync_japan(session: Session, mof: MofProvider, history: bool = False) -> int
             bodies.insert(0, ("jgb_curve", mof.fetch_jgb_history()))
         result["rows"] = sum(load_mof(session, dataset, body) for dataset, body in bodies)
     return result["rows"]
+
+
+def sync_contracts_month(session: Session, provider: UsaspendingProvider, month: date) -> int:
+    """A month's federal contract obligations by NAICS code, every page."""
+    with tracked(session, "usaspending", "naics_month", f"{month:%Y-%m}") as result:
+        session.commit()  # fetch-then-load
+        pages, page = [], 1
+        while True:
+            payload = provider.fetch_naics_month(month, page)
+            pages.append((f"{month:%Y-%m}|{page}", payload))
+            if not (payload.get("page_metadata") or {}).get("hasNext"):
+                break
+            page += 1
+        result["rows"] = sum(contracts.load_page(session, key, p) for key, p in pages)
+    return result["rows"]
+
+
+def contract_months_due(session: Session, today: date) -> list[date]:
+    """Months never loaded, or last loaded before they settled (revisions, DoD's delay)."""
+    loaded = {
+        k: ok
+        for k, ok in session.execute(
+            select(SyncState.key, SyncState.last_success).where(
+                SyncState.provider == "usaspending",
+                SyncState.dataset == "naics_month",
+                SyncState.last_success.is_not(None),
+            )
+        )
+    }
+    due = []
+    for month in contracts.months(today):
+        ok = loaded.get(f"{month:%Y-%m}")
+        if ok is None or ok.date() - contracts.month_end(month) < contracts.SETTLED_AFTER:
+            due.append(month)
+    return due
 
 
 def sync_eia(session: Session, eia_provider: EiaProvider, series_id: str) -> int:

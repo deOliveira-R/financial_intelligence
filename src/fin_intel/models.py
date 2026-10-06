@@ -594,6 +594,18 @@ class CotPosition(Base):
     spread: Mapped[float | None] = mapped_column(Float)
 
 
+class FederalObligation(Base):
+    """Federal contract obligations in a month for one industry (NAICS code), from
+    USAspending (contracts.py). Revised as agencies report; DoD reports 90 days late."""
+
+    __tablename__ = "federal_obligations"
+
+    month: Mapped[date] = mapped_column(Date, primary_key=True)  # first day of the month
+    naics: Mapped[str] = mapped_column(String(6), primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(256))
+    amount: Mapped[float] = mapped_column(Float)
+
+
 class CorporateEvent(Base):
     """A dated corporate event from SEC filings (filing_events.py): one row per 8-K item, or
     per filing for other event forms (13D/13G stakes, late filings, delistings, tender

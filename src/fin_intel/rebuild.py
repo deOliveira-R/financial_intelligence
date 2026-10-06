@@ -36,6 +36,7 @@ from fin_intel.models import (
     EconomicSeries,
     EconomicVintage,
     Fact,
+    FederalObligation,
     Filing,
     FiscalCalendar,
     ForwardOutcome,
@@ -93,6 +94,7 @@ TARGETS = {
         [("house", "fd_index"), ("house", "ptr"), ("senate", "search"), ("senate", "ptr")],
         [CongressTrade, CongressReport],
     ),
+    "policy": ([("usaspending", "naics_month")], [FederalObligation]),
     "cot": (
         [("cftc", "legacy"), ("cftc", "disaggregated"), ("cftc", "tff")],
         [CotPosition],
@@ -165,6 +167,7 @@ TARGETS = {
             CongressReport,
             CotPosition,
             CorporateEvent,
+            FederalObligation,
         ],
     ),
 }

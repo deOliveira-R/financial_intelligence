@@ -21,6 +21,7 @@ from fin_intel.providers.openfigi import OpenFigiProvider
 from fin_intel.providers.sec import SecProvider
 from fin_intel.providers.tiingo import TiingoProvider
 from fin_intel.providers.twse import TwseProvider
+from fin_intel.providers.usaspending import UsaspendingProvider
 
 __all__ = [
     "BojProvider",
@@ -45,4 +46,5 @@ __all__ = [
     "SenateProvider",
     "TiingoProvider",
     "TwseProvider",
+    "UsaspendingProvider",
 ]

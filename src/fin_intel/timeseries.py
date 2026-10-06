@@ -43,7 +43,7 @@ from fin_intel.models import (
 )
 from fin_intel.prices import adjustments
 
-SOURCES = ("px", "close", "volume", "fred", "breadth", "cot", "eia", "jp")
+SOURCES = ("px", "close", "volume", "fred", "breadth", "cot", "eia", "jp", "gov")
 _OPERATOR = re.compile(rf"([/-])(?=(?:{'|'.join(SOURCES)}):)")
 
 
@@ -143,6 +143,8 @@ def _load(
         return _eia(session, ident, days, pit)
     if source == "jp":
         return _japan(session, ident, days, pit)
+    if source == "gov":
+        return _contracts(session, ident, days, pit)
     if source == "cot":
         return _cot(session, ident.lower(), days, pit)
     if source == "breadth":
@@ -249,6 +251,18 @@ def _japan(session: Session, ident: str, days: list[date], pit: bool) -> indicat
         raise SpecError(f"no data for {series_id}; run fin-intel sync-japan")
     known = [(japan.available_on(series_id, d) if pit else d, v) for d, v in rows]
     return _step(known, days)
+
+
+def _contracts(session: Session, prefix: str, days: list[date], pit: bool) -> indicators.Series:
+    """Monthly federal contract obligations for NAICS codes starting with `prefix`."""
+    from fin_intel import contracts
+
+    if not prefix.isdigit():
+        raise SpecError(f"gov:{prefix}: expected a NAICS code or prefix, e.g. gov:3364")
+    rows = contracts.series(session, prefix)
+    if not rows:
+        raise SpecError(f"no federal obligations for NAICS {prefix}*; run sync-contracts")
+    return _step([(contracts.available_on(m) if pit else m, v) for m, v in rows], days)
 
 
 def _step(known: list[tuple[date, float]], days: list[date]) -> indicators.Series:

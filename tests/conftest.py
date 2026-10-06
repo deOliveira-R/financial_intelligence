@@ -30,6 +30,7 @@ def settings(monkeypatch):
         MassiveProvider,
         MofProvider,
         SenateProvider,
+        UsaspendingProvider,
     )
     from fin_intel.providers.ratelimit import MINUTE, Limit
 
@@ -42,6 +43,7 @@ def settings(monkeypatch):
         DartProvider,
         BojProvider,
         MofProvider,
+        UsaspendingProvider,
     ):
         monkeypatch.setattr(provider, "limits", (Limit(10_000, MINUTE),))
     yield

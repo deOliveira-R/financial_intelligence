@@ -46,7 +46,11 @@ itself before any subscription. Status and order:
    press releases, proxies (EDGAR); EDINET report text.
 6. **Domain data**: FINRA short volume/interest history, CBOE put/call statistics, SEC N-PORT
    (ETF holdings → index membership since 2019), World Bank commodity prices, freight-rate
-   headlines (cyclicals like ZIM), policy data (bills, lobbying, contracts, committees).
+   headlines (cyclicals like ZIM), policy data. Done: federal contract obligations by NAICS
+   (USAspending, `contracts.py`). Next in policy: lobbying spend by issue area (Senate LDA:
+   needs the user's free key from lda.gov/api/register), bills by policy area (congress.gov:
+   free api.data.gov key), committee rosters (unitedstates/congress-legislators, no key);
+   company-level contract recipients (name matching to issuers, conservative).
 7. Then the dedicated signal-design session: hypotheses, analysis skills, evals,
    hill-climbing on the historical data.
 

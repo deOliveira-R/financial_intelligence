@@ -53,6 +53,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 |---|---|---|---|---|
 | House Clerk financial disclosures | Yearly filing index; periodic transaction report PDFs (electronic filings parsed; paper scans skipped) | Free | `providers/congress.py`, `congress.py` | Public |
 | Senate eFD | Periodic transaction reports (HTML) after accepting the site's terms | Free | same | Public |
+| USAspending.gov API | Federal contract obligations by industry (NAICS), monthly since October 2007 | Free, no key | `providers/usaspending.py`, `contracts.py`, `sync-contracts` | Public |
 | OpenFIGI | CUSIP → security (13F), ticker/ISIN → share-class FIGI (cross-listings) | Free; key (`FI_OPENFIGI_API_KEY`) raises limits ~100x | `providers/openfigi.py`, `crosslist.py` | Free to use |
 | GLEIF | ISIN ↔ LEI mapping (daily bulk file, ~32 MB) for European issuers | Free; the per-LEI API throttles hard, so we use the bulk file | `providers/gleif.py` | Open data (CC0) |
 
@@ -68,7 +69,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 | Alpaca (free IEX feed) | Intraday bars since 2016, real-time IEX stream | No intraday use case yet |
 | Finnhub, Twelve Data, FMP and Alpha Vantage free tiers | Quotes, profiles, estimates, international prices | Quotas too small to build on; spot checks only |
 | CoinGecko, exchange APIs (Coinbase, Kraken) | Crypto OHLCV and metadata | Crypto not in scope yet |
-| congress.gov API (free key), Senate LDA lobbying API, USAspending, unitedstates/congress-legislators | Bills and policy areas, lobbying by industry, federal contracts, committee rosters | Planned to corroborate congressional signals (see backlog) |
+| congress.gov API (free api.data.gov key), Senate LDA lobbying API (lda.gov, free key), unitedstates/congress-legislators | Bills and policy areas, lobbying spend by issue area, committee rosters | Planned to corroborate congressional signals. LDA without a key allows ~15 requests/minute at 25 filings a page (about 20,000 quarterly reports a quarter), so its history needs the key |
 | GDELT, SEC 8-K feeds, company RSS | News and events | News/sentiment not started |
 | MOPS (Taiwan) | Historical quarterly statements | Backfill planned: the open data has only the latest quarter |
 | J-Quants (JPX), free tier | Japanese prices and fundamentals, 12-week delay | Delay makes it useless for current valuations; fine for backtests |
