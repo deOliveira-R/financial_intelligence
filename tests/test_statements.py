@@ -215,6 +215,38 @@ def test_restatement_wins(session):
     assert [r[2] for r in items(session, 5, "net_income")] == [9.0]
 
 
+def test_proxy_statement_figures_are_ignored(session):
+    # Pay-versus-performance tables in proxies tag net income too, often mis-scaled.
+    ingest.load_company_facts(
+        session,
+        6,
+        payload(
+            6,
+            {
+                ("us-gaap", "NetIncomeLoss"): (
+                    "USD",
+                    [
+                        fact(
+                            "2025-01-01", "2025-12-31", 3.5e9, "K", 2025, "FY", filed="2026-02-17"
+                        ),
+                        fact(
+                            "2025-01-01",
+                            "2025-12-31",
+                            3511.0,
+                            "P",
+                            2025,
+                            "FY",
+                            form="DEF 14A",
+                            filed="2026-04-16",
+                        ),
+                    ],
+                ),
+            },
+        ),
+    )
+    assert [r[2] for r in items(session, 6, "net_income")] == [3.5e9]
+
+
 def test_rederiving_replaces_rows(session):
     data = payload(
         6, {("us-gaap", "Assets"): ("USD", [fact(None, "2025-12-31", 1.0, "K", 2025, "FY")])}

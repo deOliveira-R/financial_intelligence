@@ -15,6 +15,16 @@ ANNUAL_FORMS = {"10-K", "10-K/A", "20-F", "20-F/A", "40-F", "40-F/A", "annual"}
 # Transition reports cover the stub period when a company changes its fiscal year end;
 # their period end marks the new fiscal year end.
 TRANSITION_FORMS = {"10-KT", "10-KT/A"}
+# Filings whose financial figures statements may use (amendments included): periodic
+# reports, and registration statements (a new issuer's audited financials before its first
+# 10-Q). Others also carry us-gaap tags, unreliably: proxy statements' pay-versus-
+# performance tables (Arista's 2025 net income tagged as $3,511), fee exhibits, notes.
+FINANCIAL_FORMS = {
+    "10-K", "10-Q", "10-KT", "10-QT", "20-F", "40-F", "6-K", "8-K",
+    "S-1", "S-4", "S-11", "F-1", "F-4", "10-12B", "10-12G", "20FR12B",
+    "annual", "half-year", "quarterly",
+}  # fmt: skip
+FINANCIAL_FORMS |= {f + "/A" for f in FINANCIAL_FORMS}
 
 # Inclusive duration ranges in days. 52/53-week years and 13/14-week quarters
 # make durations drift a few days around the nominal value.

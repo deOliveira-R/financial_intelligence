@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from fin_intel.db import upsert
 from fin_intel.models import Concept, Fact, Filing, StatementItem
-from fin_intel.periods import period_type
+from fin_intel.periods import FINANCIAL_FORMS, period_type
 
 # line item -> (statement, kind, [(taxonomy, concept), ...] in priority order)
 # kind: "flow" (summed over a period), "stock" (balance at a date), "per_share", "shares"
@@ -416,7 +416,11 @@ def build_issuer(session: Session, cik: int) -> int:
             Filing.filed,
         )
         .join(Filing, Filing.id == Fact.filing_id)
-        .where(Fact.cik == cik, Fact.concept_id.in_(list(by_concept)))
+        .where(
+            Fact.cik == cik,
+            Fact.concept_id.in_(list(by_concept)),
+            Filing.form.in_(FINANCIAL_FORMS),
+        )
     ).all()
 
     # Latest filed value per (concept, unit, period): restatements win. The first filing

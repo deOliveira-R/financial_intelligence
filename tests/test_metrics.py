@@ -63,13 +63,28 @@ def test_share_class_consistency():
     assert not _consistent(1.45e6, 480.0, brk)
     # A count on another basis than EPS (e.g. one class's cover-page count only).
     assert not _consistent(3e9, 100.0, items)
-    # EPS reported quarterly only for the latest months: judged on the last fiscal year.
+    # Judged on the same period for both, the latest one reporting both.
     nvda_like = {
         "net_income": [fy("2026-01-25", 120e9), Item(D("2026-04-27"), D("2026-07-26"), "Q2", 60e9)],
         "eps_diluted": [fy("2026-01-25", 4.9), Item(D("2026-04-27"), D("2026-07-26"), "Q2", 2.46)],
     }
     assert _consistent(24.1e9, 230.0, nvda_like)
     assert _consistent(None, 1.0, items) and _consistent(1e9, 1.0, {})
+    # Honeywell-like: shares halved after the fiscal year; the latest quarter agrees.
+    hon = {
+        "net_income": [
+            fy("2025-12-31", 4.7e9),
+            Item(D("2026-04-01"), D("2026-06-30"), "Q2", 5.7e9),
+        ],
+        "eps_diluted": [fy("2025-12-31", 7.36), Item(D("2026-04-01"), D("2026-06-30"), "Q2", 17.8)],
+    }
+    assert _consistent(317e6, 214.0, hon)
+    # A loss or a cents-level EPS in the latest quarter: judged on an earlier period.
+    tiny = {
+        "net_income": [fy("2025-12-31", 50e9), Item(D("2026-01-01"), D("2026-03-31"), "Q1", 1e8)],
+        "eps_diluted": [fy("2025-12-31", 5.0), Item(D("2026-01-01"), D("2026-03-31"), "Q1", 0.01)],
+    }
+    assert _consistent(10e9, 100.0, tiny) and not _consistent(3e9, 100.0, tiny)
 
 
 def annual_items(year, revenue, ebit, net, assets, equity):

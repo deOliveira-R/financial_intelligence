@@ -45,6 +45,7 @@ from fin_intel.models import (
 STALE_AFTER = timedelta(days=550)  # newest financials older than this: skip (likely gone)
 CURRENT_WINDOW = timedelta(days=400)  # inputs must be this close to the latest financials
 PRIMARY_TYPES = ("CS", "ADRC", "OS")
+MIN_EPS = 0.05  # smallest EPS the share-count consistency check trusts (rounded to cents)
 ADR_SHARES_WINDOW = timedelta(days=120)  # depositary share counts older than this: unknown
 PRIMARY_MICS = ("XNYS", "XNAS", "XASE", "XTAI", "ROCO")  # US, Taiwan (TWSE, TPEx)
 
@@ -363,17 +364,19 @@ def _issuer_metrics(
     if liabilities is None and assets is not None and equity is not None:
         liabilities = assets - equity
     current_assets, current_liabilities = bal("current_assets"), bal("current_liabilities")
-    shares = (
-        bal("shares_outstanding")
-        or ttm_last(items.get("shares_diluted", []))
-        or implied_shares(items, period_end)
+    # The first count consistent with EPS: a cover-page count can cover one share class
+    # only (HEICO reports its common, not its Class A), where the diluted count covers all.
+    counts = (
+        bal("shares_outstanding"),
+        ttm_last(items.get("shares_diluted", [])),
+        implied_shares(items, period_end),
     )
+    shares = next((c for c in counts if c and _consistent(c, price, items)), None)
 
     if listing_shares is not None:  # an ADR: its own count, in depositary shares
         market_cap = price * listing_shares if valued and listing_shares else None
     else:
-        consistent = shares and _consistent(shares, price, items)
-        market_cap = price * shares if valued and shares and consistent else None
+        market_cap = price * shares if valued and shares else None
     ev = None if market_cap is None else market_cap + debt + leases - cash
     ebitda = None if ebit is None else ebit + (depreciation or 0.0)
     tax_rate = min(max(_div(tax, pretax) or 0.21, 0.0), 0.5)
@@ -427,8 +430,9 @@ def _issuer_metrics(
 
 def _consistent(shares: float | None, price: float, items: dict[str, list[Item]]) -> bool:
     """Whether the share count, EPS and price are in the same share class's terms, judged
-    on the latest fiscal year reporting both net income and EPS (same period on purpose:
-    trailing EPS can lag trailing net income when a company only reports EPS quarterly).
+    on the latest period reporting both net income and EPS (same period on purpose:
+    trailing EPS can lag trailing net income when a company only reports EPS quarterly;
+    latest, so a reverse split or consolidation since the fiscal year doesn't fail it).
 
     - The share count implied by that year (net income / EPS) must be within 1.5x of the
       reported count: catches a count on another basis than EPS.
@@ -436,22 +440,22 @@ def _consistent(shares: float | None, price: float, items: dict[str, list[Item]]
       Berkshire reports per Class A share (~$62,000 EPS) while BRK-B trades near $480, a
       "P/E" of 0.008. No real company earns its whole share price in a year.
     """
-    eps_by_end = {
-        i.period_end: i.value
-        for name in ("eps_diluted", "eps_basic")  # Berkshire reports basic only
+    eps_by_period = {
+        (i.period_start, i.period_end): i.value
+        for name in ("eps_basic", "eps_diluted")  # diluted wins; Berkshire reports basic only
         for i in items.get(name, [])
-        if i.fiscal_period == "FY"
     }
-    years = [
-        (i.period_end, i.value, eps_by_end[i.period_end])
+    # Losses say nothing about the count, and EPS is rounded to cents: skip tiny EPS.
+    periods = [
+        (i.period_end, i.period_start, i.value, eps)
         for i in items.get("net_income", [])
-        if i.fiscal_period == "FY" and i.period_end in eps_by_end
+        if (eps := eps_by_period.get((i.period_start, i.period_end))) is not None
+        and i.value > 0
+        and eps >= MIN_EPS
     ]
-    if not shares or not years:
+    if not shares or not periods:
         return True  # nothing to compare
-    _, net_income, eps = max(years)
-    if net_income <= 0 or eps <= 0:
-        return True
+    *_, net_income, eps = max(periods)
     if price / eps < 1:
         return False
     return 1 / 1.5 <= shares / (net_income / eps) <= 1.5
