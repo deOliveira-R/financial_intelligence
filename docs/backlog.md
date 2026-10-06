@@ -76,7 +76,6 @@ itself before any subscription. Status and order:
 - **Market structure:** FINRA short volume, SEC fails-to-deliver.
 - **ETF holdings:** SEC N-PORT filings.
 - **Options:** yfinance or delayed CBOE chains, with Greeks computed ourselves.
-- **Sector breadth:** SIC codes are loaded; breadth per sector (% above 200-day) is next.
 
 - **Price outliers:** fixed 2026-10-06: a renamed company no longer receives its new
   symbol's rows from before the rename (BNY Mellon got a muni fund's "BNY" bars on

@@ -100,3 +100,24 @@ def test_breadth_in_timeseries(session):
     assert series["breadth:NET_ADVANCES"] == [None, 0, 0]  # day one has no previous day
     with pytest.raises(timeseries.SpecError, match="unknown breadth field"):
         timeseries.build(session, ["breadth:nope"])
+
+
+def test_sector_universes_and_specs(session):
+    from fin_intel.models import Issuer
+
+    oil = stock(session, "OIL", [10, 11, 12])
+    chip = stock(session, "CHIP", [10, 9, 8])
+    session.add_all([Issuer(cik=1, name="Oil", sic=1311), Issuer(cik=2, name="Chip", sic=3674)])
+    session.flush()
+    oil.cik, chip.cik = 1, 2
+    session.commit()
+    breadth.compute_all(session)
+    mining = {r.date: r for r in session.query(MarketBreadth).filter_by(universe="sector:mining")}
+    assert mining[START + timedelta(days=1)].advancers == 1
+    assert mining[START + timedelta(days=1)].decliners == 0
+    stock(session, "SPY", [100, 100, 100], security_type="ETF")
+    _, series = timeseries.build(
+        session, ["breadth:advancers", "breadth:sector:manufacturing:decliners"]
+    )
+    assert series["breadth:advancers"][1] == 1
+    assert series["breadth:sector:manufacturing:decliners"][1] == 1

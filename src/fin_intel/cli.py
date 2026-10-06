@@ -1055,7 +1055,7 @@ def derive_breadth_cmd() -> None:
     from fin_intel import breadth
 
     with session_factory()() as session:
-        typer.echo(f"breadth: {breadth.compute(session)} days")
+        typer.echo(f"breadth: {breadth.compute_all(session)} universe-days")
 
 
 @app.command("derive-metrics")

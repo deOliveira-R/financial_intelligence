@@ -246,15 +246,19 @@ def _last_break(bars: list[DailyBar], split_days: Sequence[date]) -> int:
     return start
 
 
-def _breadth(session: Session, field: str, days: list[date]) -> indicators.Series:
+def _breadth(session: Session, ident: str, days: list[date]) -> indicators.Series:
+    """`breadth:<field>` (the whole market) or `breadth:<universe>:<field>`, e.g.
+    breadth:industry:semiconductors:pct_above_200d."""
     from fin_intel import breadth
 
+    universe, _, field = ident.rpartition(":")
+    universe = universe or "us_common"
     if field not in breadth.FIELDS:
         raise SpecError(f"unknown breadth field {field!r}; one of {', '.join(breadth.FIELDS)}")
-    rows = session.scalars(select(MarketBreadth).where(MarketBreadth.universe == "us_common"))
+    rows = session.scalars(select(MarketBreadth).where(MarketBreadth.universe == universe))
     by_date = {r.date: breadth.field_values(r, field) for r in rows}
     if not by_date:
-        raise SpecError("no breadth data; run fin-intel derive-breadth")
+        raise SpecError(f"no breadth data for {universe}; run fin-intel derive-breadth")
     return [by_date.get(d) for d in days]
 
 

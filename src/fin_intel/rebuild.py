@@ -239,6 +239,6 @@ def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
         session.commit()
     if target in ("market", "prices", "all"):
         # Derived from bars and statements: refresh now rather than at the next daily sync.
-        breadth.compute(session)
+        breadth.compute_all(session)
         metrics.compute(session)
     return loaded

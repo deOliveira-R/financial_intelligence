@@ -75,7 +75,9 @@ only on exceptions), the speculation track high-attention with its own signals.
 - **Short interest:** shares short and days to cover per stock, twice a month since
   December 2017 (FINRA), known 8 business days after settlement. `si:GME`, `si:GME:dtc`.
 - **Market internals:** daily breadth for US common stocks (advancers/decliners, A/D line,
-  new highs/lows, share above 50/200-day averages), delisted stocks included.
+  new highs/lows, share above 50/200-day averages), delisted stocks included; also per SIC
+  sector and per strategic industry (`breadth:sector:mining:pct_above_200d`,
+  `breadth:industry:semiconductors:pct_above_200d`).
 - **Calendar:** scheduled releases (CPI, payrolls, GDP…), FOMC and Bank of Japan
   decisions. `fin-intel calendar`, `/calendar`.
 - **Yen carry trade gauge:** US-Japan differentials (3-month, 2- and 10-year), carry-to-risk,

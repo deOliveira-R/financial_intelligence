@@ -5,28 +5,59 @@ ETFs and preferreds excluded). Closes are split-adjusted, so a 2-for-1 split isn
 decline. Each day counts every stock with a bar that day, delisted ones included once
 their history is imported, so the measures aren't limited to today's survivors.
 
-Fields available to timeseries specs as `breadth:<field>`: the stored counts plus
-pct_above_50d, pct_above_200d, net_advances, ad_ratio, up_volume_ratio, net_new_highs.
+Sector universes split it by SIC division (`sector:mining`…), industry universes by the
+deep-history universe's strategic industries (`industry:semiconductors`…).
+
+Fields available to timeseries specs as `breadth:<field>` (the whole market) or
+`breadth:<universe>:<field>`: the stored counts plus pct_above_50d, pct_above_200d,
+net_advances, ad_ratio, up_volume_ratio, net_new_highs.
 """
 
 from collections import defaultdict, deque
 from datetime import date
+from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
+from fin_intel import sectors
+from fin_intel import universe as deep
 from fin_intel.db import upsert
-from fin_intel.models import CorporateAction, DailyBar, MarketBreadth, Security
+from fin_intel.models import CorporateAction, DailyBar, Issuer, MarketBreadth, Security
 
-UNIVERSES = {
-    "us_common": (Security.security_type == "CS") & Security.mic.in_(("XNYS", "XNAS", "XASE")),
-}
+US_COMMON = (Security.security_type == "CS") & Security.mic.in_(("XNYS", "XNAS", "XASE"))
 SOURCE = "massive"  # the market-wide feed
 
 
-def compute(session: Session, universe: str = "us_common") -> int:
+def universes() -> dict[str, Any]:
+    """Universe name -> a select of its member security ids."""
+    common = select(Security.id).where(US_COMMON)
+    out: dict[str, Any] = {"us_common": common}
+    for name in sectors.SECTORS:
+        in_division = or_(*(Issuer.sic.between(lo, hi) for lo, hi in sectors.codes(name)))
+        out[f"sector:{name}"] = (
+            select(Security.id)
+            .join(Issuer, Issuer.cik == Security.cik)
+            .where(US_COMMON, in_division)
+        )
+    by_industry: dict[str, set[int]] = defaultdict(set)
+    for m in deep.read():
+        if m.cik and m.industry != "etf":
+            by_industry[m.industry].add(m.cik)
+    for industry, ciks in by_industry.items():
+        out[f"industry:{industry}"] = select(Security.id).where(US_COMMON, Security.cik.in_(ciks))
+    return out
+
+
+def compute_all(session: Session) -> int:
+    """Every universe's breadth; returns days written."""
+    return sum(compute(session, name, members) for name, members in universes().items())
+
+
+def compute(session: Session, universe: str = "us_common", members: Any = None) -> int:
     """Recompute the universe's breadth history from scratch; returns days written."""
-    members = select(Security.id).where(UNIVERSES[universe])
+    if members is None:
+        members = universes()[universe]
     splits: dict[int, list[tuple[date, float]]] = defaultdict(list)
     for security_id, ex_date, ratio in session.execute(
         select(CorporateAction.security_id, CorporateAction.ex_date, CorporateAction.value)
