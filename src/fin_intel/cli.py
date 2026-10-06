@@ -708,6 +708,25 @@ def sync_lobbying(
         )
 
 
+@app.command("sync-bills")
+def sync_bills(
+    since: Annotated[int, typer.Option(help="First congress (112 = 2011-2012)")] = 112,
+) -> None:
+    """Load bills and joint resolutions (GovInfo Bill Status bulk files): past congresses
+    once, the current one on every run."""
+    from fin_intel import bills
+    from fin_intel.providers import GovinfoProvider
+
+    govinfo = GovinfoProvider(raw_store=default_store())
+    current = bills.congress_for(date.today())
+    with session_factory()() as session:
+        done = ingest.synced_since(
+            session, "govinfo", "billstatus", datetime(2000, 1, 1, tzinfo=UTC)
+        )
+    congresses = [str(c) for c in range(since, current + 1) if str(c) not in done or c == current]
+    _run("sync-bills", congresses, lambda s, c: ingest.sync_bills(s, govinfo, int(c)))
+
+
 @app.command("lobbying")
 def lobbying_cmd(
     issue: Annotated[str | None, typer.Option(help="Issue code, e.g. DEF, ENG, HCR, TRD")] = None,
@@ -1086,6 +1105,7 @@ def sync_weekly() -> None:
         ("index ETF holdings (N-PORT)", sync_funds),
         ("members of Congress and committees", sync_legislators),
         ("lobbying reports (Senate LDA)", sync_lobbying),
+        ("bills in Congress (GovInfo)", sync_bills),
         ("forward outcomes", derive_outcomes_cmd),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))

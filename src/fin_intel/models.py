@@ -643,6 +643,37 @@ class LobbyingIssue(Base):
     entities: Mapped[str | None] = mapped_column(Text)  # government bodies lobbied
 
 
+class Bill(Base):
+    """A bill or joint resolution (GovInfo Bill Status, bills.py)."""
+
+    __tablename__ = "bills"
+
+    id: Mapped[str] = mapped_column(String(24), primary_key=True)  # 118-hr-1234
+    congress: Mapped[int] = mapped_column(index=True)
+    type: Mapped[str] = mapped_column(String(8))
+    number: Mapped[int]
+    introduced: Mapped[date | None] = mapped_column(Date, index=True)
+    title: Mapped[str | None] = mapped_column(Text)
+    policy_area: Mapped[str | None] = mapped_column(String(64), index=True)
+    sponsor: Mapped[str | None] = mapped_column(String(8), index=True)  # bioguide id
+    sponsor_party: Mapped[str | None] = mapped_column(String(4))
+    cosponsors: Mapped[int | None]
+    committees: Mapped[str | None] = mapped_column(Text)  # system codes, comma-separated
+    latest_action: Mapped[date | None] = mapped_column(Date)
+    latest_action_text: Mapped[str | None] = mapped_column(Text)
+    law: Mapped[str | None] = mapped_column(String(16))  # public law number (118-31), if enacted
+    enacted: Mapped[date | None] = mapped_column(Date)
+
+
+class BillSubject(Base):
+    """A legislative subject CRS assigned to a bill (e.g. "Military procurement")."""
+
+    __tablename__ = "bill_subjects"
+
+    bill_id: Mapped[str] = mapped_column(String(24), primary_key=True)
+    subject: Mapped[str] = mapped_column(String(128), primary_key=True, index=True)
+
+
 class CongressTrade(Base):
     """One transaction in a PTR. Amounts are the reported range's bounds (dollars);
     amount_max is None for the open-ended top range."""

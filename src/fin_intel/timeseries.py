@@ -28,7 +28,7 @@ appear on their Friday release, and EIA weekly data on its Wednesday or Thursday
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from statistics import median
 
 from sqlalchemy import select
@@ -58,6 +58,7 @@ SOURCES = (
     "si",
     "cboe",
     "lobby",
+    "bills",
 )
 _OPERATOR = re.compile(rf"([/-])(?=(?:{'|'.join(SOURCES)}):)")
 
@@ -166,6 +167,8 @@ def _load(
         return _cboe(session, ident, days, pit)
     if source == "lobby":
         return _lobbying(session, ident, days, pit)
+    if source == "bills":
+        return _bills(session, ident, days)
     if source == "cot":
         return _cot(session, ident.lower(), days, pit)
     if source == "breadth":
@@ -379,6 +382,22 @@ def _lobbying(session: Session, ident: str, days: list[date], pit: bool) -> indi
         (lobbying.available_on(y, q) if pit else lobbying.quarter_end(y, q), n if field else s)
         for y, q, s, n in rows
     ]
+    return _step(known, days)
+
+
+def _bills(session: Session, ident: str, days: list[date]) -> indicators.Series:
+    """`bills:defense` bills introduced in the policy area in the latest full month,
+    `bills:defense:law` enacted (aliases in bills.py)."""
+    from fin_intel import bills
+
+    area, _, field = ident.partition(":")
+    if field not in ("", "LAW"):
+        raise SpecError(f"bills:{ident}: field is empty (introduced) or law (enacted)")
+    rows = bills.monthly(session, area, enacted=bool(field))
+    if not rows:
+        raise SpecError(f"no bills for policy area {area!r}; run fin-intel sync-bills")
+    # A month's count is complete once it ends: known from the first of the next month.
+    known = [((m.replace(day=28) + timedelta(days=4)).replace(day=1), n) for m, n in rows]
     return _step(known, days)
 
 

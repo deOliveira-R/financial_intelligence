@@ -21,6 +21,8 @@ from fin_intel.ingest import (
     get_security,
 )
 from fin_intel.models import (
+    Bill,
+    BillSubject,
     Committee,
     CommitteeMembership,
     CompanyMetrics,
@@ -120,6 +122,7 @@ TARGETS = {
     "shorts": ([("finra", "short_interest")], [ShortInterest]),
     "funds": ([("sec", "nport")], [FundHolding]),
     "lobbying": ([("lda", "filings")], [LobbyingIssue, LobbyingReport]),
+    "bills": ([("govinfo", "billstatus")], [BillSubject, Bill]),
     "texts": ([("sec", "filing_document")], [FilingText]),
     "cot": (
         [("cftc", "legacy"), ("cftc", "disaggregated"), ("cftc", "tff")],
@@ -205,6 +208,8 @@ TARGETS = {
             FilingText,
             LobbyingIssue,
             LobbyingReport,
+            BillSubject,
+            Bill,
         ],
     ),
 }

@@ -21,6 +21,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from fin_intel import (
+    bills,
     congress,
     congress_members,
     contracts,
@@ -72,6 +73,7 @@ from fin_intel.providers import (
     FedProvider,
     FinraProvider,
     FredProvider,
+    GovinfoProvider,
     HouseProvider,
     LdaProvider,
     LegislatorsProvider,
@@ -1126,6 +1128,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("sec", "filing_document"): lambda s, k, p, t: filing_text.load(s, k, p),
     ("legislators", "file"): lambda s, k, p, t: load_legislators_file(s, k, p),
     ("lda", "filings"): lambda s, k, p, t: lobbying.load_page(s, p),
+    ("govinfo", "billstatus"): lambda s, k, p, t: bills.load_zip(s, p),
     ("cboe", "pc_archive"): lambda s, k, p, t: load_cboe(s, "pc_archive", k, p),
     ("cboe", "daily_options"): lambda s, k, p, t: load_cboe(s, "daily_options", k, p),
     ("mof", "jgb_curve"): lambda s, k, p, t: load_mof(s, "jgb_curve", p),
@@ -1169,6 +1172,7 @@ BINARY_DATASETS = {
     ("cboe", "pc_archive"),
     ("sec", "nport"),
     ("sec", "filing_document"),
+    ("govinfo", "billstatus"),
 }
 # Datasets whose response only means something with its request (recorded as params).
 REQUEST_DATASETS = {("openfigi", "mapping"), ("openfigi", "listings")}
@@ -1193,6 +1197,7 @@ SNAPSHOT_DATASETS = {
     ("usaspending", "naics_month"),  # per month and page; months are revised
     ("finra", "short_interest"),  # per date and page; revised for a few weeks
     ("legislators", "file"),  # each file is complete
+    ("govinfo", "billstatus"),  # each zip holds a congress's bills of one type
 }
 
 
@@ -1898,6 +1903,19 @@ def fund_series(sec_provider: SecProvider) -> dict[str, dict]:
         if r.get("symbol") in funds.FUNDS and r.get("seriesId"):
             out[r["symbol"]] = {"cik": int(r["cik"]), "series_id": r["seriesId"]}
     return out
+
+
+def sync_bills(session: Session, govinfo: GovinfoProvider, congress: int) -> int:
+    """A congress's bills and joint resolutions, one bulk zip per type."""
+    from fin_intel.providers.govinfo import BILL_TYPES
+
+    with tracked(session, "govinfo", "billstatus", str(congress)) as result:
+        rows = 0
+        for kind in BILL_TYPES:
+            session.commit()  # fetch-then-load, a zip at a time
+            rows += bills.load_zip(session, govinfo.fetch_billstatus(congress, kind))
+        result["rows"] = rows
+    return result["rows"]
 
 
 LOBBYING_SETTLED = timedelta(days=150)  # late reports and amendments arrive for months
