@@ -34,7 +34,7 @@ from fin_intel.models import CusipMapping, InstitutionalFiler, InstitutionalPosi
 VALUE_IN_DOLLARS_FROM = date(2023, 1, 3)
 FULL_SINCE = date(2025, 6, 1)  # data sets covering filings from here on: every filer
 HISTORY_MIN_AUM = 1e9
-COMMIT_EVERY = 200  # filings per transaction
+COMMIT_ROWS = 50_000  # positions per transaction: short write locks for concurrent jobs
 # Notable managers kept in history whatever their size (CIKs from their 13F filings).
 WATCHED = {
     1067983,  # Berkshire Hathaway
@@ -178,7 +178,7 @@ def load(session: Session, data: bytes, min_aum: float | None = None) -> int:
         key=["cik"],
     )
     figis: dict[str, str] = {}
-    written = n = 0
+    written = pending = 0
     for f in filings:
         rows = positions.get(f.accession, [])
         if f.replaces:
@@ -201,14 +201,16 @@ def load(session: Session, data: bytes, min_aum: float | None = None) -> int:
                     "filed": f.filed,
                 }
             )
-        written += upsert(
+        count = upsert(
             session,
             InstitutionalPosition,
             records,
             key=["filer_cik", "period", "cusip", "put_call"],
         )
-        if (n := n + 1) % COMMIT_EVERY == 0:
+        written, pending = written + count, pending + count
+        if pending >= COMMIT_ROWS:
             session.commit()  # a data set is millions of rows: don't hold the write lock
+            pending = 0
     # FIGIs some filers report: free mappings, no OpenFIGI call needed.
     upsert(
         session,
