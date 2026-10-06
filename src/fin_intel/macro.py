@@ -46,6 +46,24 @@ MACRO_SERIES: dict[str, tuple[str, str]] = {
     "RSAFS": ("activity", "Retail sales"),
     "HOUST": ("activity", "Housing starts"),
     "UMCSENT": ("activity", "University of Michigan consumer sentiment"),
+    # Commodities (IMF primary commodity prices, monthly) and freight. Strategic materials
+    # and energy for the deep-history industries; lithium and cobalt aren't on FRED (LIT
+    # and the miners' prices stand in).
+    "PIORECRUSDM": ("commodities", "Iron ore price, monthly"),
+    "PNICKUSDM": ("commodities", "Nickel price, monthly"),
+    "PALUMUSDM": ("commodities", "Aluminum price, monthly"),
+    "PZINCUSDM": ("commodities", "Zinc price, monthly"),
+    "PTINUSDM": ("commodities", "Tin price, monthly"),
+    "PURANUSDM": ("commodities", "Uranium price, monthly"),
+    "PCOALAUUSDM": ("commodities", "Coal price (Australia), monthly"),
+    "PNGASEUUSDM": ("commodities", "Natural gas price (Europe), monthly"),
+    "PNGASJPUSDM": ("commodities", "LNG price (Asia), monthly"),
+    "PWHEAMTUSDM": ("commodities", "Wheat price, monthly"),
+    "PMAIZMTUSDM": ("commodities", "Corn price, monthly"),
+    "PSOYBUSDM": ("commodities", "Soybean price, monthly"),
+    "TSIFRGHT": ("freight", "Freight Transportation Services Index (BTS), monthly"),
+    "PCU483111483111": ("freight", "PPI: deep sea freight transportation, monthly"),
+    "PCU4841214841212": ("freight", "PPI: long-distance general freight trucking, monthly"),
     # Labor
     "PAYEMS": ("labor", "Nonfarm payrolls"),
     "UNRATE": ("labor", "Unemployment rate"),

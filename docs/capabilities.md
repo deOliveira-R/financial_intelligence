@@ -63,7 +63,7 @@ only on exceptions), the speculation track high-attention with its own signals.
 
 ## 4. Trading indicators and research
 
-- **Macro pack:** 55 FRED series (energy, inflation, rates and curve, activity, labor, Japan,
+- **Macro pack:** 70 FRED series (energy, inflation, rates and curve, activity, commodities, freight, labor, Japan,
   dollar, credit and volatility, liquidity) plus exchange rates for 21 currencies, all with ALFRED revision
   history for point-in-time use. `/economic/{id}`.
 - **Energy:** 13 EIA weekly series (crude, Cushing, gasoline and distillate stocks,

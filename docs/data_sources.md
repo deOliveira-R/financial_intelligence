@@ -41,7 +41,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 
 | Source | What we take | Access and limits | Code | Licensing |
 |---|---|---|---|---|
-| FRED / ALFRED (St. Louis Fed) | 55-series macro pack + exchange rates for 21 currencies, with full revision history; release dates | Free key (`FI_FRED_API_KEY`); ~120 req/min | `providers/fred.py`, `macro.py`, `fx.py`, `releases.py` | Public (some series have source restrictions) |
+| FRED / ALFRED (St. Louis Fed) | 70-series macro pack (incl. IMF commodity prices and freight indexes) + exchange rates for 21 currencies, with full revision history; release dates | Free key (`FI_FRED_API_KEY`); ~120 req/min | `providers/fred.py`, `macro.py`, `fx.py`, `releases.py` | Public (some series have source restrictions) |
 | Federal Reserve Board website | FOMC meeting calendar | Free | `providers/fed.py` | Public |
 | EIA API v2 | 13 weekly petroleum and natural gas series | Free key (`FI_EIA_API_KEY`; the shared DEMO_KEY is rate-limited per IP) | `providers/eia.py`, `energy.py`, `sync-eia` | Public |
 | Japan Ministry of Finance (CSV files) | JGB constant-maturity yields 1-40 years since 1974; weekly international transactions in securities since 2005 | Free, no key | `providers/mof.py`, `japan.py`, `sync-japan` | Public |

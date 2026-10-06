@@ -44,13 +44,17 @@ itself before any subscription. Status and order:
    judgment calls for the signal-design session to test.
 5. **Filing text** for LLM analysis skills: 10-K/10-Q sections (risk factors, MD&A), 8-K
    press releases, proxies (EDGAR); EDINET report text.
-6. **Domain data**: World Bank commodity prices, freight-rate
-   headlines (cyclicals like ZIM), policy data. Done: federal contract obligations by NAICS
-   (USAspending, `contracts.py`); FINRA short interest since 2017-12 (`shortinterest.py`); Cboe put/call since 2006 (`putcall.py`); index ETF holdings from N-PORT since 2019
-   (`funds.py`). Next in policy: lobbying spend by issue area (Senate LDA:
-   needs the user's free key from lda.gov/api/register), bills by policy area (congress.gov:
-   free api.data.gov key), committee rosters (unitedstates/congress-legislators, no key);
-   company-level contract recipients (name matching to issuers, conservative).
+6. **Domain data**. Done (2026-10-06): federal contract obligations by NAICS
+   (USAspending, `contracts.py`), FINRA short interest since 2017-12 (`shortinterest.py`),
+   Cboe put/call since 2006 (`putcall.py`), index ETF holdings from N-PORT since 2019
+   (`funds.py`), IMF commodity prices and freight indexes (FRED macro pack). Next:
+   - Policy: lobbying spend by issue area (Senate LDA: needs the user's free key from
+     lda.gov/api/register), bills by policy area (congress.gov: free api.data.gov key),
+     committee rosters (unitedstates/congress-legislators, no key); company-level contract
+     recipients (name matching to issuers, conservative).
+   - Shipping rates (container, dry bulk, tankers): no free API found (Drewry, Freightos,
+     Baltic indices are licensed); deep-sea freight PPI is the free proxy.
+   - Lithium and cobalt prices: not on FRED; miners and LIT as proxies.
 7. Then the dedicated signal-design session: hypotheses, analysis skills, evals,
    hill-climbing on the historical data.
 
