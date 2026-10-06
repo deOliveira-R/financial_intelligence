@@ -99,6 +99,7 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
     monkeypatch.setattr(cli, "sync_insiders", ok("insiders"))
     monkeypatch.setattr(cli, "sync_congress", ok("congress"))
     monkeypatch.setattr(cli, "sync_eia", ok("eia"))
+    monkeypatch.setattr(cli, "sync_japan", ok("japan"))
     monkeypatch.setattr(cli, "sync_dart", ok("dart"))
     monkeypatch.setattr(cli, "sync_edinet", ok("edinet"))
     monkeypatch.setattr(cli, "sync_tw_prices", ok("tw prices"))
@@ -115,6 +116,7 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
         "congress",
         ("fred", ["GDP", *(series for series, _ in fx.SERIES.values())]),  # plus FX rates
         "eia",
+        "japan",
         "dart",
         "edinet",
         "tw prices",

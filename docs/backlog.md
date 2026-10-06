@@ -24,23 +24,24 @@ itself before any subscription. Status and order:
 2. **Event labels**: done. `corporate_events` (8-K items, 13D/13G, late filings, delistings,
    tender offers; full history via `sync-events`) and `forward_outcomes` (returns, excess vs
    SPY/universe/sector, drawdowns, re-ratings per metrics snapshot; `derive-outcomes`).
-3. **Deep US prices, free and focused**: choose strategic industries (with the user) and
-   backfill ~500 symbols of deep history from Tiingo (its free 500-symbols/month cap):
-   their companies plus sector and macro ETFs. Survivorship-biased (current listings only),
-   acceptable for a focused universe. Then extend point-in-time metrics and outcomes back
-   (SEC XBRL starts in 2009). Paid options (Norgate, Sharadar) stay documented, not planned.
-4. **Yen carry trade pack**: the US-Japan rate differential and unwind risk.
-   - Add: Japan MoF daily JGB yield curve (1-40 years since 1974, free CSV:
-     mof.go.jp/english/policy/jgbs/reference/interest_rate/historical/jgbcme_all.csv plus
-     the current-month jgbcme.csv) as a `jgb:` timeseries source; FRED Japan call rate
-     (IRSTCI01JPM156N) and 3-month interbank (IR3TIB01JPM156N); BOJ policy meeting dates in
-     the release calendar; MoF weekly portfolio flows (Japanese investors' foreign bond and
-     equity purchases: repatriation risk).
-   - Already have: USD/JPY (DEXJPUS), CFTC yen positioning by group with COT index, US
-     yields, VIX/term structure, credit spreads, CHF/MXN/BRL/AUD rates, EWJ/DXJ.
-   - Compute: 2y and 10y differentials, carry-to-risk (differential / USD/JPY realized vol),
-     yen momentum, MXN/JPY and AUD/JPY crosses, a `carry` summary command and endpoint.
-   - Not free: USD/JPY implied vol, cross-currency basis, prime-broker positioning.
+3. **Deep US prices, free and focused**: industries chosen with the user (2026-10-06):
+   semiconductors, AI infrastructure and power, energy and critical materials, defense and
+   aerospace, healthcare and biotech, industrials and reshoring (shipping left out), plus
+   48 benchmark ETFs. `universe.py` picks each industry's largest NYSE/Nasdaq companies
+   (SIC codes plus named companies), saved in `src/fin_intel/deep_history.csv` (~490
+   symbols); `sync-deep-history` fetches full Tiingo history (50 requests/hour: ~10 hours).
+   Survivorship-biased (current listings only), acceptable for a focused universe. Then:
+   `backfill-metrics --start 2009-06-01` and `derive-outcomes` to extend point-in-time
+   metrics and outcomes back (SEC XBRL starts in 2009; before Massive's two years only the
+   universe has prices, so "universe" benchmarks then mean this universe). Paid options
+   (Norgate, Sharadar) stay documented, not planned.
+4. **Yen carry trade pack**: done (2026-10-06). MoF JGB curve since 1974 and weekly
+   portfolio flows since 2005 (`japan.py`, `jp:` timeseries source, `sync-japan`), BOJ
+   meeting dates since 2010 in the release calendar, FRED Japan call and 3-month rates, and
+   `carry.py` (`fin-intel carry`, `/carry`): differentials, carry-to-risk, MXN/JPY and
+   AUD/JPY, speculators' yen positioning, Japanese foreign bond flows, flags. Not free:
+   USD/JPY implied vol, cross-currency basis, prime-broker positioning. Flag thresholds are
+   judgment calls for the signal-design session to test.
 5. **Filing text** for LLM analysis skills: 10-K/10-Q sections (risk factors, MD&A), 8-K
    press releases, proxies (EDGAR); EDINET report text.
 6. **Domain data**: FINRA short volume/interest history, CBOE put/call statistics, SEC N-PORT

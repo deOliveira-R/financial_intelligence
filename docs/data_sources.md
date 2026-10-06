@@ -33,16 +33,18 @@ feed replaces the patchwork (and makes a commercial product possible).
 | Source | What we take | Access and limits | Code | Licensing |
 |---|---|---|---|---|
 | Massive (formerly Polygon.io), free plan | Grouped daily bars for every US stock (OTC included), splits, dividends, reference tickers (types, FIGIs), delistings, ADR share counts | Free key (`FI_MASSIVE_API_KEY`); 5 calls/min; 2 years of history | `providers/massive.py`, `sync-market-daily`, `sync-reference` | Personal use |
-| Tiingo, free plan | Deep adjusted daily history per symbol (watchlist, SPY) | Free key (`FI_TIINGO_API_KEY`); 500 symbols/month, 1,000 req/day | `providers/tiingo.py`, `sync-prices` | Personal use |
+| Tiingo, free plan | Deep daily history per symbol: the deep-history universe (`universe.py`, ~490 symbols in strategic industries and benchmark ETFs) and the watchlist | Free key (`FI_TIINGO_API_KEY`); 500 symbols/month, 1,000 req/day | `providers/tiingo.py`, `sync-prices` | Personal use |
 | TWSE / TPEx daily quotes | Daily prices of every Taiwanese stock since 2024-10 | Free; one request per exchange and day, about 1 per 3 s | `sync-tw-prices` | Public website data |
 
 ### Macro, energy, positioning, calendar
 
 | Source | What we take | Access and limits | Code | Licensing |
 |---|---|---|---|---|
-| FRED / ALFRED (St. Louis Fed) | 53-series macro pack + exchange rates for 21 currencies, with full revision history; release dates | Free key (`FI_FRED_API_KEY`); ~120 req/min | `providers/fred.py`, `macro.py`, `fx.py`, `releases.py` | Public (some series have source restrictions) |
+| FRED / ALFRED (St. Louis Fed) | 55-series macro pack + exchange rates for 21 currencies, with full revision history; release dates | Free key (`FI_FRED_API_KEY`); ~120 req/min | `providers/fred.py`, `macro.py`, `fx.py`, `releases.py` | Public (some series have source restrictions) |
 | Federal Reserve Board website | FOMC meeting calendar | Free | `providers/fed.py` | Public |
 | EIA API v2 | 13 weekly petroleum and natural gas series | Free key (`FI_EIA_API_KEY`; the shared DEMO_KEY is rate-limited per IP) | `providers/eia.py`, `energy.py`, `sync-eia` | Public |
+| Japan Ministry of Finance (CSV files) | JGB constant-maturity yields 1-40 years since 1974; weekly international transactions in securities since 2005 | Free, no key | `providers/mof.py`, `japan.py`, `sync-japan` | Public |
+| Bank of Japan website | Monetary policy meeting schedule since 2010 | Free | `providers/boj.py`, `releases.py` | Public |
 | CFTC Public Reporting (Socrata) | Commitments of Traders: legacy, disaggregated, financial futures, 26 markets since 2006 | Free, no key | `providers/cftc.py`, `cot.py`, `sync-cot` | Public |
 
 ### Ownership, politics, identifiers

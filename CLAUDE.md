@@ -40,7 +40,7 @@ rebuild.py              TARGETS: wipe tables, replay raw through the same loader
 statements.py           standard line items from US GAAP / IFRS / J-GAAP / Korean / Taiwanese concepts
 metrics.py              point-in-time company metrics (USD, splits, ADR ratios)
 crosslist.py, world.py  non-SEC issuers, their US listings, SEC duplicates
-timeseries.py           research specs (px:, fred:, breadth:, cot:, eia:) → backtest.py, screener.py,
+timeseries.py           research specs (px:, fred:, breadth:, cot:, eia:, jp:) → backtest.py, screener.py,
                         screentest.py, events.py
 cli.py, api.py          typer CLI; read-only FastAPI
 ```
@@ -98,6 +98,9 @@ cli.py, api.py          typer CLI; read-only FastAPI
   `fill-xbrl-gaps` reads the filing XBRL directly.
 - Many SEC "issuers" named "…/ADR" are depositary programs with no financial statements;
   don't treat them as the company.
+- Statements use facts only from `periods.FINANCIAL_FORMS` (periodic reports, registration
+  statements): proxies' pay-versus-performance tables tag net income too, sometimes
+  mis-scaled.
 - Foreign filers often add a USD convenience translation; statements keep the reporting
   currency, and metrics convert at FRED rates (no rate → no valuation).
 - `dict(session.execute(...))` breaks (Result has `.keys()`); use `.all()` first.

@@ -110,6 +110,9 @@ TARGETS = {
             ("fred", "series_release"),
             ("fred", "release_dates"),
             ("fed", "fomc_calendar"),
+            ("boj", "mpm_schedule"),
+            ("mof", "jgb_curve"),
+            ("mof", "flows"),
         ],
         [
             EconomicVintage,

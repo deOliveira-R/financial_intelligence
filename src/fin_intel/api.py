@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from fin_intel import (
     backtest,
+    carry,
     congress,
     cot,
     events,
@@ -845,6 +846,19 @@ def economic_calendar(
     """Scheduled economic releases (CPI, payrolls, GDP, FOMC decisions...) with the tracked
     series each one updates; `daily=true` adds daily releases (rates, spreads, VIX)."""
     return releases.upcoming(session, days, start, daily)
+
+
+# --- yen carry trade ------------------------------------------------------------------------
+
+
+@api.get("/carry")
+def carry_gauge(session: SessionDep, as_of: date | None = None) -> carry.Gauge:
+    """Yen carry trade gauge: US-Japan differentials, carry-to-risk, speculators' yen
+    positioning, Japanese foreign bond flows, upcoming BOJ/FOMC decisions, and flags."""
+    try:
+        return carry.gauge(session, as_of)
+    except timeseries.SpecError as exc:
+        raise HTTPException(404, str(exc)) from None
 
 
 # --- CFTC positioning ------------------------------------------------------------------------

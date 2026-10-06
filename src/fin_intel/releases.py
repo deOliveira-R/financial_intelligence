@@ -4,6 +4,7 @@ Market-moving releases (CPI, payrolls, GDP, FOMC decisions) are scheduled; knowi
 dates helps avoid opening positions into an event, or plan around one.
 """
 
+import html
 import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -19,6 +20,8 @@ from fin_intel.models import EconomicRelease, EconomicReleaseDate, EconomicSerie
 # are stored as a release of our own (an ID outside FRED's range).
 FOMC_RELEASE_ID = 900_001
 FOMC_LINK = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+BOJ_RELEASE_ID = 900_002
+BOJ_LINK = "https://www.boj.or.jp/en/mopo/mpmsche_minu/index.htm"
 # Release dates are kept from here on (each refresh re-reads them all: a release's dates can
 # move), so research can line signals up with past CPI, payrolls and FOMC days.
 HISTORY_START = date(2000, 1, 1)
@@ -103,6 +106,56 @@ def load_fomc(session: Session, page: bytes) -> int:
         key=["id"],
     )
     return _replace_dates(session, FOMC_RELEASE_ID, parse_fomc(page))
+
+
+def parse_boj(page: bytes) -> list[date]:
+    """Decision days (each meeting's last day, extraordinary meetings included) from a Bank
+    of Japan schedule page: one table per year, the meeting dates in each row's first cell
+    ("Jan. 22 (Thurs.), 23 (Fri.)", "Oct. 31 (Mon.), Nov. 1 (Tues.)")."""
+    text = page.decode("utf-8", errors="replace")
+    out = set()
+    sections = re.split(r"Table : (\d{4})", text)
+    for year, body in zip(sections[1::2], sections[2::2], strict=False):
+        table = body.split("</table>")[0]
+        for cell in re.findall(r"<tr[^>]*>\s*<td[^>]*>(.*?)</td>", table, re.S):
+            cell = html.unescape(re.sub(r"<[^>]+>|\[.*?\]|\(.*?\)", " ", cell))
+            explicit = re.search(r"\b(\d{4})\b", cell)
+            month, day = None, None
+            for name, number in re.findall(
+                r"(?:\b([A-Z][a-z]{2})[a-z]*\.?\s*)?\b(\d{1,2})\b", cell
+            ):
+                if name:
+                    month = _MONTHS.get(name.lower())
+                day = int(number)
+            if month and day:
+                out.add(date(int(explicit.group(1)) if explicit else int(year), month, day))
+    return sorted(out)
+
+
+def load_boj(session: Session, page: bytes) -> int:
+    """Replaces dates only within the years the page covers: the current and past pages
+    each hold part of the history."""
+    upsert(
+        session,
+        EconomicRelease,
+        [{"id": BOJ_RELEASE_ID, "name": "Bank of Japan policy decision", "link": BOJ_LINK}],
+        key=["id"],
+    )
+    dates = parse_boj(page)
+    if dates:
+        session.execute(
+            delete(EconomicReleaseDate).where(
+                EconomicReleaseDate.release_id == BOJ_RELEASE_ID,
+                EconomicReleaseDate.date >= date(dates[0].year, 1, 1),
+                EconomicReleaseDate.date <= date(dates[-1].year, 12, 31),
+            )
+        )
+    return upsert(
+        session,
+        EconomicReleaseDate,
+        [{"release_id": BOJ_RELEASE_ID, "date": d} for d in dates],
+        key=["release_id", "date"],
+    )
 
 
 @dataclass

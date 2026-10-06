@@ -568,12 +568,52 @@ def sync_adr_shares(
 
 @app.command()
 def sync_calendar() -> None:
-    """Load the economic release calendar for the tracked FRED series (plus FOMC)."""
-    from fin_intel.providers import FedProvider
+    """Load the economic release calendar for the tracked FRED series (plus FOMC and Bank
+    of Japan meetings)."""
+    from fin_intel.providers import BojProvider, FedProvider
 
     store = default_store()
     fred, fed = FredProvider(raw_store=store), FedProvider(raw_store=store)
-    _run("sync-calendar", ["all"], lambda s, _: ingest.sync_release_calendar(s, fred, fed))
+    boj = BojProvider(raw_store=store)
+    _run("sync-calendar", ["all"], lambda s, _: ingest.sync_release_calendar(s, fred, fed, boj))
+
+
+@app.command("sync-japan")
+def sync_japan(
+    history: Annotated[bool, typer.Option(help="Also reload the JGB history file")] = False,
+) -> None:
+    """Load the JGB yield curve (this month; the full history on first run or with
+    --history) and Japan's weekly portfolio flows from the Ministry of Finance."""
+    from fin_intel.providers import MofProvider
+
+    mof = MofProvider(raw_store=default_store())
+    _run("sync-japan", ["mof"], lambda s, _: ingest.sync_japan(s, mof, history))
+
+
+@app.command()
+def carry(
+    as_of: Annotated[str | None, typer.Option(help="YYYY-MM-DD; default: latest")] = None,
+) -> None:
+    """Yen carry trade gauge: differentials, carry-to-risk, crowding, flows, and flags
+    worth attention (carry.py)."""
+    from fin_intel import carry as gauge_module
+
+    with session_factory()() as session:
+        g = gauge_module.gauge(session, date.fromisoformat(as_of) if as_of else None)
+
+    def fmt(v: float | None, spec: str) -> str:
+        return "-" if v is None else format(v, spec)
+
+    typer.echo(f"yen carry gauge as of {g.as_of}   next BOJ {g.next_boj}   next FOMC {g.next_fomc}")
+    typer.echo(f"{'':42}{'value':>12}{'1m change':>12}{'3y pctile':>11}")
+    for r in g.readings:
+        relative = r.name in ("usd_jpy", "mxn_jpy", "aud_jpy")
+        change = fmt(r.change_1m, "+.1%" if relative else "+.2f")
+        typer.echo(
+            f"{r.name:42}{fmt(r.value, ',.2f'):>12}{change:>12}{fmt(r.percentile_3y, '.0%'):>11}"
+        )
+    for flag in g.flags or ["no flags"]:
+        typer.echo(f"  ! {flag}" if g.flags else f"  {flag}")
 
 
 @app.command()
@@ -817,6 +857,7 @@ def sync_daily() -> None:
         ("congressional trades", sync_congress),
         ("economic series", lambda: sync_economic(settings.fred_series_ids)),
         ("EIA energy data", sync_eia),
+        ("Japanese rates and flows (MoF)", sync_japan),
         ("Korean filings (DART)", lambda: sync_dart(limit=6000)),
         ("Japanese filings (EDINET)", sync_edinet),
         ("Taiwanese prices", sync_tw_prices),
@@ -845,6 +886,7 @@ def sync_weekly() -> None:
         ("European annual reports (ESEF)", sync_esef),
         ("cross-listings of foreign companies", sync_crosslist),
         ("economic release calendar", sync_calendar),
+        ("JGB history (MoF, monthly file)", lambda: sync_japan(history=True)),
         ("forward outcomes", derive_outcomes_cmd),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))

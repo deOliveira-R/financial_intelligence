@@ -56,7 +56,7 @@ only on exceptions), the speculation track high-attention with its own signals.
 
 ## 4. Trading indicators and research
 
-- **Macro pack:** 53 FRED series (energy, inflation, rates and curve, activity, labor,
+- **Macro pack:** 55 FRED series (energy, inflation, rates and curve, activity, labor, Japan,
   dollar, credit and volatility, liquidity) plus exchange rates for 21 currencies, all with ALFRED revision
   history for point-in-time use. `/economic/{id}`.
 - **Energy:** 13 EIA weekly series (crude, Cushing, gasoline and distillate stocks,
@@ -65,11 +65,17 @@ only on exceptions), the speculation track high-attention with its own signals.
   COT index per trader group. `/cot`, `/cot/{market}`.
 - **Market internals:** daily breadth for US common stocks (advancers/decliners, A/D line,
   new highs/lows, share above 50/200-day averages), delisted stocks included.
-- **Calendar:** scheduled releases (CPI, payrolls, GDP…) and FOMC decisions.
-  `fin-intel calendar`, `/calendar`.
+- **Calendar:** scheduled releases (CPI, payrolls, GDP…), FOMC and Bank of Japan
+  decisions. `fin-intel calendar`, `/calendar`.
+- **Yen carry trade gauge:** US-Japan differentials (3-month, 2- and 10-year), carry-to-risk,
+  MXN/JPY and AUD/JPY, speculators' yen futures positioning, Japanese residents' foreign
+  bond purchases (repatriation), next BOJ/FOMC decisions, and flags (yen rally, volatility
+  spike, crowding, narrowing differential), point in time. `fin-intel carry`, `/carry`.
+  Inputs: the MoF JGB curve since 1974 and weekly flows since 2005 (`jp:jgb10y`,
+  `jp:out_bonds`).
 - **Time series engine:** specs like `px:SPY|sma:200`, `px:CPER/px:GLD|z:252`,
   `fred:DGS10-fred:DGS2`, `breadth:pct_above_200d`, `cot:gold:managed_money:index`,
-  `eia:crude_stocks|diff:1`, with causal transforms (sma, ema, rsi, macd, ret, diff, vol,
+  `eia:crude_stocks|diff:1`, `jp:jgb10y`, with causal transforms (sma, ema, rsi, macd, ret, diff, vol,
   z, high, low, dd, yoy) on SPY's trading calendar. `timeseries`, `/timeseries`.
 - **Backtests:** rules on any specs (`px:SPY > px:SPY|sma:200 and breadth:… > 40`),
   decided at each close and held the next day, with costs, long/flat or long/short,
@@ -93,9 +99,11 @@ only on exceptions), the speculation track high-attention with its own signals.
   only where a US line trades at least 5 days a month (and an ADR's ratio can be inferred).
   Korea isn't valued except through SEC filers. A licensed global feed would fix this (see
   [data_sources.md](data_sources.md#paid-consolidators)).
-- **History depth:** Massive's free plan gives two years of whole-market bars; Tiingo
-  covers deep history for up to 500 symbols a month. Screen and signal backtests are
-  therefore short.
+- **History depth:** Massive's free plan gives two years of whole-market bars. Deep
+  history (Tiingo, decades) covers the deep-history universe: about 440 large companies in
+  six strategic industries plus 48 benchmark ETFs (`fin-intel universe`,
+  `sync-deep-history`). Longer backtests are limited to that universe, and survivorship-
+  biased (today's companies).
 - **Taiwan income statements** fill in as quarterly snapshots accumulate (the open data is
   year to date, latest quarter only).
 - **Data quality to watch:** rare unadjusted reverse splits and relisted bankrupt companies

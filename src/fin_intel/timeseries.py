@@ -43,7 +43,7 @@ from fin_intel.models import (
 )
 from fin_intel.prices import adjustments
 
-SOURCES = ("px", "close", "volume", "fred", "breadth", "cot", "eia")
+SOURCES = ("px", "close", "volume", "fred", "breadth", "cot", "eia", "jp")
 _OPERATOR = re.compile(rf"([/-])(?=(?:{'|'.join(SOURCES)}):)")
 
 
@@ -141,6 +141,8 @@ def _load(
     source, ident = term
     if source == "eia":
         return _eia(session, ident, days, pit)
+    if source == "jp":
+        return _japan(session, ident, days, pit)
     if source == "cot":
         return _cot(session, ident.lower(), days, pit)
     if source == "breadth":
@@ -228,6 +230,29 @@ def _eia(session: Session, ident: str, days: list[date], pit: bool) -> indicator
     if not rows:
         raise SpecError(f"no EIA data for {series_id}; run fin-intel sync-eia")
     known = [(energy.available_on(series_id, d) if pit else d, v) for d, v in rows]
+    return _step(known, days)
+
+
+def _japan(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+    from fin_intel import japan
+
+    try:
+        series_id = japan.resolve(ident)
+    except ValueError as exc:
+        raise SpecError(str(exc)) from None
+    rows = session.execute(
+        select(EconomicObservation.date, EconomicObservation.value)
+        .where(EconomicObservation.series_id == series_id, EconomicObservation.value.is_not(None))
+        .order_by(EconomicObservation.date)
+    ).all()
+    if not rows:
+        raise SpecError(f"no data for {series_id}; run fin-intel sync-japan")
+    known = [(japan.available_on(series_id, d) if pit else d, v) for d, v in rows]
+    return _step(known, days)
+
+
+def _step(known: list[tuple[date, float]], days: list[date]) -> indicators.Series:
+    """The latest value known on each day."""
     out, i, current = [], 0, None
     for d in days:
         while i < len(known) and known[i][0] <= d:

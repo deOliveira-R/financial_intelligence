@@ -30,6 +30,7 @@ from fin_intel import (
     esef,
     filing_events,
     insiders,
+    japan,
     releases,
     taiwan,
     thirteenf,
@@ -42,6 +43,7 @@ from fin_intel.models import (
     CorporateAction,
     DailyBar,
     EconomicObservation,
+    EconomicReleaseDate,
     EconomicSeries,
     EconomicVintage,
     Fact,
@@ -53,6 +55,7 @@ from fin_intel.models import (
     TickerHistory,
 )
 from fin_intel.providers import (
+    BojProvider,
     CftcProvider,
     DartProvider,
     EdinetProvider,
@@ -61,6 +64,7 @@ from fin_intel.providers import (
     FredProvider,
     HouseProvider,
     MassiveProvider,
+    MofProvider,
     NotFoundError,
     OpenFigiProvider,
     ProviderError,
@@ -1004,6 +1008,13 @@ def load_eia_series(session: Session, series_id: str, payload: Any) -> int:
     return upsert(session, EconomicObservation, observations, key=["series_id", "date"])
 
 
+def load_mof(session: Session, dataset: str, body: bytes) -> int:
+    """A JGB curve file (history or this month) or the weekly flows file."""
+    series, observations = (japan.parse_jgb if dataset == "jgb_curve" else japan.parse_flows)(body)
+    upsert(session, EconomicSeries, series, key=["id"])
+    return upsert(session, EconomicObservation, observations, key=["series_id", "date"])
+
+
 def load_fred_vintages(session: Session, series_id: str, payload: Any) -> int:
     rows = fred.parse_vintages(series_id, payload)
     return upsert(session, EconomicVintage, rows, key=["series_id", "date", "realtime_start"])
@@ -1059,6 +1070,9 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("fred", "series_release"): lambda s, k, p, t: releases.load_series_release(s, k, p),
     ("fred", "release_dates"): lambda s, k, p, t: releases.load_release_dates(s, int(k), p),
     ("fed", "fomc_calendar"): lambda s, k, p, t: releases.load_fomc(s, p),
+    ("boj", "mpm_schedule"): lambda s, k, p, t: releases.load_boj(s, p),
+    ("mof", "jgb_curve"): lambda s, k, p, t: load_mof(s, "jgb_curve", p),
+    ("mof", "flows"): lambda s, k, p, t: load_mof(s, "flows", p),
     **{
         ("cftc", report): (lambda r: lambda s, k, p, t: cot.load(s, r, p))(report)
         for report in cot.REPORTS
@@ -1092,6 +1106,9 @@ BINARY_DATASETS = {
     ("house", "ptr"),
     ("senate", "ptr"),
     ("fed", "fomc_calendar"),
+    ("boj", "mpm_schedule"),
+    ("mof", "jgb_curve"),
+    ("mof", "flows"),
 }
 # Datasets whose response only means something with its request (recorded as params).
 REQUEST_DATASETS = {("openfigi", "mapping"), ("openfigi", "listings")}
@@ -1110,6 +1127,9 @@ SNAPSHOT_DATASETS = {
     ("fred", "series_release"),
     ("fred", "release_dates"),
     ("fed", "fomc_calendar"),
+    ("boj", "mpm_schedule"),  # per page: current and past years
+    ("mof", "jgb_curve"),  # per key: the history file, each month's file
+    ("mof", "flows"),
 }
 
 
@@ -1620,14 +1640,30 @@ def sync_senate_ptr(session: Session, senate: SenateProvider, doc_id: str) -> in
 
 
 def sync_release_calendar(
-    session: Session, fred_provider: FredProvider, fed_provider: FedProvider
+    session: Session,
+    fred_provider: FredProvider,
+    fed_provider: FedProvider,
+    boj_provider: BojProvider | None = None,
 ) -> int:
     """Which release each tracked FRED series comes out in (looked up once per series),
     then every such release's dates (past year plus the published schedule), and the
-    FOMC meeting calendar."""
+    FOMC and Bank of Japan meeting calendars."""
     with tracked(session, "fred", "release_dates", "all") as result:
         session.commit()
         releases.load_fomc(session, fed_provider.fetch_fomc_calendar())
+        if boj_provider is not None:
+            have_past = session.scalar(
+                select(func.count())
+                .select_from(EconomicReleaseDate)
+                .where(
+                    EconomicReleaseDate.release_id == releases.BOJ_RELEASE_ID,
+                    EconomicReleaseDate.date < date(_today().year - 1, 1, 1),
+                )
+            )
+            pages = ["current"] if have_past else ["past", "current"]
+            fetched = [boj_provider.fetch_mpm_schedule(page) for page in pages]
+            for body in fetched:  # past first: each page replaces only its own years
+                releases.load_boj(session, body)
         unmapped = session.scalars(
             select(EconomicSeries.id).where(
                 EconomicSeries.source == "fred", EconomicSeries.release_id.is_(None)
@@ -1655,6 +1691,28 @@ def sync_release_calendar(
 
 
 # --- EIA energy data -------------------------------------------------------------------------
+
+
+def sync_japan(session: Session, mof: MofProvider, history: bool = False) -> int:
+    """This month's JGB yields, the weekly flows and (with `history`, or when nothing before
+    this month is stored) the JGB history file, which MoF updates monthly."""
+    with tracked(session, "mof", "jgb_curve", "history" if history else "current") as result:
+        session.commit()  # fetch-then-load
+        today = _today()
+        if not history:
+            history = not session.scalar(
+                select(func.count())
+                .select_from(EconomicObservation)
+                .where(
+                    EconomicObservation.series_id == "JGB10Y",
+                    EconomicObservation.date < today.replace(day=1),
+                )
+            )
+        bodies = [("jgb_curve", mof.fetch_jgb_current(today)), ("flows", mof.fetch_flows())]
+        if history:
+            bodies.insert(0, ("jgb_curve", mof.fetch_jgb_history()))
+        result["rows"] = sum(load_mof(session, dataset, body) for dataset, body in bodies)
+    return result["rows"]
 
 
 def sync_eia(session: Session, eia_provider: EiaProvider, series_id: str) -> int:

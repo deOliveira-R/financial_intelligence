@@ -55,6 +55,9 @@ MACRO_SERIES: dict[str, tuple[str, str]] = {
     "DEXUSEU": ("currency", "US dollars per euro, daily"),
     "DEXJPUS": ("currency", "Japanese yen per US dollar, daily"),
     "DEXCHUS": ("currency", "Chinese yuan per US dollar, daily"),
+    # Japan (yen carry trade; the JGB curve and flows come from MoF, see japan.py)
+    "IRSTCI01JPM156N": ("japan", "Japan call money rate, monthly"),
+    "IR3TIB01JPM156N": ("japan", "Japan 3-month interbank rate, monthly"),
     # Credit, volatility and financial conditions
     "BAMLH0A0HYM2": ("risk", "High-yield credit spread (option-adjusted), daily"),
     "BAMLC0A0CM": ("risk", "Investment-grade credit spread (option-adjusted), daily"),
