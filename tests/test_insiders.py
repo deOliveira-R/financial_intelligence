@@ -256,6 +256,24 @@ def test_sync_day_skips_loaded_filings_and_rebuilds(session, raw_store):
     assert count(session) == 1  # only the fetched Form 4 is in raw; the data set wasn't
 
 
+@respx.mock
+def test_sync_day_skips_filings_missing_from_the_archive(session, raw_store):
+    index = """Form Type   Company Name      CIK         Date Filed  File Name
+---------------------------------------------------------------------------------
+4           DILLARDS INC      28917       20260630    edgar/data/28917/0001-26-000001.txt
+4           DILLARDS INC      28917       20260630    edgar/data/28917/0001-26-000002.txt
+"""
+    respx.get("https://www.sec.gov/Archives/edgar/daily-index/2026/QTR2/form.20260630.idx").respond(
+        text=index
+    )
+    respx.get("https://www.sec.gov/Archives/edgar/data/28917/0001-26-000001.txt").respond(404)
+    respx.get("https://www.sec.gov/Archives/edgar/data/28917/0001-26-000002.txt").respond(
+        content=form4()
+    )
+    assert ingest.sync_insider_day(session, SecProvider(raw_store=raw_store), date(2026, 6, 30))
+    assert count(session) == 1
+
+
 def test_holiday_index_is_empty(session, raw_store):
     with respx.mock:
         respx.get(

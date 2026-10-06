@@ -1509,7 +1509,14 @@ def sync_insider_day(session: Session, sec_provider: SecProvider, day: date) -> 
                 )
             )
         )
-        bodies = [(a, sec_provider.fetch_submission(a, p)) for a, p in filings if a not in have]
+        bodies = []
+        for accession, path in filings:
+            if accession in have:
+                continue
+            try:
+                bodies.append((accession, sec_provider.fetch_submission(accession, path)))
+            except NotFoundError:  # listed in the index but withdrawn from the archive
+                log.warning("insider filing %s not in SEC's archive; skipped", accession)
         result["rows"] = sum(load_form4(session, a, body) for a, body in bodies)
     return result["rows"]
 
