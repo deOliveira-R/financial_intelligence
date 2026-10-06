@@ -2,6 +2,7 @@ import logging
 import sys
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from typing import Annotated, Any
 
 import typer
@@ -655,6 +656,50 @@ def sync_prices(
     tiingo = TiingoProvider(raw_store=default_store())
     start_date = date.fromisoformat(start) if start else None
     _run("sync-prices", tickers, lambda s, t: ingest.sync_prices(s, tiingo, t, start_date))
+
+
+@app.command("universe")
+def universe_cmd(
+    write: Annotated[bool, typer.Option("--write", help="Rebuild and save the selection")] = False,
+    out: Annotated[Path | None, typer.Option(help="Save here instead of the package")] = None,
+) -> None:
+    """Show (or with --write, rebuild and save) the deep-history universe: strategic
+    industries' largest companies plus benchmark ETFs (universe.py). The saved file is
+    committed, so rebuild where the full database is and commit the result."""
+    from fin_intel import universe
+
+    if write:
+        with session_factory()() as session:
+            members = universe.build(session)
+        universe.write(members, out or universe.MEMBERS_FILE)
+    else:
+        members = universe.read(out or universe.MEMBERS_FILE)
+    counts: dict[str, int] = {}
+    for m in members:
+        counts[m.industry] = counts.get(m.industry, 0) + 1
+    for industry, n in counts.items():
+        tickers = " ".join(m.ticker for m in members if m.industry == industry)
+        typer.echo(f"{industry} ({n}): {tickers}")
+    typer.echo(f"total: {len(members)}")
+
+
+@app.command("sync-deep-history")
+def sync_deep_history(
+    limit: Annotated[int | None, typer.Option(help="Most symbols this run")] = None,
+) -> None:
+    """Fetch full daily history from Tiingo for deep-history universe members that don't
+    have it yet. Tiingo's free plan allows 500 symbols a month and 50 requests an hour, so
+    a first run takes many hours; whatever the monthly cap stops resumes next run."""
+    from fin_intel import universe
+
+    tiingo = TiingoProvider(raw_store=default_store())
+    with session_factory()() as session:
+        done = ingest.synced_since(
+            session, "tiingo", "daily_prices", datetime.min.replace(tzinfo=UTC)
+        )
+    pending = [m.ticker for m in universe.read() if m.ticker not in done][:limit]
+    if pending:
+        _run("sync-deep-history", pending, lambda s, t: ingest.sync_prices(s, tiingo, t))
 
 
 def _weekdays(start: date, end: date) -> list[date]:
