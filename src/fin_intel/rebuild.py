@@ -46,6 +46,7 @@ from fin_intel.models import (
     Issuer,
     PortfolioTransaction,
     Security,
+    ShortInterest,
     StatementItem,
     TickerHistory,
 )
@@ -95,6 +96,7 @@ TARGETS = {
         [CongressTrade, CongressReport],
     ),
     "policy": ([("usaspending", "naics_month")], [FederalObligation]),
+    "shorts": ([("finra", "short_interest")], [ShortInterest]),
     "cot": (
         [("cftc", "legacy"), ("cftc", "disaggregated"), ("cftc", "tff")],
         [CotPosition],
@@ -168,6 +170,7 @@ TARGETS = {
             CotPosition,
             CorporateEvent,
             FederalObligation,
+            ShortInterest,
         ],
     ),
 }

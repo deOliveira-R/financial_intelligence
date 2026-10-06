@@ -40,7 +40,7 @@ rebuild.py              TARGETS: wipe tables, replay raw through the same loader
 statements.py           standard line items from US GAAP / IFRS / J-GAAP / Korean / Taiwanese concepts
 metrics.py              point-in-time company metrics (USD, splits, ADR ratios)
 crosslist.py, world.py  non-SEC issuers, their US listings, SEC duplicates
-timeseries.py           research specs (px:, fred:, breadth:, cot:, eia:, jp:, gov:) → backtest.py, screener.py,
+timeseries.py           research specs (px:, fred:, breadth:, cot:, eia:, jp:, gov:, si:) → backtest.py, screener.py,
                         screentest.py, events.py
 cli.py, api.py          typer CLI; read-only FastAPI
 ```

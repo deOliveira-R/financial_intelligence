@@ -26,6 +26,7 @@ def settings(monkeypatch):
         DartProvider,
         EiaProvider,
         FedProvider,
+        FinraProvider,
         HouseProvider,
         MassiveProvider,
         MofProvider,
@@ -44,6 +45,7 @@ def settings(monkeypatch):
         BojProvider,
         MofProvider,
         UsaspendingProvider,
+        FinraProvider,
     ):
         monkeypatch.setattr(provider, "limits", (Limit(10_000, MINUTE),))
     yield

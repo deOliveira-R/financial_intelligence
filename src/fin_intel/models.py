@@ -594,6 +594,19 @@ class CotPosition(Base):
     spread: Mapped[float | None] = mapped_column(Float)
 
 
+class ShortInterest(Base):
+    """A stock's short position on a FINRA settlement date (shortinterest.py)."""
+
+    __tablename__ = "short_interest"
+
+    security_id: Mapped[int] = mapped_column(ForeignKey("securities.id"), primary_key=True)
+    settlement_date: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    short_position: Mapped[float] = mapped_column(Float)
+    average_daily_volume: Mapped[float | None] = mapped_column(Float)
+    days_to_cover: Mapped[float | None] = mapped_column(Float)
+    market: Mapped[str | None] = mapped_column(String(8))
+
+
 class FederalObligation(Base):
     """Federal contract obligations in a month for one industry (NAICS code), from
     USAspending (contracts.py). Revised as agencies report; DoD reports 90 days late."""

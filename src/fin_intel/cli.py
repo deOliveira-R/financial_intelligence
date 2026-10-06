@@ -609,6 +609,23 @@ def sync_japan(
     _run("sync-japan", ["mof"], lambda s, _: ingest.sync_japan(s, mof, history))
 
 
+@app.command("sync-short-interest")
+def sync_short_interest() -> None:
+    """Load FINRA short interest (every stock, twice a month since December 2017): new
+    settlement dates, and recent ones again until revisions settle."""
+    from fin_intel.providers import FinraProvider
+
+    finra = FinraProvider(raw_store=default_store())
+    with session_factory()() as session:
+        dates = ingest.short_interest_due(session, finra, date.today())
+    if dates:
+        _run(
+            "sync-short-interest",
+            [d.isoformat() for d in dates],
+            lambda s, d: ingest.sync_short_interest(s, finra, date.fromisoformat(d)),
+        )
+
+
 @app.command("sync-contracts")
 def sync_contracts(
     limit: Annotated[int | None, typer.Option(help="Most months this run")] = None,
@@ -926,6 +943,7 @@ def sync_weekly() -> None:
         ("economic release calendar", sync_calendar),
         ("JGB history (MoF, monthly file)", lambda: sync_japan(history=True)),
         ("federal contract obligations (USAspending)", sync_contracts),
+        ("short interest (FINRA)", sync_short_interest),
         ("forward outcomes", derive_outcomes_cmd),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))

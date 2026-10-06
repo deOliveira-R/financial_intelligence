@@ -33,6 +33,7 @@ from fin_intel import (
     insiders,
     japan,
     releases,
+    shortinterest,
     taiwan,
     thirteenf,
     world,
@@ -52,6 +53,7 @@ from fin_intel.models import (
     InsiderTransaction,
     Issuer,
     Security,
+    ShortInterest,
     SyncState,
     TickerHistory,
 )
@@ -62,6 +64,7 @@ from fin_intel.providers import (
     EdinetProvider,
     EiaProvider,
     FedProvider,
+    FinraProvider,
     FredProvider,
     HouseProvider,
     MassiveProvider,
@@ -940,6 +943,11 @@ def load_massive_grouped_daily(session: Session, day: str, payload: Any) -> int:
     return upsert(session, DailyBar, rows, key=["security_id", "date", "source"])
 
 
+def load_short_interest(session: Session, payload: Any) -> int:
+    rows = _by_symbol(session, shortinterest.parse(payload), "settlement_date")
+    return upsert(session, ShortInterest, rows, key=["security_id", "settlement_date"])
+
+
 def load_massive_actions(session: Session, dataset: str, payload: Any) -> int:
     parse = massive.parse_splits if dataset == "splits" else massive.parse_dividends
     rows = _by_symbol(session, parse(payload), "ex_date")
@@ -1074,6 +1082,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("fed", "fomc_calendar"): lambda s, k, p, t: releases.load_fomc(s, p),
     ("boj", "mpm_schedule"): lambda s, k, p, t: releases.load_boj(s, p),
     ("usaspending", "naics_month"): lambda s, k, p, t: contracts.load_page(s, k, p),
+    ("finra", "short_interest"): lambda s, k, p, t: load_short_interest(s, p),
     ("mof", "jgb_curve"): lambda s, k, p, t: load_mof(s, "jgb_curve", p),
     ("mof", "flows"): lambda s, k, p, t: load_mof(s, "flows", p),
     **{
@@ -1134,6 +1143,7 @@ SNAPSHOT_DATASETS = {
     ("mof", "jgb_curve"),  # per key: the history file, each month's file
     ("mof", "flows"),
     ("usaspending", "naics_month"),  # per month and page; months are revised
+    ("finra", "short_interest"),  # per date and page; revised for a few weeks
 }
 
 
@@ -1717,6 +1727,51 @@ def sync_japan(session: Session, mof: MofProvider, history: bool = False) -> int
             bodies.insert(0, ("jgb_curve", mof.fetch_jgb_history()))
         result["rows"] = sum(load_mof(session, dataset, body) for dataset, body in bodies)
     return result["rows"]
+
+
+def sync_short_interest(session: Session, finra: FinraProvider, settlement: date) -> int:
+    """Every stock's short position on one settlement date (a few pages)."""
+    with tracked(session, "finra", "short_interest", settlement.isoformat()) as result:
+        session.commit()  # fetch-then-load
+        total = finra.records_on(settlement)
+        pages = [
+            finra.fetch_short_interest(settlement, offset)
+            for offset in range(0, total, finra.page_size)
+        ]
+        result["rows"] = sum(load_short_interest(session, p) for p in pages)
+    return result["rows"]
+
+
+SHORT_INTEREST_SETTLED = timedelta(days=30)  # FINRA revisions come within weeks
+
+
+def short_interest_due(session: Session, finra: FinraProvider, today: date) -> list[date]:
+    """Settlement dates to load: each published half-month cycle not loaded yet (found by
+    probing its candidate dates), and recent ones loaded before revisions settled."""
+    loaded = {
+        date.fromisoformat(k): ok.date()
+        for k, ok in session.execute(
+            select(SyncState.key, SyncState.last_success).where(
+                SyncState.provider == "finra",
+                SyncState.dataset == "short_interest",
+                SyncState.last_success.is_not(None),
+            )
+        )
+    }
+    due = [d for d, ok in loaded.items() if ok - d < SHORT_INTEREST_SETTLED]
+    year, month = shortinterest.FIRST.year, shortinterest.FIRST.month
+    while date(year, month, 1) <= today:
+        for cycle in shortinterest.candidates(year, month):
+            if any(d in loaded for d in cycle):
+                continue
+            for d in cycle:
+                if shortinterest.available_on(d) > today:
+                    break  # not published yet
+                if finra.records_on(d):
+                    due.append(d)
+                    break
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return sorted(due)
 
 
 def sync_contracts_month(session: Session, provider: UsaspendingProvider, month: date) -> int:

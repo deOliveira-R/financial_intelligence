@@ -40,10 +40,11 @@ from fin_intel.models import (
     EconomicObservation,
     EconomicVintage,
     MarketBreadth,
+    ShortInterest,
 )
 from fin_intel.prices import adjustments
 
-SOURCES = ("px", "close", "volume", "fred", "breadth", "cot", "eia", "jp", "gov")
+SOURCES = ("px", "close", "volume", "fred", "breadth", "cot", "eia", "jp", "gov", "si")
 _OPERATOR = re.compile(rf"([/-])(?=(?:{'|'.join(SOURCES)}):)")
 
 
@@ -145,6 +146,8 @@ def _load(
         return _japan(session, ident, days, pit)
     if source == "gov":
         return _contracts(session, ident, days, pit)
+    if source == "si":
+        return _short_interest(session, ident, days, pit)
     if source == "cot":
         return _cot(session, ident.lower(), days, pit)
     if source == "breadth":
@@ -263,6 +266,28 @@ def _contracts(session: Session, prefix: str, days: list[date], pit: bool) -> in
     if not rows:
         raise SpecError(f"no federal obligations for NAICS {prefix}*; run sync-contracts")
     return _step([(contracts.available_on(m) if pit else m, v) for m, v in rows], days)
+
+
+def _short_interest(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+    """`si:GME` short position (shares), `si:GME:dtc` days to cover."""
+    from fin_intel import shortinterest
+    from fin_intel.ingest import get_security
+
+    ticker, _, field = ident.partition(":")
+    column = {"": ShortInterest.short_position, "DTC": ShortInterest.days_to_cover}.get(field)
+    if column is None:
+        raise SpecError(f"si:{ident}: field is empty (shares short) or dtc (days to cover)")
+    security = get_security(session, ticker)
+    if security is None:
+        raise SpecError(f"unknown ticker {ticker}")
+    rows = session.execute(
+        select(ShortInterest.settlement_date, column)
+        .where(ShortInterest.security_id == security.id, column.is_not(None))
+        .order_by(ShortInterest.settlement_date)
+    ).all()
+    if not rows:
+        raise SpecError(f"no short interest for {ticker}; run sync-short-interest")
+    return _step([(shortinterest.available_on(d) if pit else d, v) for d, v in rows], days)
 
 
 def _step(known: list[tuple[date, float]], days: list[date]) -> indicators.Series:

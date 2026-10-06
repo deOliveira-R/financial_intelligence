@@ -53,6 +53,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 |---|---|---|---|---|
 | House Clerk financial disclosures | Yearly filing index; periodic transaction report PDFs (electronic filings parsed; paper scans skipped) | Free | `providers/congress.py`, `congress.py` | Public |
 | Senate eFD | Periodic transaction reports (HTML) after accepting the site's terms | Free | same | Public |
+| FINRA Query API (public datasets) | Consolidated short interest for every exchange-listed and OTC stock, twice a month since December 2017: short position, average volume, days to cover | Free, no credentials; 5,000 records a page | `providers/finra.py`, `shortinterest.py`, `sync-short-interest` | Public |
 | USAspending.gov API | Federal contract obligations by industry (NAICS), monthly since October 2007 | Free, no key | `providers/usaspending.py`, `contracts.py`, `sync-contracts` | Public |
 | OpenFIGI | CUSIP → security (13F), ticker/ISIN → share-class FIGI (cross-listings) | Free; key (`FI_OPENFIGI_API_KEY`) raises limits ~100x | `providers/openfigi.py`, `crosslist.py` | Free to use |
 | GLEIF | ISIN ↔ LEI mapping (daily bulk file, ~32 MB) for European issuers | Free; the per-LEI API throttles hard, so we use the bulk file | `providers/gleif.py` | Open data (CC0) |
@@ -63,7 +64,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 |---|---|---|
 | BLS, BEA, US Treasury FiscalData | CPI and payroll detail, GDP by industry, auctions, daily yield curve | FRED carries the headline series; add when a strategy needs the detail |
 | ECB Data Portal / Frankfurter, IMF, OECD, World Bank | Euro-area and cross-country macro, reference FX | FRED FX suffices for conversion; add for non-US macro signals |
-| FINRA short-sale volume, SEC fails-to-deliver, exchange short interest | Short positioning | Speculation track; not started |
+| FINRA daily short-sale volume (Reg SHO files), SEC fails-to-deliver | Daily short activity, settlement failures | Short interest is loaded; daily short volume is noisy (market makers), add if a strategy needs it |
 | SEC N-PORT | ETF and fund holdings | Not needed yet |
 | Nasdaq Trader symbol directory | Daily list of US-listed symbols | SEC + Massive reference cover it |
 | Alpaca (free IEX feed) | Intraday bars since 2016, real-time IEX stream | No intraday use case yet |
