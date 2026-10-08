@@ -21,7 +21,10 @@ class FederalRegisterProvider(Provider):
 
     name = "federalregister"
     base_url = "https://www.federalregister.gov/api/v1"
-    limits = (Limit(2, SECOND),)
+    # It answers 429 when pushed (2 requests/s for a minute did it): go slowly, back off long.
+    limits = (Limit(1, 2 * SECOND),)
+    max_retries = 4
+    retry_base = 60.0
 
     def fetch_year(self, kind: str, year: int) -> Any:
         """A year's documents of one kind (executive_order, proclamation...), by publication."""
