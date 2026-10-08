@@ -1934,7 +1934,11 @@ def sync_presidential_year(session: Session, provider: FederalRegisterProvider, 
         )
         session.commit()
         for number, url in presidential.missing_text(session, list(payloads.values())):
-            body = provider.fetch_text(number, url)
+            try:
+                body = provider.fetch_text(number, url)
+            except NotFoundError:  # a few old documents have no text page
+                log.warning("no text for presidential document %s", number)
+                continue
             rows += presidential.load_text(session, number, body)
             session.commit()  # per document
         result["rows"] = rows

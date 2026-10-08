@@ -20,6 +20,17 @@ a tariff of 25 percent on imported automobiles ...
 
 
 def listing(kind):
+    if kind == "notice":  # a document whose text page is missing: skipped, not fatal
+        return {
+            "count": 1,
+            "results": [
+                {
+                    "document_number": "1999-0001",
+                    "title": "Old notice",
+                    "raw_text_url": "https://www.federalregister.gov/x/1999-0001.txt",
+                }
+            ],
+        }
     if kind != "proclamation":
         return {"count": 0, "results": []}
     return {
@@ -48,8 +59,9 @@ def test_sync_search_and_rebuild(session, raw_store):
         )
     )
     text = respx.get(TEXT_URL).respond(content=BODY)
+    respx.get(url__regex=r".*/1999-0001\.txt").respond(404)
     provider = FederalRegisterProvider(raw_store=raw_store)
-    assert ingest.sync_presidential_year(session, provider, 2025) == 2
+    assert ingest.sync_presidential_year(session, provider, 2025) == 3
     ingest.sync_presidential_year(session, provider, 2025)
     assert text.call_count == 1  # stored text isn't fetched again
 
