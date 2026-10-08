@@ -37,6 +37,7 @@ from fin_intel import (
     insiders,
     japan,
     lobbying,
+    presidential,
     putcall,
     releases,
     shortinterest,
@@ -70,6 +71,7 @@ from fin_intel.providers import (
     DartProvider,
     EdinetProvider,
     EiaProvider,
+    FederalRegisterProvider,
     FedProvider,
     FinraProvider,
     FredProvider,
@@ -1129,6 +1131,8 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("legislators", "file"): lambda s, k, p, t: load_legislators_file(s, k, p),
     ("lda", "filings"): lambda s, k, p, t: lobbying.load_page(s, p),
     ("govinfo", "billstatus"): lambda s, k, p, t: bills.load_zip(s, p),
+    ("federalregister", "presidential_list"): lambda s, k, p, t: presidential.load_list(s, p),
+    ("federalregister", "presidential_text"): lambda s, k, p, t: presidential.load_text(s, k, p),
     ("cboe", "pc_archive"): lambda s, k, p, t: load_cboe(s, "pc_archive", k, p),
     ("cboe", "daily_options"): lambda s, k, p, t: load_cboe(s, "daily_options", k, p),
     ("mof", "jgb_curve"): lambda s, k, p, t: load_mof(s, "jgb_curve", p),
@@ -1173,6 +1177,7 @@ BINARY_DATASETS = {
     ("sec", "nport"),
     ("sec", "filing_document"),
     ("govinfo", "billstatus"),
+    ("federalregister", "presidential_text"),
 }
 # Datasets whose response only means something with its request (recorded as params).
 REQUEST_DATASETS = {("openfigi", "mapping"), ("openfigi", "listings")}
@@ -1198,6 +1203,7 @@ SNAPSHOT_DATASETS = {
     ("finra", "short_interest"),  # per date and page; revised for a few weeks
     ("legislators", "file"),  # each file is complete
     ("govinfo", "billstatus"),  # each zip holds a congress's bills of one type
+    ("federalregister", "presidential_list"),  # a kind's documents for a year
 }
 
 
@@ -1914,6 +1920,21 @@ def sync_bills(session: Session, govinfo: GovinfoProvider, congress: int) -> int
         for kind in BILL_TYPES:
             session.commit()  # fetch-then-load, a zip at a time
             rows += bills.load_zip(session, govinfo.fetch_billstatus(congress, kind))
+        result["rows"] = rows
+    return result["rows"]
+
+
+def sync_presidential_year(session: Session, provider: FederalRegisterProvider, year: int) -> int:
+    """A year's presidential documents of every kind, then the text of those not stored."""
+    with tracked(session, "federalregister", "presidential_list", str(year)) as result:
+        session.commit()  # fetch-then-load
+        payloads = [provider.fetch_year(kind, year) for kind in presidential.KINDS]
+        rows = sum(presidential.load_list(session, p) for p in payloads)
+        session.commit()
+        for number, url in presidential.missing_text(session, payloads):
+            body = provider.fetch_text(number, url)
+            rows += presidential.load_text(session, number, body)
+            session.commit()  # per document
         result["rows"] = rows
     return result["rows"]
 

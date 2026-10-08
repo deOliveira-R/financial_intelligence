@@ -67,6 +67,10 @@ only on exceptions), the speculation track high-attention with its own signals.
   sponsor, cosponsors, committees and enactment (`bills` table); monthly bills introduced
   and enacted per policy area (`bills:defense`, `bills:energy:law`; CRS assigns policy
   areas a few weeks after introduction, a small look-ahead).
+- **Presidential actions:** every executive order, proclamation (Section 232/301 tariffs),
+  memorandum, determination and notice since 1994, full text searchable, dated by signing,
+  with what each amends or revokes. `search-presidential '"section 232" steel'`,
+  `/presidential/search?q=semiconductor&kind=executive_order`.
 - **Event studies:** average returns vs SPY after disclosures (insider clusters, congress
   purchases, new 13F positions), from the next trading day. `event-study`, `/events/{source}`.
   Interpreting these signals properly (fair benchmarks, their own unit and horizon) is

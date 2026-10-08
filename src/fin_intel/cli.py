@@ -727,6 +727,52 @@ def sync_bills(
     _run("sync-bills", congresses, lambda s, c: ingest.sync_bills(s, govinfo, int(c)))
 
 
+@app.command("sync-presidential")
+def sync_presidential(
+    since: Annotated[int, typer.Option(help="First year (the API starts in 1994)")] = 1994,
+) -> None:
+    """Load presidential documents (executive orders, proclamations, memoranda,
+    determinations, notices) with full text: past years once, this year on every run."""
+    from fin_intel import presidential
+    from fin_intel.providers import FederalRegisterProvider
+
+    provider = FederalRegisterProvider(raw_store=default_store())
+    this_year = date.today().year
+    with session_factory()() as session:
+        done = ingest.synced_since(
+            session, "federalregister", "presidential_list", datetime(2000, 1, 1, tzinfo=UTC)
+        )
+    years = [
+        str(y)
+        for y in range(max(since, presidential.FIRST_YEAR), this_year + 1)
+        if str(y) not in done or y >= this_year - 1
+    ]
+    _run(
+        "sync-presidential",
+        years,
+        lambda s, y: ingest.sync_presidential_year(s, provider, int(y)),
+    )
+
+
+@app.command("search-presidential")
+def search_presidential(
+    query: str,
+    kind: Annotated[str | None, typer.Option(help="executive_order, proclamation...")] = None,
+    since: Annotated[str | None, typer.Option(help="Signed on or after (YYYY-MM-DD)")] = None,
+    limit: int = 20,
+) -> None:
+    """Full-text search over presidential documents, e.g. '"section 232" steel'."""
+    from fin_intel import presidential
+
+    with session_factory()() as session:
+        hits = presidential.search(
+            session, query, kind, date.fromisoformat(since) if since else None, limit
+        )
+    for h in hits:
+        label = f"{h.kind} {h.number or ''}".strip()
+        typer.echo(f"{h.signed} {label:24} {h.title}\n    {h.snippet}")
+
+
 @app.command("lobbying")
 def lobbying_cmd(
     issue: Annotated[str | None, typer.Option(help="Issue code, e.g. DEF, ENG, HCR, TRD")] = None,
@@ -1109,6 +1155,7 @@ def sync_weekly() -> None:
         ("members of Congress and committees", sync_legislators),
         ("lobbying reports (Senate LDA)", sync_lobbying),
         ("bills in Congress (GovInfo)", sync_bills),
+        ("presidential documents (Federal Register)", sync_presidential),
         ("forward outcomes", derive_outcomes_cmd),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))

@@ -55,6 +55,8 @@ from fin_intel.models import (
     LobbyingIssue,
     LobbyingReport,
     PortfolioTransaction,
+    PresidentialDocument,
+    PresidentialText,
     Security,
     ShortInterest,
     StatementItem,
@@ -123,6 +125,10 @@ TARGETS = {
     "funds": ([("sec", "nport")], [FundHolding]),
     "lobbying": ([("lda", "filings")], [LobbyingIssue, LobbyingReport]),
     "bills": ([("govinfo", "billstatus")], [BillSubject, Bill]),
+    "presidential": (
+        [("federalregister", "presidential_list"), ("federalregister", "presidential_text")],
+        [PresidentialText, PresidentialDocument],
+    ),
     "texts": ([("sec", "filing_document")], [FilingText]),
     "cot": (
         [("cftc", "legacy"), ("cftc", "disaggregated"), ("cftc", "tff")],
@@ -210,6 +216,8 @@ TARGETS = {
             LobbyingReport,
             BillSubject,
             Bill,
+            PresidentialText,
+            PresidentialDocument,
         ],
     ),
 }

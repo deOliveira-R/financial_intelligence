@@ -674,6 +674,32 @@ class BillSubject(Base):
     subject: Mapped[str] = mapped_column(String(128), primary_key=True, index=True)
 
 
+class PresidentialDocument(Base):
+    """An executive order, proclamation, memorandum, determination or notice published in
+    the Federal Register (presidential.py)."""
+
+    __tablename__ = "presidential_documents"
+
+    document_number: Mapped[str] = mapped_column(String(16), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(24), index=True)
+    number: Mapped[str | None] = mapped_column(String(16))  # EO / proclamation number
+    title: Mapped[str | None] = mapped_column(Text)
+    president: Mapped[str | None] = mapped_column(String(64))
+    signed: Mapped[date | None] = mapped_column(Date, index=True)
+    published: Mapped[date | None] = mapped_column(Date)
+    disposition: Mapped[str | None] = mapped_column(Text)  # amends / revokes / see also
+
+
+class PresidentialText(Base):
+    """A presidential document's full text, indexed for search in presidential_text_fts
+    (triggers in migration 0034)."""
+
+    __tablename__ = "presidential_texts"
+
+    document_number: Mapped[str] = mapped_column(String(16), primary_key=True)
+    text: Mapped[str] = mapped_column(Text)
+
+
 class CongressTrade(Base):
     """One transaction in a PTR. Amounts are the reported range's bounds (dollars);
     amount_max is None for the open-ended top range."""

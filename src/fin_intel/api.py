@@ -19,6 +19,7 @@ from fin_intel import (
     ingest,
     insiders,
     portfolio,
+    presidential,
     releases,
     screener,
     thirteenf,
@@ -894,6 +895,22 @@ def filing_sections(session: SessionDep, accession: str, section: str | None = N
         {"section": r.section, "form": r.form, "filed": r.filed, "period": r.period, "text": r.text}
         for r in rows
     ]
+
+
+# --- presidential documents -----------------------------------------------------------------
+
+
+@api.get("/presidential/search")
+def presidential_search(
+    session: SessionDep,
+    q: str,
+    kind: str | None = Query(None, description="executive_order, proclamation, memorandum..."),
+    since: date | None = None,
+    limit: int = Query(20, le=200),
+) -> list[presidential.Hit]:
+    """Full-text search over executive orders, proclamations (tariffs), memoranda,
+    determinations and notices since 1994 (FTS5 syntax)."""
+    return presidential.search(session, q, kind, since, limit)
 
 
 # --- index ETF holdings ---------------------------------------------------------------------

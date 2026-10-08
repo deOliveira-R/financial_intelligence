@@ -26,6 +26,7 @@ def settings(monkeypatch):
         CboeProvider,
         DartProvider,
         EiaProvider,
+        FederalRegisterProvider,
         FedProvider,
         FinraProvider,
         GovinfoProvider,
@@ -54,6 +55,7 @@ def settings(monkeypatch):
         LegislatorsProvider,
         LdaProvider,
         GovinfoProvider,
+        FederalRegisterProvider,
     ):
         monkeypatch.setattr(provider, "limits", (Limit(10_000, MINUTE),))
     yield

@@ -49,7 +49,8 @@ BASELINE_REVISION = "0001"
 def include_name(name: str | None, type_: str, parent_names: dict) -> bool:
     """For migration autogenerate: skip tables models don't declare on purpose (SQLite's
     full-text index and its shadow tables)."""
-    return not (type_ == "table" and name is not None and name.startswith("filing_text_fts"))
+    fts = ("filing_text_fts", "presidential_text_fts")
+    return not (type_ == "table" and name is not None and name.startswith(fts))
 
 
 def alembic_config(connection: Connection | None = None) -> AlembicConfig:
