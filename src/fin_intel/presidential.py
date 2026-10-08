@@ -32,7 +32,9 @@ def _date(value: str | None) -> date | None:
         return None
 
 
-def load_list(session: Session, payload: dict[str, Any]) -> int:
+def load_list(session: Session, key: str, payload: dict[str, Any]) -> int:
+    """A year's documents of one kind (key `executive_order|2025`)."""
+    kind = key.split("|")[0]
     rows = []
     for d in payload.get("results") or []:
         if not d.get("document_number"):
@@ -41,7 +43,7 @@ def load_list(session: Session, payload: dict[str, Any]) -> int:
         rows.append(
             {
                 "document_number": d["document_number"],
-                "kind": d.get("presidential_document_type") or "other",
+                "kind": kind,
                 "number": str(number) if number else None,
                 "title": d.get("title"),
                 "president": (d.get("president") or {}).get("name"),

@@ -1131,7 +1131,7 @@ LOADERS: dict[tuple[str, str], Loader] = {
     ("legislators", "file"): lambda s, k, p, t: load_legislators_file(s, k, p),
     ("lda", "filings"): lambda s, k, p, t: lobbying.load_page(s, p),
     ("govinfo", "billstatus"): lambda s, k, p, t: bills.load_zip(s, p),
-    ("federalregister", "presidential_list"): lambda s, k, p, t: presidential.load_list(s, p),
+    ("federalregister", "presidential_list"): lambda s, k, p, t: presidential.load_list(s, k, p),
     ("federalregister", "presidential_text"): lambda s, k, p, t: presidential.load_text(s, k, p),
     ("cboe", "pc_archive"): lambda s, k, p, t: load_cboe(s, "pc_archive", k, p),
     ("cboe", "daily_options"): lambda s, k, p, t: load_cboe(s, "daily_options", k, p),
@@ -1928,10 +1928,12 @@ def sync_presidential_year(session: Session, provider: FederalRegisterProvider, 
     """A year's presidential documents of every kind, then the text of those not stored."""
     with tracked(session, "federalregister", "presidential_list", str(year)) as result:
         session.commit()  # fetch-then-load
-        payloads = [provider.fetch_year(kind, year) for kind in presidential.KINDS]
-        rows = sum(presidential.load_list(session, p) for p in payloads)
+        payloads = {kind: provider.fetch_year(kind, year) for kind in presidential.KINDS}
+        rows = sum(
+            presidential.load_list(session, f"{kind}|{year}", p) for kind, p in payloads.items()
+        )
         session.commit()
-        for number, url in presidential.missing_text(session, payloads):
+        for number, url in presidential.missing_text(session, list(payloads.values())):
             body = provider.fetch_text(number, url)
             rows += presidential.load_text(session, number, body)
             session.commit()  # per document

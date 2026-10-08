@@ -5,7 +5,6 @@ from fin_intel.providers.ratelimit import SECOND, Limit
 
 FIELDS = [
     "document_number",
-    "presidential_document_type",
     "executive_order_number",
     "proclamation_number",
     "title",

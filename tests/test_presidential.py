@@ -27,7 +27,6 @@ def listing(kind):
         "results": [
             {
                 "document_number": "2025-06063",
-                "presidential_document_type": "proclamation",
                 "proclamation_number": "10908",
                 "executive_order_number": None,
                 "title": "Adjusting Imports of Automobiles and Automobile Parts",
