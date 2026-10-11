@@ -254,9 +254,18 @@ def test_fred_vintages_are_stored_and_fetched_incrementally(session, raw_store):
         (date(2026, 7, 1), date(2026, 9, 5), 4.2),
         (date(2026, 8, 1), date(2026, 9, 5), 4.3),
     ]
-    # The next sync asks only for vintages after the last one stored.
+    # The next sync asks from the last vintage stored (FRED rejects a realtime_start past
+    # its own date, e.g. the day after Friday's vintage on a weekend) and fetches only
+    # newer ones.
     route = respx.get("https://api.stlouisfed.org/fred/series/vintagedates").respond(
-        json={"count": 0, "vintage_dates": []}
+        json={"count": 1, "vintage_dates": ["2026-09-05"]}
     )
+    before = len(respx.calls)
     macro.sync_economic(session, fred, "UNRATE")
-    assert route.calls[-1].request.url.params["realtime_start"] == "2026-09-06"
+    assert route.calls[-1].request.url.params["realtime_start"] == "2026-09-05"
+    windows = [
+        c.request.url.params.get("realtime_start")
+        for c in respx.calls[before:]
+        if c.request.url.path.endswith("/series/observations")
+    ]
+    assert windows == [None]  # the latest values only: no vintage already stored

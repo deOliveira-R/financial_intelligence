@@ -6,7 +6,6 @@ so research can ask what was known on any past date (see timeseries.py).
 """
 
 import logging
-from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -135,8 +134,14 @@ def sync_economic(session: Session, fred_provider: FredProvider, series_id: str)
         )
         series = fred_provider.fetch_series(series_id)
         observations = fred_provider.fetch_observations(series_id)
-        since = last_vintage + timedelta(days=1) if last_vintage else None
-        vintage_dates = fred_provider.fetch_vintage_dates(series_id, since)
+        # From the last stored vintage, not the day after: FRED answers HTTP 500 to a
+        # realtime_start past its own date (which stays on the last business day over
+        # weekends), and the last vintage is one it has published.
+        vintage_dates = [
+            d
+            for d in fred_provider.fetch_vintage_dates(series_id, last_vintage)
+            if last_vintage is None or d > last_vintage
+        ]
         vintage_pages = []
         for i in range(0, len(vintage_dates), fred.MAX_VINTAGES):
             window = vintage_dates[i : i + fred.MAX_VINTAGES]

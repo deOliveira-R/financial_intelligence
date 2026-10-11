@@ -107,7 +107,9 @@ The shared vocabulary every connecting feature uses.
   themes through the graph). API endpoints, and an MCP server exposing them as tools for
   agents.
 - [x] Catalog v1 (branch `graph`): `catalog.py`, `catalog [--check]`, `/catalog`; sync-daily
-  ends with the check (first catch: FRED's HTTP 500s on 70 series, 2026-10-09). Not yet:
+  ends with the check (first catch: every FRED update failing since 2026-10-09; FRED
+  answers HTTP 500 to a realtime_start past its own date, which the incremental vintage
+  request used; fixed on `graph`). Not yet:
   push notifications (no channel chosen; ntfy.sh is free and needs no account: ask the
   user), coverage gaps per key. Provider terms per feed (public, personal use, check terms). Original notes: data catalog and freshness: per dataset coverage, row counts, last success, gaps,
   point-in-time rule, licensing; alerts when a feed goes stale or fails (the "exceptions

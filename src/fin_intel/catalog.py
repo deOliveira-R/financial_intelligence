@@ -1,8 +1,8 @@
 """The data catalog: what each feed holds, when it last synced, and which feeds need a look.
 
 Investing here is meant to be low-attention, with alerts only on exceptions, and a feed
-that silently stops is the first exception to catch (FRED answered HTTP 500 for 70 series
-on 2026-10-09 and nothing said so). Freshness comes from `sync_state`: a sync that finds
+that silently stops is the first exception to catch (from 2026-10-09 every FRED update
+failed, asking for revisions from a date FRED considered future, and nothing said so). Freshness comes from `sync_state`: a sync that finds
 nothing new still records a success, where raw fetches would look stale for quarterly
 sources. Each monitored feed has the most days its latest success may age (`EXPECTED`,
 following the schedules in cli/ops.py); a feed is
