@@ -46,7 +46,10 @@ def copy_table(source: sqlite3.Connection, engine, table) -> tuple[int, int]:
         with cursor.copy(f'COPY "{table.name}" ({names}) FROM STDIN') as copy:
             while batch := rows.fetchmany(BATCH):
                 for row in batch:
-                    copy.write_row(row)
+                    # PostgreSQL text can't hold NUL bytes (a few Federal Register texts have them)
+                    copy.write_row(
+                        [v.replace("\x00", "") if isinstance(v, str) else v for v in row]
+                    )
         raw.commit()
     finally:
         raw.close()

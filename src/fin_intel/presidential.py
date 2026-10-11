@@ -57,7 +57,7 @@ def load_list(session: Session, key: str, payload: dict[str, Any]) -> int:
 
 def to_text(body: bytes) -> str:
     """The plain text inside the Federal Register's <pre> wrapper."""
-    page = body.decode("utf-8", errors="replace")
+    page = body.decode("utf-8", errors="replace").replace("\x00", "")  # PostgreSQL text
     inner = re.search(r"<pre>(.*)</pre>", page, re.S)
     plain = html.unescape(re.sub(r"<[^>]+>", "", inner.group(1) if inner else page))
     lines = (line.strip() for line in plain.splitlines())

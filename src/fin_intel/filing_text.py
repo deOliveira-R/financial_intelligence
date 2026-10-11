@@ -65,7 +65,7 @@ _CELL = re.compile(r"<\s*/\s*t[dh]\s*>", re.I)
 
 def to_text(document: bytes) -> str:
     """Readable text from an EDGAR HTML document (inline XBRL included)."""
-    text = document.decode("utf-8", errors="replace")
+    text = document.decode("utf-8", errors="replace").replace("\x00", "")  # PostgreSQL text
     text = re.sub(r"<ix:header>.*?</ix:header>", " ", text, flags=re.S | re.I)
     text = re.sub(r"<(script|style|head)\b.*?</\1\s*>", " ", text, flags=re.S | re.I)
     text = _CELL.sub("\t", text)
