@@ -166,6 +166,14 @@ def test_dataset_and_form4_produce_the_same_row(session):
     assert stored.filing_date == date(2026, 6, 30) and stored.issuer_symbol == "DDS"
 
 
+def test_prices_at_different_precision_are_one_row(session):
+    """The quarterly dataset and the Form 4 can round a price differently."""
+    row = ("0001-26-000002", "0001111111", "DOE JANE", "P", "500.0", "222.19", "29-JUN-2026", False)
+    insiders.load(session, insiders.parse_dataset(dataset([row])))
+    insiders.load_form4(session, "0001-26-000002", form4(price="222.1932"))
+    assert count(session) == 1
+
+
 def test_cluster_buys(session):
     insiders.load(
         session,

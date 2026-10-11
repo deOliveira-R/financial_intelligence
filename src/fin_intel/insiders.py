@@ -52,9 +52,21 @@ KEY_FIELDS = (
 )
 
 
+def _content(row: dict[str, Any]) -> str:
+    """The key fields as text. Prices to the cent: SEC's quarterly dataset and the Form 4
+    itself can give the same trade's price at different precision (222.19 vs 222.1932),
+    which made one trade two rows."""
+    values = []
+    for f in KEY_FIELDS:
+        v = row.get(f)
+        if f == "price" and v is not None:
+            v = f"{v:.2f}"
+        values.append("" if v is None else str(v))
+    return "|".join(values)
+
+
 def _key(row: dict[str, Any], occurrence: int) -> str:
-    content = "|".join(str(row.get(f) if row.get(f) is not None else "") for f in KEY_FIELDS)
-    return hashlib.sha256(f"{content}|{occurrence}".encode()).hexdigest()[:32]
+    return hashlib.sha256(f"{_content(row)}|{occurrence}".encode()).hexdigest()[:32]
 
 
 def _keyed(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -62,7 +74,7 @@ def _keyed(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: Counter[str] = Counter()
     out = []
     for row in rows:
-        content = "|".join(str(row.get(f)) for f in KEY_FIELDS)
+        content = _content(row)
         seen[content] += 1
         out.append({**row, "key": _key(row, seen[content])})
     return out
