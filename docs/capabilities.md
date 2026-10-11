@@ -141,6 +141,18 @@ only on exceptions), the speculation track high-attention with its own signals.
   bought by drug wholesalers, unlike 2012): compare years in `io_uses` before trusting one
   edge.
 
+## 7. Timeline
+
+- **What became public, when** (`timeline.py`), for companies, a theme, or everything:
+  insider open-market trades of $10k+ (Form 4 filing date), congressional trades (report
+  filing date), 8-K items and event filings, periodic reports; for themes also bills (title
+  keywords, or policy area and subject together), presidential documents (keywords in the
+  title or a strong text match), lobbying reports (issue code and keywords in the issue
+  description) and monthly federal contracts (when USAspending has the month). Every date
+  is a public date, so a window ending on a date shows what was known then.
+  `timeline --ticker NVDA`, `timeline --theme defense --start 2026-01-01 --kind bill`,
+  `/timeline?theme=semiconductors`.
+
 ## Data operations
 
 - `sync-daily` (Mon–Fri after the US close): market bars, splits and dividends, breadth,

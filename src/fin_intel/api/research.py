@@ -146,3 +146,41 @@ def graph_node(
     if direction == "companies":
         return {"node": key, "companies": graph.companies(session, key)}
     return {"node": key, direction: graph.walk(session, key, direction, hops, min_share)}
+
+
+@router.get("/timeline")
+def timeline_endpoint(
+    session: SessionDep,
+    ticker: Annotated[list[str] | None, Query(description="Companies")] = None,
+    theme: str | None = None,
+    start: date | None = None,
+    end: date | None = None,
+    kind: Annotated[list[str] | None, Query(description="Only these kinds")] = None,
+    limit: int = Query(100, ge=1, le=1000, description="Most events per kind"),
+):
+    """What became public, when, newest first: insider and congressional trades, 8-K
+    items and event filings, periodic reports (companies); bills, presidential documents,
+    lobbying reports, federal contracts (themes, which also cover their companies). Dates
+    are public dates, so a window ending on a date shows only what was known then
+    (default: the last 90 days)."""
+    from datetime import timedelta
+
+    from fin_intel import symbols, timeline
+
+    end = end or date.today()
+    start = start or end - timedelta(days=90)
+    ciks = None
+    if ticker:
+        ciks = set()
+        for t in ticker:
+            security = symbols.get_security(session, t)
+            if security is None or security.cik is None:
+                raise HTTPException(404, f"unknown company {t}")
+            ciks.add(security.cik)
+    try:
+        events = timeline.query(
+            session, start, end, ciks=ciks, theme=theme, kinds=kind, limit=limit
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    return [asdict(e) for e in events]

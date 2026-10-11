@@ -440,7 +440,7 @@ def theme_cmd(
         "lobbying",
         "policy_areas",
         "bill_subjects",
-        "presidential_query",
+        "keywords",
         "etfs",
         "cot",
         "fred",
@@ -469,3 +469,42 @@ def theme_cmd(
             pct = f"{e[share]:6.1%}  " if share and e[share] is not None else ""
             note = f"  ({e['note']})" if e["note"] else ""
             typer.echo(f"  {pct}{e['node']:<24} {e['label'][:60]}{note}")
+
+
+@app.command("timeline", rich_help_panel="Research")
+def timeline_cmd(
+    ticker: Annotated[list[str] | None, typer.Option(help="Company (repeatable)")] = None,
+    theme: Annotated[
+        str | None, typer.Option(help="Theme: its policy events and companies")
+    ] = None,
+    start: Annotated[str | None, typer.Option(help="YYYY-MM-DD (default: 90 days ago)")] = None,
+    end: Annotated[str | None, typer.Option(help="YYYY-MM-DD (default: today)")] = None,
+    kind: Annotated[list[str] | None, typer.Option(help="Only these kinds (repeatable)")] = None,
+    limit: Annotated[int, typer.Option(help="Most events per kind")] = 50,
+) -> None:
+    """What became public, when: insider and congressional trades, 8-K items, reports,
+    bills, presidential documents, lobbying, contracts; for companies, a theme, or all."""
+    from datetime import timedelta
+
+    from fin_intel import timeline
+
+    last = date.fromisoformat(end) if end else date.today()
+    first = date.fromisoformat(start) if start else last - timedelta(days=90)
+    with session_factory()() as session:
+        ciks = None
+        if ticker:
+            ciks = set()
+            for t in ticker:
+                security = symbols.get_security(session, t)
+                if security is None or security.cik is None:
+                    raise typer.BadParameter(f"unknown company {t}")
+                ciks.add(security.cik)
+        try:
+            events = timeline.query(
+                session, first, last, ciks=ciks, theme=theme, kinds=kind, limit=limit
+            )
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from None
+    for e in events:
+        who = f"{e.ticker:<6} " if e.ticker else ""
+        typer.echo(f"{e.date}  {e.kind:<13} {who}{e.title[:110]}")

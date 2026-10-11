@@ -78,13 +78,22 @@ The shared vocabulary every connecting feature uses.
   (1987 SIC → 2017 NAICS, weights split equally per step; SEC-only and group codes fall
   back to their SIC group), companies → themes (`themes.themes_for`: universe industry or
   SIC ranges); `graph X --direction companies`. 90% of listed companies with a SIC map.
-- [ ] Layer 3b: company-company edges from XBRL customer-concentration facts and a
-  small curated core (ASML → TSMC → NVIDIA → hyperscalers). Text-extracted supplier and
-  customer links wait for the LLM skills (phase 5).
+- [ ] Layer 3b, moved to phase 5 (decided 2026-10-11): company-company edges. SEC's company
+  facts strip XBRL dimensions, and concentration disclosures mostly anonymize customers
+  ("Customer A"); a hand-curated core would rest on memory rather than a source. The 10-K
+  text already stored (filing_texts) is the better input: LLM extraction with citations.
 
 ## Phase 4: connecting features
 
-- [ ] Unified point-in-time event timeline: one row per public event (insider trades,
+- [x] Timeline v1 (branch `graph`, 2026-10-11): `timeline.py` reads public-dated events
+  from the source tables on request rather than copying them (always current, nothing to
+  rebuild; materialize later only if slow): insider, congress, 8-K/event filings, reports,
+  bills, presidential documents, lobbying, contracts. Themes gained `keywords` (renamed
+  from presidential_query) used for presidential text, lobbying issue descriptions and bill
+  titles, since codes and policy areas alone are too coarse. Not yet: 13F changes, short
+  interest, releases. Found and fixed on the way: insider trades stored twice when the
+  dataset and the Form 4 round a price differently (`rebuild insiders` after deploy).
+  Original notes: unified point-in-time event timeline: one row per public event (insider trades,
   congressional trades, 13F changes, 8-K items, bills, presidential documents, lobbying
   quarters, contract months, short interest, releases) with its public date, kind, entity
   (company, theme, member) and a link to the source row; rebuilt from the sources.
