@@ -15,13 +15,13 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 import zipfile
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import registry
+from fin_intel import indicators, registry, timeseries
 from fin_intel.db import upsert
 from fin_intel.models import Bill, BillSubject
 from fin_intel.pipeline import tracked
@@ -175,3 +175,19 @@ registry.register(
         snapshot=True,
     ),
 )
+
+
+@timeseries.source("bills")
+def _spec(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+    """`bills:defense` bills introduced in the policy area in the latest full month,
+    `bills:defense:law` enacted (aliases in py)."""
+
+    area, _, field = ident.partition(":")
+    if field not in ("", "LAW"):
+        raise timeseries.SpecError(f"bills:{ident}: field is empty (introduced) or law (enacted)")
+    rows = monthly(session, area, enacted=bool(field))
+    if not rows:
+        raise timeseries.SpecError(f"no bills for policy area {area!r}; run fin-intel sync-bills")
+    # A month's count is complete once it ends: known from the first of the next month.
+    known = [((m.replace(day=28) + timedelta(days=4)).replace(day=1), n) for m, n in rows]
+    return timeseries.step(known, days)

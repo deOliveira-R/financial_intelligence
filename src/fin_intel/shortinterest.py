@@ -14,7 +14,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fin_intel import registry
+from fin_intel import indicators, registry, timeseries
 from fin_intel.db import upsert
 from fin_intel.models import ShortInterest, SyncState
 from fin_intel.pipeline import tracked
@@ -131,3 +131,27 @@ registry.register(
         note="per date and page; revised for weeks",
     ),
 )
+
+
+@timeseries.source("si")
+def _spec(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+    """`si:GME` short position (shares), `si:GME:dtc` days to cover."""
+    from fin_intel.symbols import get_security
+
+    ticker, _, field = ident.partition(":")
+    column = {"": ShortInterest.short_position, "DTC": ShortInterest.days_to_cover}.get(field)
+    if column is None:
+        raise timeseries.SpecError(
+            f"si:{ident}: field is empty (shares short) or dtc (days to cover)"
+        )
+    security = get_security(session, ticker)
+    if security is None:
+        raise timeseries.SpecError(f"unknown ticker {ticker}")
+    rows = session.execute(
+        select(ShortInterest.settlement_date, column)
+        .where(ShortInterest.security_id == security.id, column.is_not(None))
+        .order_by(ShortInterest.settlement_date)
+    ).all()
+    if not rows:
+        raise timeseries.SpecError(f"no short interest for {ticker}; run sync-short-interest")
+    return timeseries.step([(available_on(d) if pit else d, v) for d, v in rows], days)

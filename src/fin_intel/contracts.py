@@ -15,7 +15,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import registry
+from fin_intel import indicators, registry, timeseries
 from fin_intel.db import upsert
 from fin_intel.models import FederalObligation, SyncState
 from fin_intel.pipeline import tracked
@@ -117,3 +117,17 @@ registry.register(
         note="per month and page; months are revised",
     ),
 )
+
+
+@timeseries.source("gov")
+def _spec(session: Session, prefix: str, days: list[date], pit: bool) -> indicators.Series:
+    """Monthly federal contract obligations for NAICS codes starting with `prefix`."""
+
+    if not prefix.isdigit():
+        raise timeseries.SpecError(f"gov:{prefix}: expected a NAICS code or prefix, e.g. gov:3364")
+    rows = series(session, prefix)
+    if not rows:
+        raise timeseries.SpecError(
+            f"no federal obligations for NAICS {prefix}*; run sync-contracts"
+        )
+    return timeseries.step([(available_on(m) if pit else m, v) for m, v in rows], days)
