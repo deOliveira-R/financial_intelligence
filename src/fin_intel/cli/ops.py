@@ -148,7 +148,7 @@ def catalog_cmd(
         color = {"failing": "red", "stale": "yellow"}.get(f.status)
         line = (
             f"{f.status:<11} {f.provider + '/' + f.dataset:<34} {age}{expected:<5} "
-            f"{f.items:>6} items {f.failing:>4} failing"
+            f"{f.items:>6} items {f.failing:>4} failing  {f.terms or '?'}"
         )
         typer.secho(line, fg=color)
         if f.status == "failing" and f.last_error:

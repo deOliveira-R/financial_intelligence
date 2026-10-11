@@ -14,6 +14,9 @@ following the schedules in cli/ops.py); a feed is
 
 `fin-intel catalog` prints it (`--check` exits non-zero on any alert; sync-daily ends with
 it), `/catalog` serves it.
+
+Each feed also carries its provider's terms (`TERMS`), to know which features would need a
+licensed source before anything built on them is shared or sold.
 """
 
 from dataclasses import dataclass
@@ -51,6 +54,7 @@ EXPECTED: dict[tuple[str, str], int] = {
     ("cftc", "tff"): WEEKLY,
     ("sec", "events"): WEEKLY,
     ("sec", "xbrl_gaps"): WEEKLY,
+    ("sec", "filing_text"): WEEKLY,
     ("twse", "table"): WEEKLY,
     ("esef", "report"): WEEKLY,
     ("fred", "release_dates"): WEEKLY,
@@ -68,6 +72,39 @@ EXPECTED: dict[tuple[str, str], int] = {
 # Failing items tolerated before a feed counts as failing: at least this many, or this share.
 STRAGGLERS, STRAGGLER_SHARE = 2, 0.01
 
+# Provider terms, coarsely: "public" (a government or regulator's publication), "personal use"
+# (a commercial provider's free plan), "check terms" (a third party's site or mixed rights:
+# some FRED series, such as the ICE BofA spreads, are copyrighted by their source).
+PUBLIC, PERSONAL, CHECK = "public", "personal use", "check terms"
+TERMS: dict[str, str] = {
+    **dict.fromkeys(
+        (
+            "sec",
+            "bea",
+            "census",
+            "cftc",
+            "eia",
+            "fed",
+            "govinfo",
+            "federalregister",
+            "usaspending",
+            "house",
+            "senate",
+            "lda",
+            "legislators",
+            "edinet",
+            "dart",
+            "twse",
+            "mof",
+            "boj",
+        ),
+        PUBLIC,
+    ),  # fmt: skip
+    "massive": PERSONAL,
+    "tiingo": PERSONAL,
+    **dict.fromkeys(("fred", "cboe", "finra", "openfigi", "esef"), CHECK),
+}
+
 
 @dataclass
 class Feed:
@@ -82,6 +119,7 @@ class Feed:
     tables: list[str]
     raw_responses: int
     last_fetch: datetime | None
+    terms: str | None = None
 
     @property
     def age_days(self) -> float | None:
@@ -170,6 +208,7 @@ def feeds(session: Session) -> list[Feed]:
                 _tables(provider, dataset),
                 responses,
                 last_fetch,
+                TERMS.get(provider),
             )
         )
     return out
@@ -205,4 +244,5 @@ def as_dict(feed: Feed) -> dict[str, Any]:
         "tables": feed.tables,
         "raw_responses": feed.raw_responses,
         "last_fetch": feed.last_fetch,
+        "terms": feed.terms,
     }

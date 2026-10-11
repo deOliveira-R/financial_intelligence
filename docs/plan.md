@@ -109,7 +109,7 @@ The shared vocabulary every connecting feature uses.
 - [x] Catalog v1 (branch `graph`): `catalog.py`, `catalog [--check]`, `/catalog`; sync-daily
   ends with the check (first catch: FRED's HTTP 500s on 70 series, 2026-10-09). Not yet:
   push notifications (no channel chosen; ntfy.sh is free and needs no account: ask the
-  user), coverage gaps per key, licensing column. Original notes: data catalog and freshness: per dataset coverage, row counts, last success, gaps,
+  user), coverage gaps per key. Provider terms per feed (public, personal use, check terms). Original notes: data catalog and freshness: per dataset coverage, row counts, last success, gaps,
   point-in-time rule, licensing; alerts when a feed goes stale or fails (the "exceptions
   only" principle). A per-table count report also serves migration and refactor checks.
 

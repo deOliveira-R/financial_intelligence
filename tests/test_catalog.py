@@ -70,3 +70,10 @@ def test_cli_check_exits_on_alerts(session, monkeypatch, db_file):
     monkeypatch.setattr(catalog, "EXPECTED", {("cftc", "legacy"): 9, ("bea", "supply_use"): 35})
     alert = runner.invoke(app, ["catalog", "--check"])
     assert alert.exit_code == 1 and "bea/supply_use" in alert.output
+
+
+def test_every_provider_has_terms():
+    from fin_intel import registry, sources  # noqa: F401  (declares every dataset)
+
+    providers = {d.provider for d in registry.DATASETS.values()}
+    assert providers <= set(catalog.TERMS), providers - set(catalog.TERMS)
