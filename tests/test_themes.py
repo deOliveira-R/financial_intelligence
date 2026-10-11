@@ -17,3 +17,14 @@ def test_theme_codes_exist_in_their_vocabularies():
 
 def test_lookup():
     assert themes.get("defense").lobbying[0] == "DEF"
+
+
+def test_theme_positioning_specs_resolve():
+    from fin_intel import dossier
+
+    for t in themes.THEMES:
+        positioning = [s for s in dossier.theme_specs(t).values() if s.startswith("cot:")]
+        assert len(positioning) == len(t.cot), t.name
+        for spec in positioning:
+            _, market, group, _ = spec.split(":")
+            cot.resolve(market, group)  # a group the market's report has

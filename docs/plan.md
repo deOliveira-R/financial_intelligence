@@ -100,8 +100,8 @@ The shared vocabulary every connecting feature uses.
 - [x] Dossiers v1 (branch `graph`): `dossier.py`, `dossier`, `/dossier/company/{ticker}`,
   `/dossier/theme/{name}`; MCP server `mcp_server.py` (`fin-intel mcp`, stdio over SSH)
   with dossiers, timeline, supply chain, filing search/text, series, catalog. Company dossiers include five
-  fiscal years of annual figures. Not yet: theme COT positioning (groups differ by
-  report type). Original notes: dossiers: company as of a date (fundamentals, metrics, ownership, insiders,
+  fiscal years of annual figures; theme dossiers show speculators' positioning in
+  the theme's futures (managed money or leveraged funds, 3-year index). Original notes: dossiers: company as of a date (fundamentals, metrics, ownership, insiders,
   congress, short interest, filing text, its themes' policy activity) and theme as of a date
   (spend, bills, orders, contracts, breadth, positioning, plus upstream and downstream
   themes through the graph). API endpoints, and an MCP server exposing them as tools for

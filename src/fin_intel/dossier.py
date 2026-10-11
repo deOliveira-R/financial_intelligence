@@ -418,7 +418,11 @@ def _theme_companies(session: Session, key: str, as_of: date) -> dict[str, Any]:
 
 def theme_specs(t: themes.Theme) -> dict[str, str]:
     """Research series for a theme: ETF returns, lobbying spend, contract obligations,
-    breadth of its universe industry, macro and energy series."""
+    breadth of its universe industry, futures positioning (speculators' net position as a
+    three-year index: managed money for commodities, leveraged funds for financial futures),
+    macro and energy series."""
+    from fin_intel import cot
+
     specs = {}
     for etf in t.etfs:
         specs[f"{etf} 3m return"] = f"px:{etf}|ret:63"
@@ -429,6 +433,11 @@ def theme_specs(t: themes.Theme) -> dict[str, str]:
         specs[f"lobbying {code} (quarter)"] = f"lobby:{code}"
     for naics in t.naics:
         specs[f"contracts {naics} (month)"] = f"gov:{naics}"
+    for market in t.cot:
+        group = cot.SPECULATORS[cot.MARKETS[market][1]]
+        specs[f"{market} {group.replace('_', ' ')} positioning (3y index)"] = (
+            f"cot:{market}:{group}:index"
+        )
     for series in t.fred:
         specs[series] = f"fred:{series}"
     for series in t.eia:
