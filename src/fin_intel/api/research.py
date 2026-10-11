@@ -184,3 +184,27 @@ def timeline_endpoint(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
     return [asdict(e) for e in events]
+
+
+@router.get("/dossier/company/{ticker}")
+def company_dossier(session: SessionDep, ticker: str, as_of: date | None = None):
+    """Everything known about a company on a date (default today), point in time: identity
+    and industries, metrics, 13F ownership, short interest, index funds holding it, filing
+    text, its timeline of the last 90 days, and its themes' suppliers and buyers."""
+    from fin_intel import dossier
+    from fin_intel.api.app import issuer_cik_or_404
+
+    return dossier.company(session, issuer_cik_or_404(session, ticker), as_of or date.today())
+
+
+@router.get("/dossier/theme/{name}")
+def theme_dossier(session: SessionDep, name: str, as_of: date | None = None):
+    """Everything known about a theme on a date (default today): its codes, companies and
+    the largest of them, supply chain, research series (ETF returns, breadth, lobbying,
+    contracts, macro) as known then and a year earlier, and its policy timeline."""
+    from fin_intel import dossier
+
+    try:
+        return dossier.theme(session, name, as_of or date.today())
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from None

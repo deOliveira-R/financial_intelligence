@@ -508,3 +508,28 @@ def timeline_cmd(
     for e in events:
         who = f"{e.ticker:<6} " if e.ticker else ""
         typer.echo(f"{e.date}  {e.kind:<13} {who}{e.title[:110]}")
+
+
+@app.command("dossier", rich_help_panel="Research")
+def dossier_cmd(
+    subject: Annotated[str, typer.Argument(help="A ticker, or theme:<name>")],
+    as_of: Annotated[str | None, typer.Option(help="YYYY-MM-DD (default: today)")] = None,
+) -> None:
+    """Everything known about a company or a theme on a date, as JSON (point in time)."""
+    import json
+
+    from fin_intel import dossier
+
+    day = date.fromisoformat(as_of) if as_of else date.today()
+    with session_factory()() as session:
+        try:
+            if subject.startswith("theme:"):
+                result = dossier.theme(session, subject.split(":", 1)[1], day)
+            else:
+                security = symbols.get_security(session, subject)
+                if security is None or security.cik is None:
+                    raise ValueError(f"unknown company {subject}")
+                result = dossier.company(session, security.cik, day)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from None
+    typer.echo(json.dumps(result, indent=2, default=str))

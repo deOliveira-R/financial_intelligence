@@ -153,6 +153,18 @@ only on exceptions), the speculation track high-attention with its own signals.
   `timeline --ticker NVDA`, `timeline --theme defense --start 2026-01-01 --kind bill`,
   `/timeline?theme=semiconductors`.
 
+## 8. Dossiers
+
+- **A company on a date** (`dossier NVDA --as-of 2022-03-31`, `/dossier/company/{ticker}`):
+  identity and BEA industries, metrics as of the date, 13F ownership from filings public by
+  then (holders, change on the quarter, top holders), short interest once published, the
+  index ETFs holding it, filing text sections, its 90-day timeline, and its themes'
+  suppliers and buyers.
+- **A theme on a date** (`dossier theme:defense`, `/dossier/theme/{name}`): its codes, its
+  companies and the largest by market value, supply chain, research series (ETF returns,
+  breadth, lobbying spend, contracts, FRED/EIA) as known then and a year earlier, and its
+  policy timeline. Each section fails on its own, reporting why.
+
 ## Data operations
 
 - `sync-daily` (Mon–Fri after the US close): market bars, splits and dividends, breadth,
