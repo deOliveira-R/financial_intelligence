@@ -78,7 +78,7 @@ def _accounts(session: Session) -> dict[str, Account]:
 
 def load_transactions(session: Session, rows: Iterable[dict[str, Any]], source: str) -> int:
     """Insert generic transaction rows; returns how many were new."""
-    from fin_intel.ingest import get_security
+    from fin_intel.symbols import get_security
 
     accounts = _accounts(session)
     seen: Counter[str] = Counter()

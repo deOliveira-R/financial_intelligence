@@ -5,7 +5,7 @@ import respx
 from sqlalchemy import func, select
 from test_timeseries import add_bars
 
-from fin_intel import contracts, ingest, timeseries
+from fin_intel import contracts, timeseries
 from fin_intel.models import FederalObligation, SyncState
 from fin_intel.providers import UsaspendingProvider
 from fin_intel.rebuild import rebuild
@@ -40,7 +40,7 @@ def test_month_is_loaded_page_by_page_and_rebuilds(session, raw_store):
 
     respx.post(URL).mock(side_effect=answer)
     provider = UsaspendingProvider(raw_store=raw_store)
-    assert ingest.sync_contracts_month(session, provider, date(2024, 2, 1)) == 2
+    assert contracts.sync_contracts_month(session, provider, date(2024, 2, 1)) == 2
     assert contracts.series(session, "3364") == [(date(2024, 2, 1), 1.3e9)]
 
     session.query(FederalObligation).delete()
@@ -69,7 +69,7 @@ def test_months_due_until_settled(session):
     loaded(date(2007, 10, 1), datetime(2026, 1, 1, tzinfo=UTC))  # long settled
     loaded(date(2026, 8, 1), datetime(2026, 9, 15, tzinfo=UTC))  # loaded too soon: refetch
     session.commit()
-    due = ingest.contract_months_due(session, today)
+    due = contracts.contract_months_due(session, today)
     assert date(2007, 10, 1) not in due and date(2026, 8, 1) in due
     assert len(due) == len(all_months) - 1
 

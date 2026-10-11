@@ -3,7 +3,7 @@ from datetime import date, datetime
 import respx
 from sqlalchemy import select
 
-from fin_intel import filing_events, ingest
+from fin_intel import edgar, filing_events
 from fin_intel.models import CorporateEvent, Issuer
 from fin_intel.providers import SecProvider
 from fin_intel.rebuild import rebuild
@@ -55,8 +55,8 @@ def test_sync_loads_recent_and_older_pages_then_rebuilds(session, raw_store):
     )
     older = respx.get(f"https://data.sec.gov/submissions/{page}").respond(json=OLD)
     sec = SecProvider(raw_store=raw_store)
-    assert ingest.sync_events(session, sec, 320193) > 0
-    assert ingest.sync_events(session, sec, 320193) >= 0
+    assert edgar.sync_events(session, sec, 320193) > 0
+    assert edgar.sync_events(session, sec, 320193) >= 0
     assert older.call_count == 1  # an older page is fetched once
 
     def events():

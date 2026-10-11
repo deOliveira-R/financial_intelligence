@@ -99,7 +99,7 @@ def parse(text: str) -> Spec:
 
 def calendar(session: Session, start: date | None, end: date | None) -> list[date]:
     """Trading days: dates on which SPY has a bar from any source."""
-    from fin_intel.ingest import get_security
+    from fin_intel.symbols import get_security
 
     spy = get_security(session, "SPY")
     if spy is None:
@@ -182,7 +182,7 @@ def _price(session: Session, ticker: str, days: list[date], field: str) -> indic
     """Bars merged across sources: the deepest-history source wins on each date, others fill
     its gaps (sources agree where both exist). Splits and dividends are merged the same
     way, and adjustments computed once over the merged bars."""
-    from fin_intel.ingest import get_security
+    from fin_intel.symbols import get_security
 
     security = get_security(session, ticker)
     if security is None:
@@ -331,7 +331,7 @@ def _contracts(session: Session, prefix: str, days: list[date], pit: bool) -> in
 def _short_interest(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
     """`si:GME` short position (shares), `si:GME:dtc` days to cover."""
     from fin_intel import shortinterest
-    from fin_intel.ingest import get_security
+    from fin_intel.symbols import get_security
 
     ticker, _, field = ident.partition(":")
     column = {"": ShortInterest.short_position, "DTC": ShortInterest.days_to_cover}.get(field)

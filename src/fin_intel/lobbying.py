@@ -12,14 +12,21 @@ Point in time: reports are due 20 days after the quarter; late filings are commo
 quarter counts as known AVAILABLE_AFTER its end.
 """
 
+import logging
 from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
-from fin_intel.models import LobbyingIssue, LobbyingReport
+from fin_intel.models import LobbyingIssue, LobbyingReport, SyncState
+from fin_intel.pipeline import tracked
+from fin_intel.providers import LdaProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 FIRST_YEAR = 2008  # quarterly reports began in 2008 (semiannual before)
 AVAILABLE_AFTER = timedelta(days=45)
@@ -167,3 +174,53 @@ def by_client(session: Session, name: str, limit: int = 40) -> list[dict[str, An
     return [
         {"client": c, "year": y, "quarter": q, "spend": s, "reports": n} for c, y, q, s, n in rows
     ]
+
+
+# --- loading and syncs ---
+
+
+LOBBYING_SETTLED = timedelta(days=150)  # late reports and amendments arrive for months
+
+
+def sync_lobbying_quarter(session: Session, lda: LdaProvider, year: int, quarter: int) -> int:
+    """Every filing of a quarter, page by page (25 a page; ~1,100 pages a quarter)."""
+    with tracked(session, "lda", "filings", f"{year}-Q{quarter}") as result:
+        rows, page = 0, 1
+        while True:
+            session.commit()  # fetch-then-load, a page at a time
+            payload = lda.fetch_quarter(year, quarter, page)
+            rows += load_page(session, payload)
+            if not payload.get("next"):
+                break
+            page += 1
+        result["rows"] = rows
+    return result["rows"]
+
+
+def lobbying_quarters_due(session: Session, first_year: int, today: date) -> list[tuple[int, int]]:
+    """Quarters never loaded, or loaded before late filings settled."""
+    loaded = {
+        k: ok.date()
+        for k, ok in session.execute(
+            select(SyncState.key, SyncState.last_success).where(
+                SyncState.provider == "lda",
+                SyncState.dataset == "filings",
+                SyncState.last_success.is_not(None),
+            )
+        )
+    }
+    due = []
+    for year in range(first_year, today.year + 1):
+        for quarter in range(1, 5):
+            end = quarter_end(year, quarter)
+            if end >= today:
+                continue
+            ok = loaded.get(f"{year}-Q{quarter}")
+            if ok is None or ok - end < LOBBYING_SETTLED:
+                due.append((year, quarter))
+    return due
+
+
+registry.register(
+    Dataset("lda", "filings", lambda s, k, p, t: load_page(s, p), ("lobbying",)),
+)

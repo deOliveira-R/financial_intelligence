@@ -15,8 +15,10 @@ without a home-market price feed.
   without a ratio stays linked but unvalued.
 """
 
+import logging
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import date, timedelta
 from statistics import median
 from typing import Any
@@ -24,7 +26,12 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from fin_intel import registry, world
 from fin_intel.models import DailyBar, Issuer, Security, StatementItem
+from fin_intel.providers import OpenFigiProvider, ProviderError
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 RATIO_WINDOW_DAYS = 180
 HOME_EXCHANGES = {"edinet": ["JT"], "dart": ["KS", "KQ"], "twse": ["TT"]}
@@ -260,3 +267,105 @@ def trading_days(session: Session, ids: list[int], days: int = 30) -> dict[int, 
             .group_by(DailyBar.security_id)
         ).all()
     )
+
+
+# --- loading and syncs ---
+
+
+def load_listings(session: Session, key: str, request: list[dict], response: list[dict]) -> int:
+    """Apply an OpenFIGI mapping made for cross-listings. The key says what for:
+    `home|...` (home tickers), `isin|<LEI>` (one European issuer's ISINs), `us|...`."""
+    kind = key.split("|", 1)[0]
+    if kind == "isin":
+        cik = world.issuer_id("esef", key.split("|")[1])
+        return apply_home(session, [(job, cik) for job in request], response)
+    targets: list[int | None] = []
+    if kind == "us":
+        tickers = [job["idValue"].replace("/", "-") for job in request]
+        ids = dict(
+            session.execute(
+                select(Security.ticker, Security.id).where(Security.ticker.in_(tickers))
+            ).all()
+        )
+        targets = [ids.get(t) for t in tickers]
+    else:
+        sources = {"JT": "edinet", "KS": "dart", "KQ": "dart", "TT": "twse"}
+        for job in request:
+            source = sources.get(job.get("exchCode", ""))
+            home = _home_id(session, source, job["idValue"]) if source else None
+            targets.append(world.issuer_id(source, home) if source and home else None)
+    pairs = [(job, t) for job, t in zip(request, targets, strict=True) if t]
+    results = [r for r, t in zip(response, targets, strict=False) if t]
+    apply = apply_us if kind == "us" else apply_home
+    return apply(session, pairs, results)
+
+
+def _home_id(session: Session, source: str, ticker: str) -> str:
+    """The regulator id of the issuer with this home ticker (DART and EDINET ids differ
+    from tickers; TWSE's are the tickers)."""
+    found = session.scalar(
+        select(Issuer.source_id).where(Issuer.source == source, Issuer.home_ticker == ticker)
+    )
+    return found or ticker
+
+
+def sync_crosslist(session: Session, openfigi: OpenFigiProvider, gleif: Any) -> dict[str, int]:
+    """Find foreign issuers' share classes (home tickers; ISINs via GLEIF for European
+    issuers), the share classes of US OTC lines and ADRs, then link them."""
+    stats: dict[str, int] = defaultdict(int)
+
+    def run(kind: str, pairs: list, apply: Callable) -> None:
+        for i in range(0, len(pairs), openfigi.batch):
+            batch = pairs[i : i + openfigi.batch]
+            session.commit()  # fetch-then-load
+            key = f"{kind}|{batch[0][0]['idValue']}"
+            results = openfigi.map_jobs([job for job, _ in batch], key)
+            stats[kind] += apply(session, batch, results)
+            session.commit()
+
+    run("home", home_jobs(session), apply_home)
+    europeans = dict(
+        session.execute(
+            select(Issuer.lei, Issuer.cik).where(
+                Issuer.source == "esef", Issuer.lei.is_not(None), Issuer.share_class_figi.is_(None)
+            )
+        ).all()
+    )
+    if europeans:
+        from fin_intel.providers.gleif import isins_by_lei
+
+        session.commit()
+        try:
+            mapping = isins_by_lei(gleif.fetch_mapping(), set(europeans))
+        except ProviderError as exc:  # GLEIF throttles; the next run catches up
+            log.warning("cross-listings: skipping European ISINs: %s", exc)
+            mapping = {}
+        countries = dict(
+            session.execute(
+                select(Issuer.lei, Issuer.country).where(Issuer.lei.in_(list(mapping)))
+            ).all()
+        )
+        for lei, isins in mapping.items():
+            # Shares carry the home country's prefix; banks also list thousands of bonds.
+            home = countries.get(lei) or ""
+            isins = sorted(isins, key=lambda i: not i.startswith(home))[: openfigi.batch]
+            jobs = [({"idType": "ID_ISIN", "idValue": isin}, europeans[lei]) for isin in isins]
+            session.commit()
+            results = openfigi.map_jobs([job for job, _ in jobs], f"isin|{lei}")
+            stats["isin"] += apply_home(session, jobs, results)
+            session.commit()
+    run("us", us_jobs(session), apply_us)
+    stats.update(link(session))
+    session.commit()
+    return dict(stats)
+
+
+registry.register(
+    Dataset(
+        "openfigi",
+        "listings",
+        lambda s, k, p, t: load_listings(s, k, p["request"], p["response"]),
+        ("market",),
+        payload="request",
+    ),
+)

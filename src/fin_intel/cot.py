@@ -15,6 +15,7 @@ over the last three years. Extremes in managed money or leveraged funds tend to 
 crowded trades; commercials' extremes tend to lead turns.
 """
 
+import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -23,8 +24,14 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
 from fin_intel.models import CotPosition
+from fin_intel.pipeline import tracked
+from fin_intel.providers import CftcProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 # alias -> (CFTC contract market code, family, description)
 MARKETS: dict[str, tuple[str, str, str]] = {
@@ -318,3 +325,34 @@ def series_by_day(
             i += 1
         out.append(current)
     return out
+
+
+# --- loading and syncs ---
+
+
+def sync_cot(session: Session, cftc: CftcProvider, report: str, since: date) -> int:
+    """A COT report's rows for the curated markets since `since`, page by page."""
+    if report == "legacy":
+        codes = [code for code, _, _ in MARKETS.values()]
+    else:
+        family = next(f for f, r in FAMILY_REPORT.items() if r == report)
+        codes = [code for code, fam, _ in MARKETS.values() if fam == family]
+    with tracked(session, "cftc", report, since.isoformat()) as result:
+        rows, offset = 0, 0
+        while True:
+            session.commit()  # fetch-then-load
+            page = cftc.fetch_reports(report, REPORTS[report], codes, since, offset)
+            rows += load(session, report, page)
+            if len(page) < cftc.page_size:
+                break
+            offset += cftc.page_size
+        result["rows"] = rows
+    return result["rows"]
+
+
+registry.register(
+    *(
+        Dataset("cftc", report, (lambda r: lambda s, k, p, t: load(s, r, p))(report), ("cot",))
+        for report in REPORTS
+    )
+)

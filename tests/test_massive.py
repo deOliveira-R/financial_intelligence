@@ -11,7 +11,7 @@ from conftest import (
 )
 from sqlalchemy import select
 
-from fin_intel import ingest
+from fin_intel import market
 from fin_intel.models import CorporateAction, DailyBar, RawResponse, Security
 from fin_intel.providers import MassiveProvider
 from fin_intel.providers.massive import normalize_symbol, parse_splits
@@ -44,13 +44,13 @@ def test_split_ratios_include_reverse_splits():
 
 @respx.mock
 def test_grouped_daily_loads_known_securities(session, raw_store):
-    ingest.load_company_tickers(session, TICKERS, date(2026, 1, 1))
+    market.load_company_tickers(session, TICKERS, date(2026, 1, 1))
     session.commit()
     route = respx.get(f"{API}/v2/aggs/grouped/locale/us/market/stocks/2026-09-29").respond(
         json=MASSIVE_GROUPED
     )
 
-    rows = ingest.sync_market_daily(
+    rows = market.sync_market_daily(
         session, MassiveProvider(raw_store=raw_store), date(2026, 9, 29)
     )
 
@@ -68,7 +68,7 @@ def test_grouped_daily_loads_known_securities(session, raw_store):
 
 @respx.mock
 def test_actions_follow_pagination_with_auth_header(session, raw_store):
-    ingest.load_company_tickers(session, TICKERS, date(2026, 1, 1))
+    market.load_company_tickers(session, TICKERS, date(2026, 1, 1))
     session.commit()
     first = respx.get(f"{API}/stocks/v1/splits", params={"limit": "5000"}).respond(
         json=MASSIVE_SPLITS_PAGE1
@@ -79,8 +79,8 @@ def test_actions_follow_pagination_with_auth_header(session, raw_store):
     respx.get(f"{API}/stocks/v1/dividends").respond(json=MASSIVE_DIVIDENDS)
     massive = MassiveProvider(raw_store=raw_store)
 
-    assert ingest.sync_market_actions(session, massive, "splits", date(2000, 1, 1)) == 2
-    assert ingest.sync_market_actions(session, massive, "dividends", date(2000, 1, 1)) == 1
+    assert market.sync_market_actions(session, massive, "splits", date(2000, 1, 1)) == 2
+    assert market.sync_market_actions(session, massive, "dividends", date(2000, 1, 1)) == 1
 
     assert first.calls[0].request.url.params["execution_date.gte"] == "2000-01-01"
     assert second.calls[0].request.headers["Authorization"] == "Bearer massive-key"

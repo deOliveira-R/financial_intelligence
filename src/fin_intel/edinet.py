@@ -10,8 +10,20 @@ them), but two figures metrics need are spread over several lines:
 Both are added as `fin-intel` facts dated like their components.
 """
 
+import logging
 from collections import defaultdict
+from datetime import date
 from typing import Any
+
+from sqlalchemy.orm import Session
+
+from fin_intel import registry, world, xbrl
+from fin_intel.edgar import load_company_facts
+from fin_intel.pipeline import tracked
+from fin_intel.providers import EdinetProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 DEBT_JGAAP = [
     "ShortTermLoansPayable",
@@ -77,3 +89,81 @@ def add_derived(payload: dict[str, Any]) -> dict[str, Any]:
     if derived:
         facts["fin-intel"] = {concept: {"units": units} for concept, units in derived.items()}
     return payload
+
+
+# --- loading and syncs ---
+
+
+def load_edinet_instance(session: Session, key: str, body: bytes) -> int:
+    """One EDINET report's facts. The raw key carries the document id, filer, type and
+    filing date: `S100YE9I|E00776|120|2026-06-19`."""
+    from fin_intel.providers.edinet import DOC_TYPES
+
+    doc_id, edinet_code, doc_type, filed = key.split("|")
+    payload = xbrl.parse_instance(
+        body, f"edinet:{doc_id}", DOC_TYPES.get(doc_type), date.fromisoformat(filed)
+    )
+
+    dei = payload.pop("dei", {})
+    add_derived(payload)
+    year_end = dei.get("CurrentFiscalYearEndDateDEI") or ""
+    code = (dei.get("SecurityCodeDEI") or "").strip()
+    cik = world.ensure_issuer(
+        session,
+        "edinet",
+        edinet_code,
+        payload.get("entityName"),
+        home_ticker=code[:4] or None,
+        fiscal_month=int(year_end[5:7]) if len(year_end) >= 7 else None,
+    )
+    if not payload["facts"]:
+        return 0
+    return load_company_facts(session, cik, payload, supplement=True)
+
+
+def edinet_reports(documents: Any) -> list[dict[str, Any]]:
+    """Listed companies' annual, quarterly and half-year reports with XBRL in a day's list."""
+    from fin_intel.providers.edinet import DOC_TYPES
+
+    return [
+        r
+        for r in (documents or {}).get("results") or []
+        if r.get("docTypeCode") in DOC_TYPES and r.get("secCode") and r.get("xbrlFlag") == "1"
+    ]
+
+
+def sync_edinet_day(session: Session, provider: EdinetProvider, day: date) -> int:
+    """Every report a day's list names that isn't loaded yet."""
+    with tracked(session, "edinet", "documents", day.isoformat()) as result:
+        session.commit()
+        reports = edinet_reports(provider.fetch_documents(day))
+        store = provider.raw_store
+        done = (
+            {k.split("|")[0] for k in store.latest_hashes("edinet", "instance") if k}
+            if store
+            else set()
+        )
+        rows = 0
+        for r in reports:
+            if r["docID"] in done:
+                continue
+            filed = (r.get("submitDateTime") or day.isoformat())[:10]
+            key = f"{r['docID']}|{r['edinetCode']}|{r['docTypeCode']}|{filed}"
+            session.commit()  # fetch-then-load
+            body = provider.fetch_instance(r["docID"], key)
+            if body is not None:
+                rows += load_edinet_instance(session, key, body)
+        result["rows"] = rows
+    return result["rows"]
+
+
+registry.register(
+    Dataset("edinet", "documents", lambda s, k, p, t: len(edinet_reports(p))),
+    Dataset(
+        "edinet",
+        "instance",
+        lambda s, k, p, t: load_edinet_instance(s, k, p),
+        ("fundamentals",),
+        payload="bytes",
+    ),
+)

@@ -16,12 +16,12 @@ from fin_intel import (
     events,
     filing_text,
     funds,
-    ingest,
     insiders,
     portfolio,
     presidential,
     releases,
     screener,
+    symbols,
     thirteenf,
     timeseries,
 )
@@ -195,7 +195,7 @@ class StatusOut(BaseModel):
 
 
 def _security(session: Session, ticker: str) -> Security:
-    security = ingest.get_security(session, ticker)
+    security = symbols.get_security(session, ticker)
     if security is None:
         raise HTTPException(404, f"unknown ticker {ticker}")
     return security
@@ -878,7 +878,7 @@ def filing_search(
     (web-search syntax: words, "phrases", OR, -exclude)."""
     ciks = None
     if ticker:
-        security = ingest.get_security(session, ticker)
+        security = symbols.get_security(session, ticker)
         if security is None or not security.cik:
             raise HTTPException(404, f"unknown ticker {ticker}")
         ciks = [security.cik]

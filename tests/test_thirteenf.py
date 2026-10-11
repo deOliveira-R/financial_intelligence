@@ -7,7 +7,7 @@ import httpx
 import respx
 from sqlalchemy import func, select
 
-from fin_intel import ingest, thirteenf
+from fin_intel import thirteenf
 from fin_intel.models import CusipMapping, InstitutionalPosition, Security
 from fin_intel.providers import OpenFigiProvider, SecProvider
 from fin_intel.rebuild import rebuild
@@ -184,10 +184,10 @@ def test_openfigi_mapping_links_securities_and_rebuilds(session, raw_store):
     sec = SecProvider(raw_store=raw_store)
     ((period, url),) = sec.list_13f_datasets().items()
     assert period == "2026-03-01_2026-05-31"
-    ingest.sync_13f_dataset(session, sec, period, url)
+    thirteenf.sync_13f_dataset(session, sec, period, url)
     assert sorted(thirteenf.unmapped_cusips(session)) == sorted([AAPL, BOND])
 
-    ingest.sync_cusip_mappings(session, OpenFigiProvider(raw_store=raw_store))
+    thirteenf.sync_cusip_mappings(session, OpenFigiProvider(raw_store=raw_store))
     sent = json.loads(route.calls[0].request.content)
     assert {j["idValue"] for j in sent} == {AAPL, BOND}
     aapl = session.get(CusipMapping, AAPL)

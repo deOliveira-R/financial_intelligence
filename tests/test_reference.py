@@ -3,7 +3,7 @@ from datetime import date
 import respx
 from sqlalchemy import select
 
-from fin_intel import ingest
+from fin_intel import edgar, market, symbols
 from fin_intel.models import Issuer, Security
 from fin_intel.providers import MassiveProvider
 
@@ -25,18 +25,18 @@ def ref(ticker, type_="CS", cik=None, figi=None, name=None, mic="XNAS"):
 
 def sec_sync(session, rows, today=D1):
     payload = {"fields": ["cik", "name", "ticker", "exchange"], "data": rows}
-    ingest.load_company_tickers(session, payload, today)
+    market.load_company_tickers(session, payload, today)
     session.commit()
 
 
-def massive_sync(session, results, today=D1, market="stocks"):
-    ingest.load_massive_tickers(session, market, {"results": results}, today)
-    ingest.deactivate_unseen_massive(session, market, today)
+def massive_sync(session, results, today=D1, segment="stocks"):
+    market.load_massive_tickers(session, segment, {"results": results}, today)
+    market.deactivate_unseen_massive(session, segment, today)
     session.commit()
 
 
 def sec(session, ticker):
-    return ingest.get_security(session, ticker)
+    return symbols.get_security(session, ticker)
 
 
 def test_enriches_sec_securities_but_keeps_sec_name_and_cik(session):
@@ -96,7 +96,7 @@ def test_sec_claims_a_massive_security_it_lists(session):
 def test_deactivation_only_touches_the_list_that_created_a_security(session):
     sec_sync(session, [[1, "Co", "CO", "NYSE"]])
     massive_sync(session, [ref("ETFA", "ETF", figi="BBG0000000E5"), ref("CO", cik=1)])
-    massive_sync(session, [ref("OTCX", "OS", figi="BBG0000000F6", mic=None)], market="otc")
+    massive_sync(session, [ref("OTCX", "OS", figi="BBG0000000F6", mic=None)], segment="otc")
     # The next main-list sync no longer lists ETFA or CO.
     massive_sync(session, [ref("ETFB", "ETF", figi="BBG0000000G7")], today=D2)
     assert not sec(session, "ETFA").active  # Massive-created, gone from Massive's list
@@ -124,7 +124,7 @@ def test_reference_sync_reads_every_page(session, raw_store):
     respx.get("https://api.massive.com/v3/reference/tickers", params={"active": "false"}).respond(
         json={"results": []}
     )
-    rows = ingest.sync_reference_tickers(session, MassiveProvider(raw_store=raw_store))
+    rows = market.sync_reference_tickers(session, MassiveProvider(raw_store=raw_store))
     assert rows == 2 and first.called
     types = session.execute(select(Security.ticker, Security.security_type)).all()
     assert sorted(types) == [("VYM", "ETF"), ("XLV", "ETF")]
@@ -149,10 +149,10 @@ def test_market_data_synced_before_discovery_is_backfilled(session, raw_store):
     )
     massive = MassiveProvider(raw_store=raw_store)
     # Market data first: XLV is unknown, so its rows are skipped...
-    assert ingest.sync_market_daily(session, massive, date(2026, 9, 29)) == 0
-    assert ingest.sync_market_actions(session, massive, "dividends", date(2026, 1, 1)) == 0
+    assert market.sync_market_daily(session, massive, date(2026, 9, 29)) == 0
+    assert market.sync_market_actions(session, massive, "dividends", date(2026, 1, 1)) == 0
     # ...until the reference sync discovers it.
-    ingest.sync_reference_tickers(session, massive)
+    market.sync_reference_tickers(session, massive)
 
     def rows():
         return (
@@ -181,6 +181,6 @@ def test_submissions_set_sic_codes(session, raw_store):
             "filings": {},
         }
     )
-    assert ingest.sync_submissions(session, SecProvider(raw_store=raw_store), 1109357) == 1
+    assert edgar.sync_submissions(session, SecProvider(raw_store=raw_store), 1109357) == 1
     exelon = session.get(Issuer, 1109357)
     assert (exelon.sic, exelon.filer_category) == (4931, "Large accelerated filer")

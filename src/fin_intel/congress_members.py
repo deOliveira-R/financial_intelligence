@@ -10,6 +10,7 @@ Committee assignments are the current roster only (the source keeps no history),
 using them on past trades is a look-ahead; fine for live monitoring.
 """
 
+import logging
 import re
 import unicodedata
 from collections import defaultdict
@@ -19,6 +20,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
 from fin_intel.models import (
     Committee,
@@ -27,6 +29,11 @@ from fin_intel.models import (
     CongressReportMember,
     LegislatorTerm,
 )
+from fin_intel.pipeline import tracked
+from fin_intel.providers import LegislatorsProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 FILING_GRACE = timedelta(days=120)
 _SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "md", "phd", "hon"}
@@ -175,3 +182,37 @@ def _by_name(name: str | None, candidates: list[LegislatorTerm]) -> LegislatorTe
             & {w for n in (t.first, t.nickname) for w in _words(n)}
         }
     return next(iter(people.values())) if len(people) == 1 else None
+
+
+# --- loading and syncs ---
+
+
+def load_legislators_file(session: Session, file: str, payload: Any) -> int:
+    if file in ("current", "historical"):
+        return load_legislators(session, payload)
+    if file == "committees":
+        return load_committees(session, payload)
+    return load_memberships(session, payload)
+
+
+def sync_legislators(session: Session, provider: LegislatorsProvider) -> int:
+    """Members of Congress and current committees, then which member filed each report."""
+    with tracked(session, "legislators", "file", "all") as result:
+        session.commit()  # fetch-then-load
+        files = [
+            (f, provider.fetch(f)) for f in ("historical", "current", "committees", "membership")
+        ]
+        rows = sum(load_legislators_file(session, f, payload) for f, payload in files)
+        result["rows"] = rows + link(session)
+    return result["rows"]
+
+
+registry.register(
+    Dataset(
+        "legislators",
+        "file",
+        lambda s, k, p, t: load_legislators_file(s, k, p),
+        ("congress",),
+        snapshot=True,
+    ),
+)

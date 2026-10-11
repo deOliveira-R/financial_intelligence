@@ -10,6 +10,7 @@ document, and links to what each amends or revokes (`disposition`).
 """
 
 import html
+import logging
 import re
 from dataclasses import dataclass
 from datetime import date
@@ -18,8 +19,14 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
 from fin_intel.models import PresidentialDocument, PresidentialText
+from fin_intel.pipeline import tracked
+from fin_intel.providers import FederalRegisterProvider, NotFoundError
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 KINDS = ("executive_order", "proclamation", "memorandum", "determination", "notice")
 FIRST_YEAR = 1994
@@ -129,3 +136,43 @@ def search(
         params,
     ).all()
     return [Hit(*row) for row in rows]
+
+
+# --- loading and syncs ---
+
+
+def sync_presidential_year(session: Session, provider: FederalRegisterProvider, year: int) -> int:
+    """A year's presidential documents of every kind, then the text of those not stored."""
+    with tracked(session, "federalregister", "presidential_list", str(year)) as result:
+        session.commit()  # fetch-then-load
+        payloads = {kind: provider.fetch_year(kind, year) for kind in KINDS}
+        rows = sum(load_list(session, f"{kind}|{year}", p) for kind, p in payloads.items())
+        session.commit()
+        for number, url in missing_text(session, list(payloads.values())):
+            try:
+                body = provider.fetch_text(number, url)
+            except NotFoundError:  # a few old documents have no text page
+                log.warning("no text for presidential document %s", number)
+                continue
+            rows += load_text(session, number, body)
+            session.commit()  # per document
+        result["rows"] = rows
+    return result["rows"]
+
+
+registry.register(
+    Dataset(
+        "federalregister",
+        "presidential_list",
+        lambda s, k, p, t: load_list(s, k, p),
+        ("presidential",),
+        snapshot=True,
+    ),
+    Dataset(
+        "federalregister",
+        "presidential_text",
+        lambda s, k, p, t: load_text(s, k, p),
+        ("presidential",),
+        payload="bytes",
+    ),
+)

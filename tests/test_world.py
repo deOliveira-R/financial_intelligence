@@ -3,7 +3,7 @@ from datetime import date
 
 from sqlalchemy import select
 
-from fin_intel import esef, ingest, taiwan, world
+from fin_intel import esef, taiwan, world
 from fin_intel.models import Issuer, StatementItem
 
 
@@ -58,7 +58,7 @@ def test_taiwan_tables_are_year_to_date_in_thousands():
 
 
 def test_taiwan_balance_sheet_loads(session):
-    rows = ingest.load_twse_table(session, "twse|t187ap07_ci|2026-10-04", [TSMC_BS])
+    rows = taiwan.load_twse_table(session, "twse|t187ap07_ci|2026-10-04", [TSMC_BS])
     assert rows > 0
     cik = world.issuer_id("twse", "2330")
     assert session.get(Issuer, cik).country == "TW"
@@ -120,7 +120,7 @@ def test_esef_periods_end_the_day_before_midnight():
 
 def test_esef_report_loads(session):
     key = "724500Y6DUVHQD6OXN27|2025-12-31|NL|2026-02-11|ASML Holding N.V."
-    assert ingest.load_esef_report(session, key, esef_report()) > 0
+    assert esef.load_esef_report(session, key, esef_report()) > 0
     cik = world.issuer_id("esef", "724500Y6DUVHQD6OXN27")
     issuer = session.get(Issuer, cik)
     assert (issuer.name, issuer.country, issuer.lei) == (
@@ -146,8 +146,8 @@ def test_taiwan_prices_create_listings_and_value_in_dollars(session):
     session.commit()
     full_year = dict(TSMC_IS, 季別="4", 年度="114")  # FY2025, so there's an annual figure
     full_year["淨利（淨損）歸屬於母公司業主"] = "1695124900.00"
-    ingest.load_twse_table(session, "twse|t187ap06_ci|2026-03-31", [full_year])
-    ingest.load_twse_table(session, "twse|t187ap07_ci|2026-10-04", [TSMC_BS])
+    taiwan.load_twse_table(session, "twse|t187ap06_ci|2026-03-31", [full_year])
+    taiwan.load_twse_table(session, "twse|t187ap07_ci|2026-10-04", [TSMC_BS])
     day = d.today()
     quote = {
         "tables": [
@@ -176,7 +176,7 @@ def test_taiwan_prices_create_listings_and_value_in_dollars(session):
             }
         ]
     }
-    assert ingest.load_tw_prices(session, f"twse|{day.isoformat()}", quote) == 1
+    assert taiwan.load_tw_prices(session, f"twse|{day.isoformat()}", quote) == 1
     tsmc = session.scalar(select(Security).where(Security.ticker == "2330.TW"))
     assert (tsmc.currency, tsmc.mic, tsmc.cik) == ("TWD", "XTAI", world.issuer_id("twse", "2330"))
     session.add(EconomicSeries(id="DEXTAUS", source="fred"))

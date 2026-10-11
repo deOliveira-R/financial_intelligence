@@ -17,6 +17,7 @@ reasons, but buy for one.
 import csv
 import hashlib
 import io
+import logging
 import re
 import xml.etree.ElementTree as ET
 import zipfile
@@ -28,8 +29,14 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
 from fin_intel.models import InsiderTransaction
+from fin_intel.pipeline import tracked
+from fin_intel.providers import NotFoundError, SecProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 KEY_FIELDS = (
     "accession",
@@ -277,3 +284,67 @@ def cluster_buys(
 
 def latest_transaction_date(session: Session) -> date | None:
     return session.scalar(select(func.max(InsiderTransaction.filing_date)))
+
+
+# --- loading and syncs ---
+
+
+INSIDER_FORMS = ("4", "4/A")
+
+_FILED = re.compile(rb"FILED AS OF DATE:\s*(\d{8})")
+
+
+def load_insider_dataset(session: Session, body: bytes) -> int:
+    return load(session, parse_dataset(body))
+
+
+def load_form4(session: Session, accession: str, body: bytes) -> int:
+    match = _FILED.search(body)
+    filed = datetime.strptime(match.group(1).decode(), "%Y%m%d").date() if match else None
+    return load(session, parse_form4(accession, filed, body))
+
+
+def sync_insider_dataset(
+    session: Session, sec_provider: SecProvider, quarter: str, url: str
+) -> int:
+    with tracked(session, "sec", "insider_dataset", quarter) as result:
+        body = sec_provider.fetch_insider_dataset(quarter, url)
+        result["rows"] = load_insider_dataset(session, body)
+    return result["rows"]
+
+
+def sync_insider_day(session: Session, sec_provider: SecProvider, day: date) -> int:
+    """Every Form 4 filed on a day that isn't loaded yet (each fetched individually)."""
+    with tracked(session, "sec", "insider_day", day.isoformat()) as result:
+        filings = [
+            (a, p) for form, a, p in sec_provider.fetch_daily_index(day) if form in INSIDER_FORMS
+        ]
+        have = set(
+            session.scalars(
+                select(InsiderTransaction.accession).where(
+                    InsiderTransaction.accession.in_([a for a, _ in filings])
+                )
+            )
+        )
+        bodies = []
+        for accession, path in filings:
+            if accession in have:
+                continue
+            try:
+                bodies.append((accession, sec_provider.fetch_submission(accession, path)))
+            except NotFoundError:  # listed in the index but withdrawn from the archive
+                log.warning("insider filing %s not in SEC's archive; skipped", accession)
+        result["rows"] = sum(load_form4(session, a, body) for a, body in bodies)
+    return result["rows"]
+
+
+registry.register(
+    Dataset(
+        "sec",
+        "insider_dataset",
+        lambda s, k, p, t: load_insider_dataset(s, p),
+        ("insiders",),
+        payload="bytes",
+    ),
+    Dataset("sec", "form4", lambda s, k, p, t: load_form4(s, k, p), ("insiders",), payload="bytes"),
+)

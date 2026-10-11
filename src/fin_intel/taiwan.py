@@ -9,8 +9,21 @@ Field names differ between the exchanges (公司代號 vs SecuritiesCompanyCode)
 industry formats (banks report net interest income and other net revenue, not revenue).
 """
 
+import logging
 from datetime import date
 from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from fin_intel import registry, world
+from fin_intel.db import upsert
+from fin_intel.edgar import load_company_facts
+from fin_intel.models import DailyBar, Issuer, Security
+from fin_intel.pipeline import tracked
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 THOUSANDS = 1000.0
 PAR = 10.0
@@ -219,3 +232,95 @@ def parse_profiles(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+# --- loading and syncs ---
+
+
+def load_twse_table(session: Session, key: str, payload: Any) -> int:
+    """One exchange table: profiles (names), or a quarter's income statements or balance
+    sheets for every company. Key: `twse|t187ap06_ci|2026-10-04`."""
+    if not isinstance(payload, list):
+        return 0
+    _, table, snapshot = key.split("|")
+    if table == "t187ap03":
+        profiles = parse_profiles(payload)
+        for p in profiles:
+            world.ensure_issuer(session, "twse", p["code"], p["name"], home_ticker=p["code"])
+        return len(profiles)
+    statement = "income" if table.startswith("t187ap06") else "balance"
+    rows = 0
+    for company, facts in parse_table(payload, statement, date.fromisoformat(snapshot)).items():
+        cik = world.ensure_issuer(session, "twse", company, home_ticker=company)
+        rows += load_company_facts(session, cik, world.facts_payload(facts), supplement=True)
+        session.commit()  # one company at a time: a whole table would hold the write lock
+    return rows
+
+
+def load_tw_prices(session: Session, key: str, payload: Any) -> int:
+    """One trading day's quotes on TWSE or TPEx, for companies we have filings for (ETFs and
+    warrants are skipped). Each company's listing is created on first sight, priced in TWD.
+    Key: `twse|2026-10-02`."""
+    market, day = key.split("|")
+    bars = parse_prices(payload, market)
+    if not bars:
+        return 0
+    issuers = dict(
+        session.execute(select(Issuer.source_id, Issuer.name).where(Issuer.source == "twse")).all()
+    )
+    tickers = {f"{b['code']}.{SUFFIX[market]}": b for b in bars if b["code"] in issuers}
+    existing = dict(
+        session.execute(
+            select(Security.ticker, Security.id).where(Security.ticker.in_(list(tickers)))
+        ).all()
+    )
+    for ticker, bar in tickers.items():
+        if ticker not in existing:
+            security = Security(
+                ticker=ticker,
+                name=issuers[bar["code"]],
+                origin="twse",
+                mic=MICS[market],
+                security_type="CS",
+                cik=world.issuer_id("twse", bar["code"]),
+                currency="TWD",
+            )
+            session.add(security)
+            session.flush()
+            existing[ticker] = security.id
+    rows = [
+        {
+            "security_id": existing[t],
+            "date": date.fromisoformat(day),
+            "source": "twse",
+            **{k: b[k] for k in ("open", "high", "low", "close", "volume")},
+        }
+        for t, b in tickers.items()
+    ]
+    return upsert(session, DailyBar, rows, key=["security_id", "date", "source"])
+
+
+def sync_tw_prices(session: Session, provider: Any, market: str, day: date) -> int:
+    with tracked(session, "twse", "prices", f"{market}|{day.isoformat()}") as result:
+        session.commit()
+        payload = provider.fetch_prices(market, day)
+        result["rows"] = load_tw_prices(session, f"{market}|{day.isoformat()}", payload)
+    return result["rows"]
+
+
+def sync_twse_table(
+    session: Session, provider: Any, market: str, table: str, snapshot: date
+) -> int:
+    with tracked(session, "twse", "table", f"{market}|{table}|{snapshot.isoformat()}") as result:
+        session.commit()
+        payload = provider.fetch(market, table, snapshot.isoformat())
+        result["rows"] = load_twse_table(
+            session, f"{market}|{table}|{snapshot.isoformat()}", payload
+        )
+    return result["rows"]
+
+
+registry.register(
+    Dataset("twse", "table", lambda s, k, p, t: load_twse_table(s, k, p), ("fundamentals",)),
+    Dataset("twse", "prices", lambda s, k, p, t: load_tw_prices(s, k, p), ("prices", "market")),
+)

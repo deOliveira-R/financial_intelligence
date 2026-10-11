@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import respx
 from sqlalchemy import func, select
 
-from fin_intel import carry, ingest, japan, releases
+from fin_intel import carry, japan, releases
 from fin_intel.models import (
     DailyBar,
     EconomicObservation,
@@ -109,9 +109,9 @@ def test_sync_japan_loads_history_once_and_rebuilds(session, raw_store):
     respx.get(base + JGB_CURRENT).respond(content=JGB_MONTH)
     respx.get(base + FLOWS).respond(content=FLOWS_CSV)
     mof = MofProvider(raw_store=raw_store)
-    assert ingest.sync_japan(session, mof) > 0
+    assert japan.sync_japan(session, mof) > 0
     assert history.call_count == 1  # nothing before this month yet: history fetched
-    ingest.sync_japan(session, mof)
+    japan.sync_japan(session, mof)
     assert history.call_count == 1  # history present: only this month and flows
 
     def count():

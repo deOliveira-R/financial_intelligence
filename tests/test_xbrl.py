@@ -3,7 +3,7 @@ from datetime import date
 import respx
 from sqlalchemy import select
 
-from fin_intel import ingest, xbrl
+from fin_intel import edgar, xbrl
 from fin_intel.models import Filing, Issuer, StatementItem
 from fin_intel.providers import SecProvider
 from fin_intel.rebuild import rebuild
@@ -126,7 +126,7 @@ def test_fill_gaps_loads_the_filing_and_keeps_the_reporting_currency(session, ra
     respx.get(f"{folder}/tsm-20251231_htm.xml").respond(content=instance())
     sec = SecProvider(raw_store=raw_store)
 
-    assert ingest.sync_xbrl_gaps(session, sec, 1046179) > 0
+    assert edgar.sync_xbrl_gaps(session, sec, 1046179) > 0
     filing = session.scalar(select(Filing).where(Filing.accession == accession))
     assert (filing.form, filing.filed) == ("20-F", date(2026, 4, 16))
     assert session.get(Issuer, 1046179).name == "TSMC"  # not overwritten
@@ -144,7 +144,7 @@ def test_fill_gaps_loads_the_filing_and_keeps_the_reporting_currency(session, ra
         (date(2025, 12, 31), "TWD", 3809000000000.0),
     ]
     assert revenue() == expected
-    assert ingest.sync_xbrl_gaps(session, sec, 1046179) == 0  # loaded now: not refetched
+    assert edgar.sync_xbrl_gaps(session, sec, 1046179) == 0  # loaded now: not refetched
 
     rebuild(session, raw_store, "fundamentals")
     assert revenue() == expected

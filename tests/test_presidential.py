@@ -4,7 +4,7 @@ import httpx
 import respx
 from sqlalchemy import func, select
 
-from fin_intel import ingest, presidential
+from fin_intel import presidential
 from fin_intel.models import PresidentialDocument, PresidentialText
 from fin_intel.providers import FederalRegisterProvider
 from fin_intel.rebuild import rebuild
@@ -61,8 +61,8 @@ def test_sync_search_and_rebuild(session, raw_store):
     text = respx.get(TEXT_URL).respond(content=BODY)
     respx.get(url__regex=r".*/1999-0001\.txt").respond(404)
     provider = FederalRegisterProvider(raw_store=raw_store)
-    assert ingest.sync_presidential_year(session, provider, 2025) == 3
-    ingest.sync_presidential_year(session, provider, 2025)
+    assert presidential.sync_presidential_year(session, provider, 2025) == 3
+    presidential.sync_presidential_year(session, provider, 2025)
     assert text.call_count == 1  # stored text isn't fetched again
 
     doc = session.get(PresidentialDocument, "2025-06063")

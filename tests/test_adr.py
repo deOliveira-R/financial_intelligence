@@ -5,7 +5,7 @@ import respx
 from test_aliases import reference
 from test_reference import ref
 
-from fin_intel import ingest, metrics
+from fin_intel import market, metrics, symbols
 from fin_intel.metrics import Item
 from fin_intel.models import Security
 from fin_intel.providers import MassiveProvider
@@ -66,17 +66,17 @@ def test_sync_rotates_through_adrs_and_rebuilds(session, raw_store, monkeypatch)
             ref("AAPL", "CS", cik=320193, figi="BBG000AAPL01"),
         ]
     )
-    ingest.sync_reference_tickers(session, massive)
-    monkeypatch.setattr(ingest, "_today", lambda: date.today())
-    assert ingest.due_listing_shares(session) == ["MOMO", "NVO"]  # ADRs only
+    market.sync_reference_tickers(session, massive)
+    monkeypatch.setattr(market, "utc_today", lambda: date.today())
+    assert market.due_listing_shares(session) == ["MOMO", "NVO"]  # ADRs only
 
     respx.get("https://api.massive.com/v3/reference/tickers/MOMO").respond(
         json=details("MOMO", 107565168, "BBG000MOMO01")
     )
-    assert ingest.sync_listing_shares(session, massive, "MOMO") == 1
-    momo = ingest.get_security(session, "MOMO")
+    assert market.sync_listing_shares(session, massive, "MOMO") == 1
+    momo = symbols.get_security(session, "MOMO")
     assert momo.shares_outstanding == 107565168 and momo.shares_as_of == date.today()
-    assert ingest.due_listing_shares(session) == ["NVO"]  # MOMO is fresh now
+    assert market.due_listing_shares(session) == ["NVO"]  # MOMO is fresh now
 
     rebuild(session, raw_store, "market")
-    assert ingest.get_security(session, "MOMO").shares_outstanding == 107565168
+    assert symbols.get_security(session, "MOMO").shares_outstanding == 107565168

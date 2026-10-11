@@ -3,7 +3,7 @@ from datetime import date
 import respx
 from sqlalchemy import select
 
-from fin_intel import dart, ingest, world
+from fin_intel import dart, world
 from fin_intel.models import Issuer, StatementItem
 from fin_intel.providers import DartProvider
 from fin_intel.rebuild import rebuild
@@ -63,7 +63,7 @@ def test_periods_follow_the_report_and_fiscal_year():
 
 
 def test_periods_past_their_deadline_newest_first():
-    periods = ingest.dart_periods(date(2026, 10, 4), first_year=2025)
+    periods = dart.dart_periods(date(2026, 10, 4), first_year=2025)
     assert periods == [
         (2026, "11012"),
         (2026, "11013"),
@@ -102,7 +102,7 @@ def test_report_sync_falls_back_to_separate_statements_and_rebuilds(session, raw
     world.ensure_issuer(session, "dart", "00126380", "SAMSUNG", home_ticker="005930")
     session.commit()
     provider = DartProvider(raw_store=raw_store)
-    assert ingest.sync_dart_report(session, provider, "00126380", 2026, "11012", shares=True) > 0
+    assert dart.sync_dart_report(session, provider, "00126380", 2026, "11012", shares=True) > 0
     cik = world.issuer_id("dart", "00126380")
     assert cik == 20_000_126_380 and session.get(Issuer, cik).country == "KR"
 

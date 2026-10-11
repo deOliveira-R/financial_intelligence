@@ -9,6 +9,7 @@ period).
 SPY and DIA are unit investment trusts and don't file N-PORT; IVV stands in for the S&P 500.
 """
 
+import logging
 import re
 import xml.etree.ElementTree as ET
 from datetime import date
@@ -17,8 +18,14 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
 from fin_intel.models import CusipMapping, FundHolding
+from fin_intel.pipeline import tracked
+from fin_intel.providers import SecProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 FUNDS = {
     "IVV": "S&P 500",
@@ -189,3 +196,52 @@ def members(session: Session, fund: str, as_of: date | None = None) -> list[dict
         }
         for h, security_id in rows
     ]
+
+
+# --- loading and syncs ---
+
+
+def sync_fund(session: Session, sec_provider: SecProvider, ticker: str, series: dict) -> int:
+    """A tracked fund's N-PORT reports not stored yet (`series`: its fund_tickers entry)."""
+    with tracked(session, "sec", "nport", ticker) as result:
+        session.commit()  # fetch-then-load
+        store = sec_provider.raw_store
+        have = {k.split("|")[2] for k in store.latest_hashes("sec", "nport")} if store else set()
+        filings = [
+            f
+            for form in FORMS
+            for f in sec_provider.fetch_series_filings(series["series_id"], form)
+            if f["accession"] not in have
+        ]
+        bodies = [
+            (
+                f"{ticker}|{series['series_id']}|{f['accession']}|{f['filed']}",
+                sec_provider.fetch_nport(
+                    ticker, series["series_id"], series["cik"], f["accession"], f["filed"]
+                ),
+            )
+            for f in sorted(filings, key=lambda f: f["filed"])
+        ]
+        rows = 0
+        for key, body in bodies:
+            rows += load(session, key, body)
+            session.commit()  # per report
+        result["rows"] = rows
+    return result["rows"]
+
+
+def fund_series(sec_provider: SecProvider) -> dict[str, dict]:
+    """Tracked funds' trust CIK and series ID, from SEC's fund ticker list."""
+    payload = sec_provider.fetch_fund_tickers()
+    fields = payload["fields"]
+    out = {}
+    for row in payload["data"]:
+        r = dict(zip(fields, row, strict=False))
+        if r.get("symbol") in FUNDS and r.get("seriesId"):
+            out[r["symbol"]] = {"cik": int(r["cik"]), "series_id": r["seriesId"]}
+    return out
+
+
+registry.register(
+    Dataset("sec", "nport", lambda s, k, p, t: load(s, k, p), ("funds",), payload="bytes"),
+)

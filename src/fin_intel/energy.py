@@ -7,8 +7,20 @@ expectations move crude, products and energy stocks; Cushing (the WTI delivery p
 matters for the front of the futures curve.
 """
 
+import logging
 from datetime import date, timedelta
 from typing import Any
+
+from sqlalchemy.orm import Session
+
+from fin_intel import registry
+from fin_intel.db import upsert
+from fin_intel.models import EconomicObservation, EconomicSeries
+from fin_intel.pipeline import tracked
+from fin_intel.providers import EiaProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 # EIA ID -> (route, alias, publication lag in days after the period's Friday)
 SERIES: dict[str, tuple[str, str, int]] = {
@@ -71,3 +83,34 @@ def parse(series_id: str, payload: dict[str, Any]) -> tuple[dict[str, Any], list
     return series, [
         {"series_id": series_id, "date": d, "value": v} for d, v in sorted(observations.items())
     ]
+
+
+# --- loading and syncs ---
+
+
+def load_eia_series(session: Session, series_id: str, payload: Any) -> int:
+    series, observations = parse(series_id, payload)
+    upsert(session, EconomicSeries, [series], key=["id"])
+    return upsert(session, EconomicObservation, observations, key=["series_id", "date"])
+
+
+def sync_eia(session: Session, eia_provider: EiaProvider, series_id: str) -> int:
+    route = SERIES[series_id][0]
+    with tracked(session, "eia", "series", series_id) as result:
+        session.commit()  # fetch-then-load
+        result["rows"] = load_eia_series(
+            session, series_id, eia_provider.fetch_series(route, series_id)
+        )
+    return result["rows"]
+
+
+registry.register(
+    Dataset(
+        "eia",
+        "series",
+        lambda s, k, p, t: load_eia_series(s, k, p),
+        ("economic",),
+        snapshot=True,
+        note="full history in every response",
+    ),
+)

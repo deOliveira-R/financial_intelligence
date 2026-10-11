@@ -8,14 +8,21 @@ Point in time: agencies report obligations within weeks, the Department of Defen
 end, and months younger than SETTLED_AFTER are refetched on every sync.
 """
 
+import logging
 from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
-from fin_intel.models import FederalObligation
+from fin_intel.models import FederalObligation, SyncState
+from fin_intel.pipeline import tracked
+from fin_intel.providers import UsaspendingProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 FIRST_MONTH = date(2007, 10, 1)  # USAspending searches start in fiscal 2008
 AVAILABLE_AFTER = timedelta(days=90)
@@ -60,3 +67,53 @@ def series(session: Session, prefix: str) -> list[tuple[date, float]]:
         .order_by(FederalObligation.month)
     )
     return [(m, v) for m, v in rows]
+
+
+# --- loading and syncs ---
+
+
+def sync_contracts_month(session: Session, provider: UsaspendingProvider, month: date) -> int:
+    """A month's federal contract obligations by NAICS code, every page."""
+    with tracked(session, "usaspending", "naics_month", f"{month:%Y-%m}") as result:
+        session.commit()  # fetch-then-load
+        pages, page = [], 1
+        while True:
+            payload = provider.fetch_naics_month(month, page)
+            pages.append((f"{month:%Y-%m}|{page}", payload))
+            if not (payload.get("page_metadata") or {}).get("hasNext"):
+                break
+            page += 1
+        result["rows"] = sum(load_page(session, key, p) for key, p in pages)
+    return result["rows"]
+
+
+def contract_months_due(session: Session, today: date) -> list[date]:
+    """Months never loaded, or last loaded before they settled (revisions, DoD's delay)."""
+    loaded = {
+        k: ok
+        for k, ok in session.execute(
+            select(SyncState.key, SyncState.last_success).where(
+                SyncState.provider == "usaspending",
+                SyncState.dataset == "naics_month",
+                SyncState.last_success.is_not(None),
+            )
+        )
+    }
+    due = []
+    for month in months(today):
+        ok = loaded.get(f"{month:%Y-%m}")
+        if ok is None or ok.date() - month_end(month) < SETTLED_AFTER:
+            due.append(month)
+    return due
+
+
+registry.register(
+    Dataset(
+        "usaspending",
+        "naics_month",
+        lambda s, k, p, t: load_page(s, k, p),
+        ("policy",),
+        snapshot=True,
+        note="per month and page; months are revised",
+    ),
+)

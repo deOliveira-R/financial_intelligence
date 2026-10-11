@@ -5,7 +5,7 @@ import respx
 from sqlalchemy import func, select
 from test_timeseries import add_bars
 
-from fin_intel import cot, ingest, timeseries
+from fin_intel import cot, timeseries
 from fin_intel.models import CotPosition
 from fin_intel.providers import CftcProvider
 from fin_intel.rebuild import rebuild
@@ -103,7 +103,7 @@ def test_sync_pages_then_rebuild(session, raw_store, monkeypatch):
         side_effect=[respx.MockResponse(200, json=p) for p in pages]
     )
     cftc = CftcProvider(raw_store=raw_store)
-    assert ingest.sync_cot(session, cftc, "legacy", date(2026, 9, 1)) == 9
+    assert cot.sync_cot(session, cftc, "legacy", date(2026, 9, 1)) == 9
     first, second = (c.request.url.params for c in route.calls)
     assert "'067651'" in first["$where"] and "'13874A'" in first["$where"]  # every market
     assert "report_date_as_yyyy_mm_dd >= '2026-09-01'" in first["$where"]

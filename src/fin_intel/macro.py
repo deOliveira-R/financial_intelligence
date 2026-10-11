@@ -5,6 +5,22 @@ explicit list. Every series is stored with its full revision history (ALFRED vin
 so research can ask what was known on any past date (see timeseries.py).
 """
 
+import logging
+from datetime import timedelta
+from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from fin_intel import registry
+from fin_intel.db import upsert
+from fin_intel.models import EconomicObservation, EconomicSeries, EconomicVintage
+from fin_intel.pipeline import tracked
+from fin_intel.providers import FredProvider, fred
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
+
 MACRO_SERIES: dict[str, tuple[str, str]] = {
     # Oil and energy
     "DCOILWTICO": ("energy", "WTI crude oil spot, daily"),
@@ -89,3 +105,60 @@ MACRO_SERIES: dict[str, tuple[str, str]] = {
     "WTREGEN": ("liquidity", "Treasury General Account, weekly"),
     "M2SL": ("liquidity", "M2 money supply"),
 }
+
+
+# --- loading and syncs ---
+
+
+def load_fred_series(session: Session, payload: Any) -> int:
+    return upsert(session, EconomicSeries, [fred.parse_series(payload)], key=["id"])
+
+
+def load_fred_observations(session: Session, series_id: str, payload: Any) -> int:
+    rows = fred.parse_observations(series_id, payload)
+    return upsert(session, EconomicObservation, rows, key=["series_id", "date"])
+
+
+def load_fred_vintages(session: Session, series_id: str, payload: Any) -> int:
+    rows = fred.parse_vintages(series_id, payload)
+    return upsert(session, EconomicVintage, rows, key=["series_id", "date", "realtime_start"])
+
+
+def sync_economic(session: Session, fred_provider: FredProvider, series_id: str) -> int:
+    """Latest values (one call returns the whole series) plus every revision published
+    since the last sync (ALFRED vintages), for point-in-time research."""
+    with tracked(session, "fred", "observations", series_id) as result:
+        last_vintage = session.scalar(
+            select(func.max(EconomicVintage.realtime_start)).where(
+                EconomicVintage.series_id == series_id
+            )
+        )
+        series = fred_provider.fetch_series(series_id)
+        observations = fred_provider.fetch_observations(series_id)
+        since = last_vintage + timedelta(days=1) if last_vintage else None
+        vintage_dates = fred_provider.fetch_vintage_dates(series_id, since)
+        vintage_pages = []
+        for i in range(0, len(vintage_dates), fred.MAX_VINTAGES):
+            window = vintage_dates[i : i + fred.MAX_VINTAGES]
+            vintage_pages += fred_provider.fetch_vintages(series_id, window[0], window[-1])
+
+        load_fred_series(session, series)
+        result["rows"] = load_fred_observations(session, series_id, observations)
+        for page in vintage_pages:
+            load_fred_vintages(session, series_id, page)
+    return result["rows"]
+
+
+registry.register(
+    Dataset(
+        "fred", "series", lambda s, k, p, t: load_fred_series(s, p), ("economic",), snapshot=True
+    ),
+    Dataset(
+        "fred",
+        "observations",
+        lambda s, k, p, t: load_fred_observations(s, k, p),
+        ("economic",),
+        snapshot=True,
+    ),
+    Dataset("fred", "vintages", lambda s, k, p, t: load_fred_vintages(s, k, p), ("economic",)),
+)

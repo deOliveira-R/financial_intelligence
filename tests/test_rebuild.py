@@ -15,7 +15,7 @@ from conftest import (
 )
 from sqlalchemy import select
 
-from fin_intel import ingest
+from fin_intel import edgar, macro, market, registry
 from fin_intel.models import (
     Concept,
     CorporateAction,
@@ -107,16 +107,16 @@ def synced(session, raw_store):
         mock_fred()
         sec = SecProvider(raw_store=raw_store)
         tiingo = TiingoProvider(raw_store=raw_store)
-        ingest.sync_tickers(session, sec)
-        ingest.sync_fundamentals(session, sec, "AAPL")
-        ingest.sync_prices(session, tiingo, "SPY")  # not in SEC's list: created via metadata
-        ingest.sync_prices(session, tiingo, "SPY")
-        ingest.sync_economic(session, FredProvider(raw_store=raw_store), "UNRATE")
+        market.sync_tickers(session, sec)
+        edgar.sync_fundamentals(session, sec, "AAPL")
+        market.sync_prices(session, tiingo, "SPY")  # not in SEC's list: created via metadata
+        market.sync_prices(session, tiingo, "SPY")
+        macro.sync_economic(session, FredProvider(raw_store=raw_store), "UNRATE")
         massive = MassiveProvider(raw_store=raw_store)
-        ingest.sync_reference_tickers(session, massive)
-        ingest.sync_market_daily(session, massive, date(2026, 9, 29))
-        ingest.sync_market_actions(session, massive, "splits", date(2000, 1, 1))
-        ingest.sync_market_actions(session, massive, "dividends", date(2000, 1, 1))
+        market.sync_reference_tickers(session, massive)
+        market.sync_market_daily(session, massive, date(2026, 9, 29))
+        market.sync_market_actions(session, massive, "splits", date(2000, 1, 1))
+        market.sync_market_actions(session, massive, "dividends", date(2000, 1, 1))
     return session
 
 
@@ -149,10 +149,9 @@ def test_rebuild_picks_up_parser_changes(synced, raw_store, monkeypatch):
 def test_rebuild_still_reproduces_tables_after_pruning(synced, raw_store):
     from datetime import timedelta
 
-    from fin_intel.ingest import SNAPSHOT_DATASETS
     from fin_intel.raw import prune
 
     before = snapshot(synced)
-    prune(raw_store, SNAPSHOT_DATASETS, keep=1, min_age=timedelta(0))
+    prune(raw_store, registry.where(snapshot=True), keep=1, min_age=timedelta(0))
     rebuild(synced, raw_store, "all")
     assert snapshot(synced) == before
