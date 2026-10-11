@@ -90,8 +90,8 @@ The shared vocabulary every connecting feature uses.
   rebuild; materialize later only if slow): insider, congress, 8-K/event filings, reports,
   bills, presidential documents, lobbying, contracts. Themes gained `keywords` (renamed
   from presidential_query) used for presidential text, lobbying issue descriptions and bill
-  titles, since codes and policy areas alone are too coarse. Not yet: 13F changes, short
-  interest, releases. Found and fixed on the way: insider trades stored twice when the
+  titles, since codes and policy areas alone are too coarse. 13F quarters and short-interest
+  jumps added for companies. Not yet: releases. Found and fixed on the way: insider trades stored twice when the
   dataset and the Form 4 round a price differently (`rebuild insiders` after deploy).
   Original notes: unified point-in-time event timeline: one row per public event (insider trades,
   congressional trades, 13F changes, 8-K items, bills, presidential documents, lobbying

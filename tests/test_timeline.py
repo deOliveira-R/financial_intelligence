@@ -12,17 +12,21 @@ from fin_intel.models import (
     CongressReport,
     CongressTrade,
     CorporateEvent,
+    CusipMapping,
     FederalObligation,
     Filing,
     GraphEdge,
     GraphNode,
     InsiderTransaction,
+    InstitutionalFiler,
+    InstitutionalPosition,
     Issuer,
     LobbyingIssue,
     LobbyingReport,
     PresidentialDocument,
     PresidentialText,
     Security,
+    ShortInterest,
 )
 
 
@@ -220,3 +224,54 @@ def test_api(data, engine):
         assert client.get("/timeline", params={"kind": "gossip"}).status_code == 400
     finally:
         app.dependency_overrides.clear()
+
+
+def test_short_interest_and_13f(data):
+    session = data
+    sid = session.query(Security).filter_by(ticker="AERO").one().id
+    session.add_all([InstitutionalFiler(cik=c, name=str(c)) for c in (10, 11, 12)])
+    session.add_all(
+        [
+            CusipMapping(cusip="AERO00001", security_id=sid),
+            CusipMapping(cusip="AERO00002", security_id=sid),  # a second share class
+        ]
+    )
+    session.flush()
+
+    def pos(filer, period, filed, cusip="AERO00001", shares=100.0):
+        return InstitutionalPosition(
+            filer_cik=filer,
+            period=period,
+            cusip=cusip,
+            put_call="",
+            shares=shares,
+            accession=f"{filer}{period}{cusip}",
+            filed=filed,
+        )
+
+    session.add_all(
+        [
+            ShortInterest(security_id=sid, settlement_date=date(2026, 5, 15), short_position=100.0),
+            ShortInterest(security_id=sid, settlement_date=date(2026, 5, 29), short_position=110.0),
+            ShortInterest(
+                security_id=sid,
+                settlement_date=date(2026, 6, 15),
+                short_position=165.0,
+                days_to_cover=3.0,
+            ),
+            pos(10, date(2025, 12, 31), date(2026, 2, 1)),
+            pos(10, date(2026, 3, 31), date(2026, 5, 1)),
+            pos(10, date(2026, 3, 31), date(2026, 5, 1), cusip="AERO00002"),  # one holder
+            pos(11, date(2026, 3, 31), date(2026, 5, 2), shares=50.0),
+            pos(12, date(2026, 3, 31), date(2026, 9, 1)),  # late: after the deadline
+        ]
+    )
+    session.commit()
+    events = timeline.query(
+        session, date(2026, 5, 1), date(2026, 6, 30), ciks={1}, kinds=["short_interest", "13f"]
+    )
+    (si,) = [e for e in events if e.kind == "short_interest"]  # +10% isn't an event
+    assert si.date == date(2026, 6, 25) and "+50% to 165 shares, 3.0 days to cover" in si.title
+    (holders,) = [e for e in events if e.kind == "13f"]
+    assert holders.date == date(2026, 5, 15)
+    assert "2 holders (+1), shares held +150.0%" in holders.title

@@ -7,7 +7,7 @@ only what could have been known then. Events are read from the source tables on 
 (nothing is copied, nothing to rebuild), for a company (`ciks`), a theme, or both:
 
 - company events: insider open-market trades, congressional trades, 8-K items and other
-  event filings, periodic reports;
+  event filings, periodic reports, short-interest jumps, 13F holders per quarter;
 - theme events: bills (introduced, enacted) by policy area and subject, presidential
   documents by the theme's query, lobbying reports by issue code, monthly federal contract
   obligations by NAICS, and the company events of the theme's companies (graph.py's
@@ -17,6 +17,7 @@ only what could have been known then. Events are read from the source tables on 
 Sources register with `@source("kind")`; `query()` merges them newest first.
 """
 
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -25,7 +26,7 @@ from typing import Any
 from sqlalchemy import and_, func, or_, select, true
 from sqlalchemy.orm import Session
 
-from fin_intel import contracts, filing_events, themes
+from fin_intel import contracts, filing_events, shortinterest, themes
 from fin_intel.models import (
     Bill,
     BillSubject,
@@ -33,16 +34,19 @@ from fin_intel.models import (
     CongressReportMember,
     CongressTrade,
     CorporateEvent,
+    CusipMapping,
     FederalObligation,
     Filing,
     GraphEdge,
     InsiderTransaction,
+    InstitutionalPosition,
     LegislatorTerm,
     LobbyingIssue,
     LobbyingReport,
     PresidentialDocument,
     PresidentialText,
     Security,
+    ShortInterest,
 )
 
 PERIODIC_FORMS = ("10-K", "10-Q", "20-F", "40-F", "10-K/A", "20-F/A")
@@ -51,6 +55,10 @@ MIN_INSIDER_VALUE = 10_000
 # ts_rank_cd of a presidential document's text against a theme's keywords: below this, the
 # match is usually boilerplate (measured on 2025-2026 documents).
 PRESIDENTIAL_MIN_RANK = 0.5
+# Short interest changes between settlements smaller than this aren't events.
+SHORT_CHANGE = 0.25
+# 13F reports are due 45 days after the quarter: the quarter's holdings count as public then.
+THIRTEENF_DEADLINE = timedelta(days=45)
 
 
 @dataclass
@@ -267,6 +275,116 @@ def _filing_events(session: Session, q: Query) -> list[Event]:
             )
         )
     return out
+
+
+def _securities(session: Session, ciks: set[int]) -> dict[int, int]:
+    """security id -> cik, for the companies' listings (active or not)."""
+    rows = session.execute(select(Security.id, Security.cik).where(Security.cik.in_(ciks)))
+    return {sid: cik for sid, cik in rows}
+
+
+@source("short_interest")
+def _short_interest(session: Session, q: Query) -> list[Event]:
+    """Changes of SHORT_CHANGE or more between settlements, when FINRA publishes them.
+    Companies only (market-wide, every stock moves somewhere)."""
+    if not q.ciks:
+        return []
+    securities = _securities(session, q.ciks)
+    rows = session.scalars(
+        select(ShortInterest)
+        .where(
+            ShortInterest.security_id.in_(securities),
+            ShortInterest.settlement_date.between(q.start - timedelta(days=60), q.end),
+        )
+        .order_by(ShortInterest.security_id, ShortInterest.settlement_date)
+    ).all()
+    out = []
+    for before, after in zip(rows, rows[1:], strict=False):
+        if before.security_id != after.security_id or not before.short_position:
+            continue
+        change = after.short_position / before.short_position - 1
+        public = shortinterest.available_on(after.settlement_date)
+        if abs(change) < SHORT_CHANGE or not q.start <= public <= q.end:
+            continue
+        cover = f", {after.days_to_cover:.1f} days to cover" if after.days_to_cover else ""
+        cik = securities[after.security_id]
+        out.append(
+            Event(
+                public,
+                "short_interest",
+                f"Short interest {change:+.0%} to {after.short_position:,.0f} shares{cover} "
+                f"(settled {after.settlement_date})",
+                cik=cik,
+                ticker=q.tickers.get(cik),
+                ref=f"short_interest:{after.security_id}:{after.settlement_date}",
+            )
+        )
+    return out[-q.limit :]
+
+
+@source("13f")
+def _thirteenf(session: Session, q: Query) -> list[Event]:
+    """Each quarter's institutional holders against the quarter before, on the filing
+    deadline (holdings filed by then; late filers are left out). Companies only."""
+    if not q.ciks:
+        return []
+    by_cusip = dict(
+        session.execute(
+            select(CusipMapping.cusip, Security.cik)
+            .join(Security, Security.id == CusipMapping.security_id)
+            .where(Security.cik.in_(q.ciks))
+        ).all()
+    )
+    if not by_cusip:
+        return []
+    first = q.start - THIRTEENF_DEADLINE - timedelta(days=100)  # and the quarter before
+    rows = session.execute(
+        select(
+            InstitutionalPosition.cusip,
+            InstitutionalPosition.period,
+            InstitutionalPosition.filer_cik,
+            func.sum(InstitutionalPosition.shares),
+        )
+        .where(
+            InstitutionalPosition.cusip.in_(by_cusip),
+            InstitutionalPosition.put_call == "",
+            InstitutionalPosition.period >= first,
+            InstitutionalPosition.filed <= InstitutionalPosition.period + THIRTEENF_DEADLINE,
+        )
+        .group_by(
+            InstitutionalPosition.cusip,
+            InstitutionalPosition.period,
+            InstitutionalPosition.filer_cik,
+        )
+    ).all()
+    holders: dict[tuple[int, date], set[int]] = defaultdict(set)
+    shares: dict[tuple[int, date], float] = defaultdict(float)
+    for cusip, period, filer, held in rows:
+        holders[(by_cusip[cusip], period)].add(filer)
+        shares[(by_cusip[cusip], period)] += held or 0.0
+    out = []
+    for (cik, period), managers in sorted(holders.items()):
+        public = period + THIRTEENF_DEADLINE
+        if not q.start <= public <= q.end:
+            continue
+        earlier = [p for c, p in holders if c == cik and p < period]
+        change = ""
+        if earlier:
+            prev = (cik, max(earlier))
+            change = f" ({len(managers) - len(holders[prev]):+,})"
+            if shares[prev]:
+                change += f", shares held {shares[(cik, period)] / shares[prev] - 1:+.1%}"
+        out.append(
+            Event(
+                public,
+                "13f",
+                f"13F for quarter ending {period}: {len(managers):,} holders{change}",
+                cik=cik,
+                ticker=q.tickers.get(cik),
+                ref=f"institutional_positions:{cik}:{period}",
+            )
+        )
+    return out[-q.limit :]
 
 
 @source("report")

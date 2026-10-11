@@ -145,7 +145,8 @@ only on exceptions), the speculation track high-attention with its own signals.
 
 - **What became public, when** (`timeline.py`), for companies, a theme, or everything:
   insider open-market trades of $10k+ (Form 4 filing date), congressional trades (report
-  filing date), 8-K items and event filings, periodic reports; for themes also bills (title
+  filing date), 8-K items and event filings, periodic reports, short-interest changes of
+  25%+ (when FINRA publishes), 13F holders per quarter (at the 45-day deadline); for themes also bills (title
   keywords, or policy area and subject together), presidential documents (keywords in the
   title or a strong text match), lobbying reports (issue code and keywords in the issue
   description) and monthly federal contracts (when USAspending has the month). Every date

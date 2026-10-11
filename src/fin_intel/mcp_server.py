@@ -108,7 +108,8 @@ def timeline(
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     """Public events newest first, dated when they became public. Kinds: insider,
-    congress, filing_event (8-K items, 13D/G, late filings), report (10-K/10-Q), bill,
+    congress, filing_event (8-K items, 13D/G, late filings), report (10-K/10-Q),
+    short_interest, 13f, bill,
     presidential, lobbying, contracts. Scope by tickers, a theme (its policy events and
     companies), or neither. Default window: the 90 days to `end` (default today); `limit`
     caps each kind."""
