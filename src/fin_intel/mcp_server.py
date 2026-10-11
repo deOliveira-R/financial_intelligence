@@ -91,7 +91,8 @@ def company_dossier(ticker: str, as_of: str | None = None) -> dict[str, Any]:
 def theme_dossier(theme: str, as_of: str | None = None) -> dict[str, Any]:
     """Everything known about a theme on a date: codes, companies (largest by market
     value), supply chain, research series as known then and a year earlier, and its policy
-    events (bills, presidential documents, lobbying, contracts) of the last 90 days."""
+    events (bills, presidential documents, lobbying, contracts, releases of its series) of
+    the last 90 days."""
     from fin_intel import dossier
 
     with session_factory()() as session:
@@ -110,7 +111,8 @@ def timeline(
     """Public events newest first, dated when they became public. Kinds: insider,
     congress, filing_event (8-K items, 13D/G, late filings), report (10-K/10-Q),
     short_interest, 13f, bill,
-    presidential, lobbying, contracts. Scope by tickers, a theme (its policy events and
+    presidential, lobbying, contracts, release (economic releases: CPI, payrolls, FOMC...).
+    Scope by tickers, a theme (its policy events and
     companies), or neither. Default window: the 90 days to `end` (default today); `limit`
     caps each kind."""
     from dataclasses import asdict

@@ -149,7 +149,9 @@ only on exceptions), the speculation track high-attention with its own signals.
   25%+ (when FINRA publishes), 13F holders per quarter (at the 45-day deadline); for themes also bills (title
   keywords, or policy area and subject together), presidential documents (keywords in the
   title or a strong text match), lobbying reports (issue code and keywords in the issue
-  description) and monthly federal contracts (when USAspending has the month). Every date
+  description), monthly federal contracts (when USAspending has the month) and the
+  economic releases updating its FRED series; unscoped, every scheduled release (CPI,
+  payrolls, GDP, FOMC and BoJ decisions; daily series' releases left out). Every date
   is a public date, so a window ending on a date shows what was known then.
   `timeline --ticker NVDA`, `timeline --theme defense --start 2026-01-01 --kind bill`,
   `/timeline?theme=semiconductors`.

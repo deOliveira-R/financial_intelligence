@@ -483,7 +483,8 @@ def timeline_cmd(
     limit: Annotated[int, typer.Option(help="Most events per kind")] = 50,
 ) -> None:
     """What became public, when: insider and congressional trades, 8-K items, reports,
-    bills, presidential documents, lobbying, contracts; for companies, a theme, or all."""
+    bills, presidential documents, lobbying, contracts, economic releases; for companies, a
+    theme, or all."""
     from datetime import timedelta
 
     from fin_intel import timeline

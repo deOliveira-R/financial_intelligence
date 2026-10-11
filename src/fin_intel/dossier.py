@@ -381,7 +381,7 @@ def theme(session: Session, name: str, as_of: date) -> dict[str, Any]:
                     as_of - timedelta(days=TIMELINE_DAYS),
                     as_of,
                     theme=t.name,
-                    kinds=["bill", "presidential", "lobbying", "contracts"],
+                    kinds=["bill", "presidential", "lobbying", "contracts", "release"],
                     limit=15,
                 )
             ],

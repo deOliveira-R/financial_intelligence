@@ -99,7 +99,9 @@ api/                    read-only FastAPI, routers by area (app.py: key check, s
   (pull `main`, sync deps, migrate, restart the API).
 - Long jobs: `sudo systemd-run --unit=NAME --uid=finintel --gid=finintel
   -p WorkingDirectory=/home/finintel/financial_intelligence <absolute path> ...`, then
-  `journalctl -u NAME`. One-shot units show `activating` (not `active`) while running.
+  `journalctl -u NAME`. Wait with `while systemctl is-active -q NAME; do sleep 60; done`:
+  the timer units are one-shot and show `activating` while running, `systemd-run` units
+  `active`.
 - Timers: `sync-daily` Mon–Fri 23:30 UTC, `sync-weekly` Sun 06:00 UTC, backup 04:00 UTC.
 - The developer's laptop runs ProtonVPN: some sources rate-limit or fail locally (EIA
   DEMO_KEY, GLEIF, some downloads). Test those from the server.

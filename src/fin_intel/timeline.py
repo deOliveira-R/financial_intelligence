@@ -12,6 +12,8 @@ only what could have been known then. Events are read from the source tables on 
   documents by the theme's query, lobbying reports by issue code, monthly federal contract
   obligations by NAICS, and the company events of the theme's companies (graph.py's
   `part_of` edges, so `sync-industries` must have run);
+- macro events: scheduled economic releases (CPI, payrolls, GDP, FOMC and BoJ decisions);
+  for a theme, those updating its FRED series;
 - with neither, everything in the window, capped per source.
 
 Sources register with `@source("kind")`; `query()` merges them newest first.
@@ -26,7 +28,7 @@ from typing import Any
 from sqlalchemy import and_, func, or_, select, true
 from sqlalchemy.orm import Session
 
-from fin_intel import contracts, filing_events, shortinterest, themes
+from fin_intel import contracts, filing_events, releases, shortinterest, themes
 from fin_intel.models import (
     Bill,
     BillSubject,
@@ -35,6 +37,8 @@ from fin_intel.models import (
     CongressTrade,
     CorporateEvent,
     CusipMapping,
+    EconomicRelease,
+    EconomicReleaseDate,
     FederalObligation,
     Filing,
     GraphEdge,
@@ -569,3 +573,37 @@ def _contracts(session: Session, q: Query) -> list[Event]:
             )
         )
     return out[-q.limit :]
+
+
+# --- macro events ---
+
+
+@source("release")
+def _releases(session: Session, q: Query) -> list[Event]:
+    """Economic releases on their publication day (scheduled in advance, so public as a
+    date even before; the figures themselves come out that day). Releases of daily series
+    aren't events. For a theme: the releases updating its FRED series."""
+    if not _policy(q):
+        return []
+    series, daily = releases.release_series(session)
+    where: Any = EconomicRelease.id.not_in(daily) if daily else true()
+    if q.theme is not None:
+        ids = [r for r, ids in series.items() if r not in daily and set(ids) & set(q.theme.fred)]
+        if not ids:
+            return []
+        where = EconomicRelease.id.in_(ids)
+    rows = session.execute(
+        select(EconomicReleaseDate.date, EconomicRelease.id, EconomicRelease.name)
+        .join(EconomicRelease, EconomicRelease.id == EconomicReleaseDate.release_id)
+        .where(where, EconomicReleaseDate.date.between(q.start, q.end))
+        .order_by(EconomicReleaseDate.date.desc())
+        .limit(q.limit)
+    ).all()
+    out = []
+    for day, rid, name in rows:
+        updates = series.get(rid, [])
+        if q.theme is not None:
+            updates = [s for s in updates if s in q.theme.fred]
+        detail = f" ({', '.join(updates[:6])})" if updates else ""
+        out.append(Event(day, "release", f"{name or rid}{detail}", ref=f"economic_releases:{rid}"))
+    return out

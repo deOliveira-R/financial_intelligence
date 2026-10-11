@@ -13,6 +13,9 @@ from fin_intel.models import (
     CongressTrade,
     CorporateEvent,
     CusipMapping,
+    EconomicRelease,
+    EconomicReleaseDate,
+    EconomicSeries,
     FederalObligation,
     Filing,
     GraphEdge,
@@ -275,3 +278,38 @@ def test_short_interest_and_13f(data):
     (holders,) = [e for e in events if e.kind == "13f"]
     assert holders.date == date(2026, 5, 15)
     assert "2 holders (+1), shares held +150.0%" in holders.title
+
+
+def test_releases(session):
+    session.add_all(
+        [
+            EconomicRelease(id=10, name="Consumer Price Index"),
+            EconomicRelease(id=13, name="G.17 Industrial Production and Capacity Utilization"),
+            EconomicRelease(id=18, name="H.15 Selected Interest Rates"),
+        ]
+    )
+    session.flush()
+    session.add_all(
+        [
+            EconomicSeries(id="CPIAUCSL", source="fred", frequency="M", release_id=10),
+            EconomicSeries(id="INDPRO", source="fred", frequency="M", release_id=13),
+            EconomicSeries(id="TCU", source="fred", frequency="M", release_id=13),
+            EconomicSeries(id="DFF", source="fred", frequency="D", release_id=18),
+            EconomicReleaseDate(release_id=10, date=date(2026, 6, 10)),
+            EconomicReleaseDate(release_id=13, date=date(2026, 6, 16)),
+            EconomicReleaseDate(release_id=13, date=date(2026, 7, 15)),
+            EconomicReleaseDate(release_id=18, date=date(2026, 6, 15)),
+        ]
+    )
+    session.commit()
+    june = date(2026, 6, 1), date(2026, 6, 30)
+    # Daily releases (rates published every day) aren't events.
+    unscoped = timeline.query(session, *june, kinds=["release"])
+    assert [(e.date, e.ref) for e in unscoped] == [
+        (date(2026, 6, 16), "economic_releases:13"),
+        (date(2026, 6, 10), "economic_releases:10"),
+    ]
+    (indpro,) = timeline.query(session, *june, theme="industrials", kinds=["release"])
+    assert indpro.title.endswith("(INDPRO, TCU)")
+    assert timeline.query(session, *june, theme="financials", kinds=["release"]) == []
+    assert timeline.query(session, *june, ciks={1}, kinds=["release"]) == []

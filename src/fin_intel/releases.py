@@ -188,20 +188,28 @@ def upcoming(
         )
         .order_by(EconomicReleaseDate.date, EconomicRelease.name)
     ).all()
+    series, daily_releases = release_series(session)
+    return [
+        Event(d, rid, name, series.get(rid, []))
+        for d, rid, name in rows
+        if daily or rid not in daily_releases
+    ]
+
+
+def release_series(session: Session) -> tuple[dict[int, list[str]], set[int]]:
+    """The tracked series each release updates, and the releases with daily series (rates,
+    spreads, VIX: published every day, so not events)."""
     series: dict[int, list[str]] = {}
-    frequencies: dict[int, set[str | None]] = {}
+    daily: set[int] = set()
     for sid, rid, frequency in session.execute(
-        select(EconomicSeries.id, EconomicSeries.release_id, EconomicSeries.frequency).where(
-            EconomicSeries.release_id.is_not(None)
-        )
+        select(EconomicSeries.id, EconomicSeries.release_id, EconomicSeries.frequency)
+        .where(EconomicSeries.release_id.is_not(None))
+        .order_by(EconomicSeries.id)
     ):
         series.setdefault(rid, []).append(sid)
-        frequencies.setdefault(rid, set()).add(frequency)
-    return [
-        Event(d, rid, name, sorted(series.get(rid, [])))
-        for d, rid, name in rows
-        if daily or "D" not in frequencies.get(rid, set())
-    ]
+        if frequency == "D":
+            daily.add(rid)
+    return series, daily
 
 
 # --- loading and syncs ---
