@@ -138,8 +138,9 @@ def sync_filing_text(
     cik: Annotated[list[int] | None, typer.Option(help="Only these SEC filers")] = None,
     since: Annotated[str, typer.Option(help="Filed on or after (YYYY-MM-DD)")] = "2023-01-01",
 ) -> None:
-    """Fetch 10-K/10-Q narrative sections (risk factors, MD&A) and earnings press releases
-    as searchable text, for the deep-history universe's companies (or --cik)."""
+    """Fetch 10-K/10-Q/20-F narrative sections (risk factors, MD&A) and press releases
+    (earnings 8-Ks, 6-Ks) as searchable text, for the deep-history universe's companies (or
+    --cik). Filings fetched before are skipped."""
     from fin_intel import universe
 
     sec = SecProvider(raw_store=default_store())

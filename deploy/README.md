@@ -6,7 +6,7 @@ One small Arm VM runs everything: the API as a service, the scheduled syncs as s
 |---|---|---|
 | `fin-intel-api.service` | always | API on `127.0.0.1:8000` |
 | `fin-intel-daily.timer` | Mon–Fri 23:30 UTC | `fin-intel sync-daily`: market bars, splits and dividends, breadth, SEC fundamentals (bulk), insiders, congress, FRED, EIA, Korean and Japanese filings, Taiwanese prices, company metrics, watchlist prices |
-| `fin-intel-weekly.timer` | Sun 06:00 UTC | `fin-intel sync-weekly`: SEC tickers, Massive reference, 13F, CFTC, ADR share counts, SIC codes, missing SEC filings, Taiwanese and European statements, cross-listings, release calendar, `prune-raw` |
+| `fin-intel-weekly.timer` | Sun 06:00 UTC | `fin-intel sync-weekly`: SEC tickers, Massive reference, 13F, CFTC, ADR share counts, SIC codes, corporate events, missing SEC filings, filing text, Taiwanese and European statements, cross-listings, release calendar, contracts, input-output tables, short interest, N-PORT, Congress, lobbying, bills, presidential documents, outcomes, `prune-raw` |
 | `fin-intel-backup.timer` | daily 04:00 UTC | `deploy/backup.sh`: irreplaceable tables (raw index, portfolio) and the raw files present at dump time to an rclone remote, verified |
 
 ## 1. Oracle account

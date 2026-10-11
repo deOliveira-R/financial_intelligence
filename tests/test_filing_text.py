@@ -28,6 +28,19 @@ EXXON_STYLE = f"""<p>Item 7. Management's Discussion and Analysis: see the Finan
 <p>MANAGEMENT’S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS</p>
 <p>{MDNA}</p><p>MANAGEMENT’S REPORT ON INTERNAL CONTROL OVER FINANCIAL REPORTING</p>""".encode()
 
+TWENTY_F = f"""<p>ITEM 3. KEY INFORMATION</p><p>ITEM 4. INFORMATION ON THE COMPANY</p>
+<p>ITEM 5. OPERATING AND FINANCIAL REVIEWS AND PROSPECTS</p><p>ITEM 6. DIRECTORS</p>
+<p>ITEM&#8201;3.KEY INFORMATION</p><p>Risk Factors</p><p>{RISKS * 4}</p>
+<p>ITEM&#8201;4.INFORMATION ON THE COMPANY</p><p>We make chips.</p>
+<p>ITEM&#8201;5.OPERATING AND FINANCIAL REVIEWS AND PROSPECTS</p><p>{MDNA * 4}</p>
+<p>ITEM&#8201;6.DIRECTORS, SENIOR MANAGEMENT AND EMPLOYEES</p>""".encode()
+
+# An annual-report-style 20-F: the items appear only in a cross-reference index.
+CROSS_REFERENCED = f"""<p>Risk factors</p><p>{RISKS * 4}</p>
+<p>Item 5. Operating and financial review and prospects.</p>
+<p>{"Results of operations, pages 40-62; liquidity, pages 63-70. " * 15}</p>
+<p>Item 6. Directors, senior management and employees.</p>""".encode()
+
 ROW = '<tr><td>{}</td><td>{}</td><td><a href="{}">doc</a></td><td>{}</td></tr>'
 INDEX_PAGE = "".join(
     ROW.format(*r)
@@ -47,6 +60,12 @@ def test_sections_skip_the_table_of_contents():
     assert "accelerated computing" in filing_text.section(text, "10-K", "mdna")
     exxon = filing_text.section(filing_text.to_text(EXXON_STYLE), "10-K", "mdna")
     assert exxon.startswith("MANAGEMENT’S DISCUSSION") and "INTERNAL CONTROL" not in exxon
+    tsmc = filing_text.to_text(TWENTY_F)
+    risks = filing_text.section(tsmc, "20-F", "risk_factors")
+    assert "Export controls" in risks and "We make chips" not in risks
+    assert "accelerated computing" in filing_text.section(tsmc, "20-F", "mdna")
+    index = filing_text.to_text(CROSS_REFERENCED)
+    assert filing_text.section(index, "20-F", "mdna") is None  # an index entry, not the text
     assert [(e.document, e.kind) for e in filing_text.exhibits(INDEX_PAGE)] == [
         ("pr.htm", "EX-99.1")
     ]
@@ -58,12 +77,17 @@ def test_sync_search_and_rebuild(session, raw_store):
         "cik": "1",
         "filings": {
             "recent": {
-                "accessionNumber": ["0001-26-000003", "0001-26-000002", "0001-22-000001"],
-                "form": ["8-K", "10-K", "10-K"],
-                "filingDate": ["2026-02-25", "2026-02-25", "2022-02-25"],
-                "reportDate": ["2026-02-25", "2026-01-25", "2022-01-30"],
-                "primaryDocument": ["a.htm", "k.htm", "old.htm"],
-                "items": ["2.02,9.01", "", ""],
+                "accessionNumber": [
+                    "0001-26-000004",
+                    "0001-26-000003",
+                    "0001-26-000002",
+                    "0001-22-000001",
+                ],
+                "form": ["6-K", "8-K", "10-K", "10-K"],
+                "filingDate": ["2026-03-10", "2026-02-25", "2026-02-25", "2022-02-25"],
+                "reportDate": ["2026-03-10", "2026-02-25", "2026-01-25", "2022-01-30"],
+                "primaryDocument": ["cover.htm", "a.htm", "k.htm", "old.htm"],
+                "items": ["", "2.02,9.01", "", ""],
             },
             "files": [],
         },
@@ -75,8 +99,14 @@ def test_sync_search_and_rebuild(session, raw_store):
     respx.get(f"{archive}/000126000003/pr.htm").respond(
         content=b"<p>Record quarterly revenue of $50 billion, up 60% from a year ago.</p>"
     )
+    respx.get(f"{archive}/000126000004/0001-26-000004-index.htm").respond(
+        content=INDEX_PAGE.replace(b"000126000003/pr.htm", b"000126000004/fab.htm")
+    )
+    respx.get(f"{archive}/000126000004/fab.htm").respond(
+        content=b"<p>We will build a second fab in Arizona.</p>"
+    )
     sec = SecProvider(raw_store=raw_store)
-    assert filing_text.sync_filing_text(session, sec, 1, date(2023, 1, 1)) == 3
+    assert filing_text.sync_filing_text(session, sec, 1, date(2023, 1, 1)) == 4
     filing_text.sync_filing_text(session, sec, 1, date(2023, 1, 1))
     assert report.call_count == 1  # fetched documents aren't fetched again
 
@@ -85,6 +115,7 @@ def test_sync_search_and_rebuild(session, raw_store):
     assert "[Export] [controls] on advanced chips to [China]" in hits[0].snippet
     assert filing_text.search(session, "quarterly revenue", ciks=[2]) == []
     assert filing_text.search(session, "quarterly revenue", ciks=[1])[0].section == "EX-99.1"
+    assert filing_text.search(session, "fab arizona")[0].form == "6-K"
 
     def count():
         return session.scalar(select(func.count()).select_from(FilingText))

@@ -3,7 +3,13 @@ earnings press releases, as plain text.
 
 - 10-K: Item 1A risk factors, Item 7 MD&A.
 - 10-Q: Part I Item 2 MD&A, Part II Item 1A risk factor updates.
+- 20-F (foreign private issuers): Item 3 key information (now essentially the risk
+  factors) and Item 5 operating and financial review (their MD&A). 20-Fs written as an
+  annual report with only a cross-reference index to the items (ASML, SAP) don't split
+  this way and are left out rather than cut at the wrong place.
 - 8-K with Item 2.02 (results of operations): the press release and other EX-99 exhibits.
+- 6-K (foreign issuers' current reports, which carry no item codes): every EX-99 exhibit,
+  so press releases of all kinds, earnings among them.
 
 Sections are found by their headings; the table of contents repeats every heading, so the
 longest span between a section's heading and the next one wins. Text is searchable through
@@ -48,6 +54,8 @@ SECTIONS: dict[tuple[str, str], tuple[str, str]] = {
         _ITEM + r"1a\b\.?\s*[-–—:.]?\s*risk\s+factors",
         _ITEM + r"(2|3|4|5|6)\b",
     ),
+    ("20-F", "risk_factors"): (_ITEM + r"3\b", _ITEM + r"4\b"),
+    ("20-F", "mdna"): (_ITEM + r"5\b", _ITEM + r"6\b"),
 }
 # Some 10-Ks (Exxon's) put MD&A in a "Financial Section" under its bare title, with Item 7
 # only pointing there.
@@ -61,10 +69,14 @@ FALLBACKS: dict[tuple[str, str], tuple[str, str]] = {
     ),
 }
 MIN_SECTION = 500  # characters: shorter spans are table-of-contents entries or references
+# Cross-reference indexes of annual-report-style 20-Fs list each item with a paragraph of
+# page references; real 20-F sections run to tens of thousands of characters.
+MIN_SECTIONS = {"20-F": 5_000}
 MAX_EXHIBITS = 3
 MAX_EXHIBIT_CHARS = 200_000
-FORMS = ("10-K", "10-Q")
+FORMS = ("10-K", "10-Q", "20-F")
 RESULTS_ITEM = "2.02"  # 8-K: results of operations and financial condition
+RELEASE_FORMS = ("6-K",)  # every exhibit-bearing one: no items say which are earnings
 
 _BLOCK = re.compile(r"<\s*/?\s*(p|div|br|tr|li|h[1-6]|table|section|article)\b[^>]*>", re.I)
 _CELL = re.compile(r"<\s*/\s*t[dh]\s*>", re.I)
@@ -86,13 +98,16 @@ def to_text(document: bytes) -> str:
 def section(text: str, form: str, name: str) -> str | None:
     """A section's text, or None when its heading can't be found reliably."""
     key = (form.removesuffix("/A"), name)
-    found = _longest(text, *SECTIONS[key])
+    shortest = MIN_SECTIONS.get(key[0], MIN_SECTION)
+    found = _longest(text, *SECTIONS[key], shortest)
     if found is None and key in FALLBACKS:
-        found = _longest(text, *FALLBACKS[key])
+        found = _longest(text, *FALLBACKS[key], shortest)
     return found
 
 
-def _longest(text: str, start_pattern: str, end_pattern: str) -> str | None:
+def _longest(
+    text: str, start_pattern: str, end_pattern: str, shortest: int = MIN_SECTION
+) -> str | None:
     starts = [m.start() for m in re.finditer(start_pattern, text, re.I | re.M)]
     ends = [m.start() for m in re.finditer(end_pattern, text, re.I | re.M)]
     best = None
@@ -100,7 +115,7 @@ def _longest(text: str, start_pattern: str, end_pattern: str) -> str | None:
         end = next((e for e in ends if e > s + 20), len(text))
         if best is None or end - s > best[1] - best[0]:
             best = (s, end)
-    if best is None or best[1] - best[0] < MIN_SECTION:
+    if best is None or best[1] - best[0] < shortest:
         return None
     return text[best[0] : best[1]].strip()
 
@@ -159,7 +174,8 @@ def load(session: Session, key: str, body: bytes) -> int:
 
 
 def wanted(submissions: dict[str, Any], since: date) -> list[dict[str, str]]:
-    """10-Ks, 10-Qs and earnings 8-Ks filed since `since`, from a submissions response."""
+    """Periodic reports (FORMS), earnings 8-Ks and 6-Ks filed since `since`, from a
+    submissions response."""
     recent = (submissions.get("filings") or {}).get("recent") or {}
     out = []
     for i, form in enumerate(recent.get("form") or []):
@@ -167,7 +183,8 @@ def wanted(submissions: dict[str, Any], since: date) -> list[dict[str, str]]:
         items = (recent.get("items") or [""] * (i + 1))[i] or ""
         if filed < since.isoformat():
             continue
-        if form in FORMS or (form == "8-K" and RESULTS_ITEM in items.split(",")):
+        earnings = form == "8-K" and RESULTS_ITEM in items.split(",")
+        if form in FORMS or form in RELEASE_FORMS or earnings:
             out.append(
                 {
                     "accession": recent["accessionNumber"][i],
@@ -233,7 +250,7 @@ def get(session: Session, accession: str, name: str | None = None) -> list[Filin
 
 
 def sync_filing_text(session: Session, sec_provider: SecProvider, cik: int, since: date) -> int:
-    """A company's 10-K/10-Q sections and earnings press releases filed since `since` that
+    """A company's periodic report sections and press releases filed since `since` that
     haven't been fetched yet."""
     with tracked(session, "sec", "filing_text", str(cik)) as result:
         session.commit()  # fetch-then-load
@@ -252,7 +269,7 @@ def sync_filing_text(session: Session, sec_provider: SecProvider, cik: int, sinc
         for f in filings:
             if f["form"] in FORMS:
                 targets = [(f["document"], "report")]
-            else:  # an earnings 8-K: its press release exhibits
+            else:  # an earnings 8-K or a 6-K: its press release exhibits
                 page = sec_provider.fetch_index_page(cik, f["accession"])
                 targets = [(e.document, e.kind) for e in exhibits(page)]
             for document, kind in targets:

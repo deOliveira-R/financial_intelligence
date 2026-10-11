@@ -42,10 +42,12 @@ itself before any subscription. Status and order:
    AUD/JPY, speculators' yen positioning, Japanese foreign bond flows, flags. Not free:
    USD/JPY implied vol, cross-currency basis, prime-broker positioning. Flag thresholds are
    judgment calls for the signal-design session to test.
-5. **Filing text** for LLM analysis skills: done for 10-K/10-Q risk factors and MD&A and
-   earnings press releases, deep-history universe since 2023, full-text search (`filing_text.py`).
-   Later: earnings call transcripts (not free), proxies (compensation, related parties),
-   EDINET/DART report text, older years.
+5. **Filing text** for LLM analysis skills: done for 10-K/10-Q/20-F risk factors and MD&A,
+   earnings 8-K and 6-K press releases, deep-history universe since 2023, weekly, full-text
+   search (`filing_text.py`). Later: annual-report-style 20-Fs (ASML, SAP: sections under
+   bare headings, items only in a cross-reference index), 40-F (the annual information form
+   and MD&A are exhibits), earnings call transcripts (not free), proxies (compensation,
+   related parties), EDINET/DART report text, older years.
 6. **Domain data**. Done (2026-10-06): federal contract obligations by NAICS
    (USAspending, `contracts.py`), FINRA short interest since 2017-12 (`shortinterest.py`),
    Cboe put/call since 2006 (`putcall.py`), index ETF holdings from N-PORT since 2019

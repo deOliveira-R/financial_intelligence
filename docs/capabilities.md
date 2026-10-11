@@ -111,9 +111,11 @@ only on exceptions), the speculation track high-attention with its own signals.
 
 ## 5. Filing text (for language-model analysis)
 
-- 10-K risk factors and MD&A, 10-Q MD&A and risk factor updates, and earnings press
-  releases (8-K item 2.02 exhibits) as plain text, for the deep-history universe since 2023
-  (`sync-filing-text`, any company with `--cik`).
+- 10-K risk factors and MD&A, 10-Q MD&A and risk factor updates, 20-F key information
+  (risk factors) and operating review, earnings press releases (8-K item 2.02 exhibits)
+  and foreign issuers' 6-K press releases as plain text, for the deep-history universe
+  since 2023, refreshed weekly (`sync-filing-text`, any company with `--cik`). 20-Fs
+  written as an annual report with only a cross-reference index (ASML, SAP) aren't split.
 - Full-text search (PostgreSQL; words, "phrases", OR, -exclude), with snippets:
   `search-filings '"export controls" china'`, `/filings/search?q=...&ticker=NVDA`;
   full sections at `/filings/{accession}/text`.
