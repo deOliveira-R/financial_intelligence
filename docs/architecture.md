@@ -61,6 +61,7 @@ Rules that hold everywhere:
 | Portfolio | `portfolio.py`, `importers.py` | Tax lots (FIFO), harvesting, wash-sale window, replacements |
 | Domain data | `japan.py`, `carry.py`, `contracts.py`, `shortinterest.py`, `putcall.py`, `funds.py`, `filing_text.py`, `universe.py` | JGB curve and flows, yen carry gauge, federal contracts, short interest, put/call, index ETF holdings, filing text (tsvector search), deep-history universe |
 | Taxonomy and graph | `themes.py`, `industries.py`, `graph.py` | Themes map each industry to every source's codes; BEA input-output tables give industry-to-industry flows; `graph_nodes`/`graph_edges` (derived) hold industries, final demand and themes with `supplies`, `part_of` and `maps_to` edges, walked with recursive CTEs |
+| Catalog | `catalog.py` | Feed freshness from `sync_state` against expected ages (`EXPECTED`, mirroring the schedules), failing-item thresholds, tables per feed; `catalog --check` ends sync-daily |
 | Timeline | `timeline.py` | Public-dated events read from the source tables on request (no copy): sources register with `@timeline.source("kind")` and filter by companies or a theme (themes' keywords make text matches precise) |
 | Research | `backtest.py`, `screentest.py`, `events.py` | Rules on point-in-time series, screen backtests, disclosure event studies |
 

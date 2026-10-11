@@ -165,7 +165,9 @@ only on exceptions), the speculation track high-attention with its own signals.
   retention.
 - `rebuild <target|all>` (`fin-intel rebuild --help` lists the targets, e.g. industries)
   reproduces tables from raw without the network; `migrate`, `prune-raw`, `derive*`.
-- `/status` shows recent runs and failing items.
+- `/status` shows recent runs and failing items; `catalog` (`/catalog`) every feed's
+  freshness against its schedule, failing items and tables. sync-daily ends with
+  `catalog --check`, so a stale or failing feed fails the run.
 
 ## Known limits
 

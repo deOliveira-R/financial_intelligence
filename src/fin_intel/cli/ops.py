@@ -81,10 +81,12 @@ def sync_daily() -> None:
         ("Korean filings (DART)", lambda: sync_dart(limit=6000)),
         ("Japanese filings (EDINET)", sync_edinet),
         ("Taiwanese prices", sync_tw_prices),
-        ("company metrics", derive_metrics_cmd),  # last: uses every market's new data
+        ("company metrics", derive_metrics_cmd),  # uses every market's new data
     ]
     if settings.watchlist_tickers:
         steps.append(("watchlist prices", lambda: sync_prices(settings.watchlist_tickers)))
+    # Last: a stale or failing feed fails the run, so it shows in /status and the journal.
+    steps.append(("feed freshness", lambda: catalog_cmd(check=True, all_feeds=False)))
     run_steps("sync-daily", steps)
 
 
@@ -119,6 +121,41 @@ def sync_weekly() -> None:
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
     run_steps("sync-weekly", steps)
+
+
+@app.command("catalog", rich_help_panel="Operations")
+def catalog_cmd(
+    check: Annotated[
+        bool, typer.Option(help="Exit non-zero if any feed is stale or failing")
+    ] = False,
+    all_feeds: Annotated[bool, typer.Option("--all", help="Every feed, not just alerts")] = True,
+) -> None:
+    """Every feed: items, failing items, last success against its expected freshness,
+    raw responses, and the tables it loads. Alerts (stale, failing) first."""
+    from fin_intel import catalog
+
+    with session_factory()() as session:
+        feeds = catalog.feeds(session)
+    order = {"failing": 0, "stale": 1, "ok": 2, "unmonitored": 3}
+    shown = sorted(feeds, key=lambda f: (order[f.status], f.provider, f.dataset))
+    if not all_feeds:
+        shown = [f for f in shown if f.status in ("failing", "stale")]
+    for f in shown:
+        age = f"{f.age_days:5.1f}d" if f.age_days is not None else "never "
+        expected = f"/{f.expected_days}d" if f.expected_days else "    "
+        color = {"failing": "red", "stale": "yellow"}.get(f.status)
+        line = (
+            f"{f.status:<11} {f.provider + '/' + f.dataset:<34} {age}{expected:<5} "
+            f"{f.items:>6} items {f.failing:>4} failing"
+        )
+        typer.secho(line, fg=color)
+        if f.status == "failing" and f.last_error:
+            typer.echo(f"            {f.last_error[:120]}")
+    alerts = [f for f in feeds if f.status in ("failing", "stale")]
+    if not alerts:
+        typer.echo("all monitored feeds fresh")
+    if check and alerts:
+        raise typer.Exit(1)
 
 
 @app.command("rebuild", rich_help_panel="Operations")

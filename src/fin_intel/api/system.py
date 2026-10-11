@@ -52,3 +52,16 @@ def status(session: SessionDep) -> StatusOut:
         recent_runs=[SyncRunOut.model_validate(r) for r in runs],
         failing=[SyncStateOut.model_validate(s) for s in failing],
     )
+
+
+@router.get("/catalog")
+def data_catalog(session: SessionDep, alerts_only: bool = False):
+    """Every feed: status (ok, stale, failing, unmonitored), items and failing items, last
+    success and its age against the expected freshness, the tables it loads, and raw
+    responses kept; plus estimated rows per table."""
+    from fin_intel import catalog
+
+    feeds = [catalog.as_dict(f) for f in catalog.feeds(session)]
+    if alerts_only:
+        feeds = [f for f in feeds if f["status"] in ("stale", "failing")]
+    return {"feeds": feeds, "tables": catalog.table_rows(session)}
