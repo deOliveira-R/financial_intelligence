@@ -118,6 +118,24 @@ only on exceptions), the speculation track high-attention with its own signals.
   `search-filings '"export controls" china'`, `/filings/search?q=...&ticker=NVDA`;
   full sections at `/filings/{accession}/text`.
 
+## 6. Themes and the supply chain
+
+- **Themes** (`themes.py`, 13): each industry or policy area mapped to SIC, NAICS, BEA
+  industries, lobbying issue codes, bill policy areas and subjects, a presidential-document
+  query, ETFs, CFTC markets, FRED and EIA series. `theme`, `theme defense`, `/themes`,
+  `/themes/{name}`.
+- **Supply-chain graph** from BEA's input-output tables: who buys from whom among ~400
+  industries (2017 detail) and 71 summary industries (2023), plus final demand (exports,
+  private investment, federal defense...), and the same aggregated between themes. Walk it
+  upstream (suppliers, by share of the buyer's inputs) or downstream (buyers, by share of
+  the supplier's output), N hops: `graph theme:defense --direction upstream`,
+  `graph 334413 --direction downstream --hops 3`, `/graph/{node}?direction=upstream`.
+  Limits: capital equipment (semiconductor machinery to chip makers) is investment, not an
+  intermediate input, so it shows as sales to private investment, not to the buyer; single
+  detail cells can reflect BEA's classification of establishments (2017 shows $26B of chips
+  bought by drug wholesalers, unlike 2012): compare years in `io_uses` before trusting one
+  edge.
+
 ## Data operations
 
 - `sync-daily` (Mon–Fri after the US close): market bars, splits and dividends, breadth,
@@ -125,8 +143,10 @@ only on exceptions), the speculation track high-attention with its own signals.
   and Japanese filings, Taiwanese prices, then company metrics.
 - `sync-weekly` (Sunday): SEC and Massive reference lists, 13F, CFTC, ADR share counts, SIC
   codes, missing SEC filings (direct XBRL), Taiwanese and European statements,
-  cross-listings, release calendar, raw retention.
-- `rebuild <fundamentals|prices|market|insiders|holdings|congress|cot|economic|all>`
+  cross-listings, release calendar, contracts, short interest, N-PORT, legislators,
+  lobbying, bills, presidential documents, BEA tables (monthly check), outcomes, raw
+  retention.
+- `rebuild <target|all>` (`fin-intel rebuild --help` lists the targets, e.g. industries)
   reproduces tables from raw without the network; `migrate`, `prune-raw`, `derive*`.
 - `/status` shows recent runs and failing items.
 

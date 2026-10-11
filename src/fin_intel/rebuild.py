@@ -40,9 +40,14 @@ from fin_intel.models import (
     FiscalCalendar,
     ForwardOutcome,
     FundHolding,
+    GraphEdge,
+    GraphNode,
     InsiderTransaction,
     InstitutionalFiler,
     InstitutionalPosition,
+    IoCode,
+    IoNaics,
+    IoUse,
     Issuer,
     LegislatorTerm,
     LobbyingIssue,
@@ -91,6 +96,7 @@ TABLES: dict[str, list] = {
         EconomicReleaseDate,
         EconomicRelease,
     ],
+    "industries": [GraphEdge, GraphNode, IoUse, IoNaics, IoCode],
     "market": [ForwardOutcome, CompanyMetrics, DailyBar, CorporateAction, TickerHistory, Security],
 }
 # Everything, children before parents: every table above plus issuers.
@@ -174,6 +180,11 @@ def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
         from fin_intel import congress_members
 
         congress_members.link(session)  # reports to members (needs both loaded)
+        session.commit()
+    if target in ("industries", "all"):
+        from fin_intel import graph
+
+        graph.build(session)  # derived from the IO tables and the themes
         session.commit()
     if target in ("market", "all"):
         from fin_intel import crosslist

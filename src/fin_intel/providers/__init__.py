@@ -1,4 +1,5 @@
 from fin_intel.providers.base import Provider
+from fin_intel.providers.bea import BeaProvider
 from fin_intel.providers.boj import BojProvider
 from fin_intel.providers.cboe import CboeProvider
 from fin_intel.providers.cftc import CftcProvider
@@ -30,6 +31,7 @@ from fin_intel.providers.twse import TwseProvider
 from fin_intel.providers.usaspending import UsaspendingProvider
 
 __all__ = [
+    "BeaProvider",
     "BojProvider",
     "CboeProvider",
     "CftcProvider",

@@ -358,3 +358,108 @@ def lobbying_cmd(
                 typer.echo(
                     f"{r['year']}-Q{r['quarter']}  ${(r['spend'] or 0) / 1e6:7.2f}M  {r['client']}"
                 )
+
+
+@app.command("build-graph", rich_help_panel="Research")
+def build_graph_cmd() -> None:
+    """Rebuild the supply-chain graph from the BEA tables and the themes (after editing
+    themes.py; sync-bea rebuilds it on its own)."""
+    from fin_intel import graph
+
+    with session_factory()() as session:
+        counts = graph.build(session)
+        session.commit()
+    typer.echo(f"graph: {counts['nodes']} nodes, {counts['edges']} edges")
+
+
+@app.command("graph", rich_help_panel="Research")
+def graph_cmd(
+    node: Annotated[str, typer.Argument(help="theme:defense, industry:334413, or a name/code")],
+    direction: Annotated[
+        str, typer.Option(help="upstream (suppliers), downstream (buyers) or edges")
+    ] = "upstream",
+    hops: Annotated[int, typer.Option(help="Most edges from the node")] = 2,
+    min_share: Annotated[float, typer.Option(help="Smallest share an edge must carry")] = 0.02,
+    rows: Annotated[int, typer.Option(help="Rows to print")] = 25,
+) -> None:
+    """Walk the supply-chain graph: who a node buys from (upstream: share of its inputs) or
+    sells to (downstream: share of its output), N hops out; or its direct edges."""
+    from fin_intel import graph
+
+    with session_factory()() as session:
+        try:
+            key = graph.resolve(session, node)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from None
+        if direction == "edges":
+            for kind, edges in graph.neighbors(session, key).items():
+                typer.secho(kind, bold=True)
+                ordered = sorted(edges, key=lambda e: -(e["value"] or 0))
+                for e in ordered[:rows]:
+                    value = f"{e['value']:>10,.0f}" if e["value"] is not None else " " * 10
+                    note = f"  ({e['note']})" if e["note"] else ""
+                    typer.echo(f"  {value}  {e['node']:<24} {e['label'][:60]}{note}")
+            return
+        try:
+            found = graph.walk(session, key, direction, hops, min_share)
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from None
+    typer.echo(f"{direction} of {key} (share = product of shares along the path)")
+    for r in found[:rows]:
+        typer.echo(f"  {r['share']:6.1%}  {r['depth']}  {r['node']:<24} {r['label'][:60]}")
+
+
+@app.command("theme", rich_help_panel="Research")
+def theme_cmd(
+    name: Annotated[str | None, typer.Argument(help="Theme name; omit to list them")] = None,
+) -> None:
+    """A theme's codes in every source's vocabulary, its BEA industries and its largest
+    suppliers and buyers."""
+    from fin_intel import graph, themes
+
+    if name is None:
+        for t in themes.THEMES:
+            typer.echo(f"  {t.name:<18} {t.label}")
+        return
+    try:
+        theme = themes.get(name)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from None
+    typer.secho(theme.label, bold=True)
+    for field in (
+        "universe_industry",
+        "sic",
+        "naics",
+        "bea",
+        "lobbying",
+        "policy_areas",
+        "bill_subjects",
+        "presidential_query",
+        "etfs",
+        "cot",
+        "fred",
+        "eia",
+    ):
+        value = getattr(theme, field)
+        if value:
+            typer.echo(f"  {field:<19} {value}")
+    with session_factory()() as session:
+        try:
+            key = graph.resolve(session, f"theme:{name}")
+        except ValueError:
+            typer.echo("  (no graph yet: run fin-intel sync-bea)")
+            return
+        edges = graph.neighbors(session, key)
+    for kind, title, share in (
+        ("maps_to_out", "BEA industries", None),
+        ("supplies_in", "bought from (share of its inputs)", "buyer_share"),
+        ("supplies_out", "sold to (share of its output)", "supplier_share"),
+    ):
+        typer.secho(title, bold=True)
+        found = edges.get(kind, [])
+        if share:
+            found = sorted(found, key=lambda e: -(e[share] or 0))[:8]
+        for e in found:
+            pct = f"{e[share]:6.1%}  " if share and e[share] is not None else ""
+            note = f"  ({e['note']})" if e["note"] else ""
+            typer.echo(f"  {pct}{e['node']:<24} {e['label'][:60]}{note}")

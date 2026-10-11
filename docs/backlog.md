@@ -63,6 +63,11 @@ itself before any subscription. Status and order:
 
 ## Data
 
+- **Supply-chain graph, next layers** (plan.md phase 3): companies to BEA industries via
+  the Census SIC-NAICS concordance; company-company edges from XBRL customer concentration
+  and a curated core; BEA capital flow tables (which industries buy which equipment: the
+  semiconductor machinery to chip makers link the use tables book as investment); theme
+  flows over the summary years (1997-2023) to see dependencies shift.
 - **EIA key:** the shared DEMO_KEY is limited per IP (fine on the server, exhausted behind
   VPNs). A free personal key (`FI_EIA_API_KEY`) removes the problem.
 - **EIA expectations:** inventory *surprises* (vs analyst consensus) are what move prices;

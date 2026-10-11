@@ -14,6 +14,7 @@ from fin_intel import (  # noqa: F401
     esef,
     filing_text,
     funds,
+    industries,
     insiders,
     japan,
     lobbying,

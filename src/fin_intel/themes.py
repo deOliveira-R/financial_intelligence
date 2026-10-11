@@ -26,6 +26,9 @@ class Theme:
     # Policy: NAICS code prefixes (contracts), LDA issue codes (lobbying), CRS policy areas
     # and subjects (bills), and a full-text query for presidential documents.
     naics: tuple[str, ...] = ()
+    # BEA detail industries the NAICS codes can't reach (graph.py): BEA splits construction
+    # by type of structure, all under NAICS 23.
+    bea: tuple[str, ...] = ()
     lobbying: tuple[str, ...] = ()
     policy_areas: tuple[str, ...] = ()
     bill_subjects: tuple[str, ...] = ()
@@ -58,6 +61,7 @@ THEMES = (
         "AI infrastructure and power",
         universe_industry="ai_infrastructure_power",
         naics=("2211", "518", "335", "237130"),
+        bea=("233240",),
         lobbying=("UTI", "ENG", "CPI", "TEC"),
         policy_areas=("Energy", "Science, Technology, Communications"),
         bill_subjects=(
@@ -102,7 +106,7 @@ THEMES = (
         "defense",
         "Defense and aerospace",
         universe_industry="defense_aerospace",
-        naics=("3364", "3366", "332992", "332993", "332994", "541715"),
+        naics=("3364", "3366", "332992", "332993", "332994", "334511", "541715"),
         lobbying=("DEF", "AER", "AVI", "HOM"),
         policy_areas=("Armed Forces and National Security",),
         bill_subjects=("Military procurement, research, weapons development",),
@@ -125,6 +129,7 @@ THEMES = (
         "Industrials, infrastructure and reshoring",
         universe_industry="industrials_reshoring",
         naics=("333", "237", "2373"),
+        bea=("2332C0", "233230", "233240"),
         lobbying=("MAN", "TRA", "TAR", "ROD", "TRD"),
         policy_areas=("Transportation and Public Works", "Foreign Trade and International Finance"),
         bill_subjects=("Tariffs", "Manufacturing", "Infrastructure development"),
@@ -186,6 +191,7 @@ THEMES = (
         "Real estate and housing",
         sic=((6500, 6599), (6798, 6798), (1520, 1531)),
         naics=("531", "236"),
+        bea=("233411", "233412", "2334A0", "230302", "2332A0"),
         lobbying=("HOU", "RES", "URB"),
         policy_areas=("Housing and Community Development",),
         presidential_query="housing OR mortgage OR homeownership",

@@ -60,14 +60,19 @@ The shared vocabulary every connecting feature uses.
   estate, consumer), each mapped to SIC/universe industry, NAICS, LDA issue codes, CRS
   policy areas and subjects, a presidential-document query, ETFs, CFTC markets, FRED/EIA.
   Codes validated against the loaded data. The user found it reasonable (2026-10-11).
-- [ ] Layer 1, industry graph from data: BEA input-output accounts (free,
+- [x] Layer 1 (branch `graph`): `sync-bea` stores BEA's supply-use zip raw and loads
+  `io_codes`, `io_naics`, `io_uses` (detail 2007/2012/2017, summary 1997-2023, 269k cells);
+  `graph.py` builds industry, summary, final-demand and theme nodes with `supplies`
+  (dollars, buyer_share, supplier_share), `part_of` and `maps_to` edges; `graph`, `theme`,
+  `build-graph`, `/graph/{node}`, `/themes`. Original notes: BEA input-output accounts (free,
   `https://apps.bea.gov/industry/iTables%20Static%20Files/AllTablesSUP.zip`: detailed
   2017 use table, ~400 industries keyed to NAICS; summary tables 71 industries 1997-2023).
   Edges supplier industry → buyer industry with dollars and share of the buyer's inputs,
   dated by table year. New provider/dataset/loader per the registry; raw first.
-- [ ] Layer 2, theme graph derived: theme-to-theme edges aggregated from layer 1 through
+- [x] Layer 2 (same branch; themes gained curated `bea` codes for construction, defense
+  gained NAICS 334511): theme graph derived: theme-to-theme edges aggregated from layer 1 through
   each theme's NAICS codes; curated edges only where codes are too coarse, marked as such.
-- [ ] Graph storage in Postgres: `graph_nodes` / `graph_edges` (typed: supplies, maps_to,
+- [x] Graph storage in Postgres: `graph_nodes` / `graph_edges` (typed: supplies, maps_to,
   part_of; source, as_of, weight), recursive-CTE queries for upstream/downstream N hops.
 - [ ] Layer 3, companies: companies → industries via the Census SIC-NAICS concordance (and
   universe industries); company-company edges from XBRL customer-concentration facts and a

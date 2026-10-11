@@ -859,3 +859,76 @@ class ForwardOutcome(Base):
     max_drawdown_12m: Mapped[float | None] = mapped_column(Float)
     pe_change_12m: Mapped[float | None] = mapped_column(Float)  # log(P/E later / P/E now)
     ev_ebit_change_12m: Mapped[float | None] = mapped_column(Float)
+
+
+class IoCode(Base):
+    """A row or column code of BEA's input-output tables (industries.py): an industry or
+    commodity, a final-demand column (F...: consumption, investment, exports, government),
+    a value-added row (V...) or a total (T...). `level` is the table's level of detail; detail
+    and summary industries carry their parents in BEA's hierarchy."""
+
+    __tablename__ = "io_codes"
+
+    level: Mapped[str] = mapped_column(String, primary_key=True)  # sector, summary, detail
+    code: Mapped[str] = mapped_column(String, primary_key=True)
+    title: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(
+        String
+    )  # industry, commodity, final_demand, value_added, total
+    summary: Mapped[str | None] = mapped_column(String)  # summary parent (detail industries)
+    sector: Mapped[str | None] = mapped_column(String)  # sector parent (summary and detail)
+
+
+class IoNaics(Base):
+    """A NAICS code (any length: a prefix covers its subcodes) in a BEA detail industry, from
+    BEA's concordance. Government industries have none."""
+
+    __tablename__ = "io_naics"
+
+    code: Mapped[str] = mapped_column(String, primary_key=True)  # BEA detail industry
+    naics: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+
+
+class IoUse(Base):
+    """One cell of a BEA use table, as published: the value (millions of dollars) of a
+    commodity used by an industry or a final-demand column in a year. Includes the total and
+    value-added rows and columns, so shares need no other table."""
+
+    __tablename__ = "io_uses"
+
+    level: Mapped[str] = mapped_column(String, primary_key=True)  # summary, detail
+    year: Mapped[int] = mapped_column(primary_key=True)
+    commodity: Mapped[str] = mapped_column(String, primary_key=True)
+    buyer: Mapped[str] = mapped_column(String, primary_key=True, index=True)  # industry or F...
+    value: Mapped[float] = mapped_column(Float)
+
+
+class GraphNode(Base):
+    """Derived (graph.py): a node of the supply-chain graph. Keys are typed:
+    `industry:334413` (BEA detail), `summary:334` (BEA summary), `theme:defense`."""
+
+    __tablename__ = "graph_nodes"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    kind: Mapped[str] = mapped_column(String, index=True)
+    label: Mapped[str] = mapped_column(Text)
+
+
+class GraphEdge(Base):
+    """Derived (graph.py): a typed edge. `supplies` runs from supplier to buyer, with the
+    dollars (millions) and the share of the buyer's intermediate inputs (`buyer_share`) and
+    of the supplier's output (`supplier_share`); `part_of` runs from a node to its parent;
+    `maps_to` from a theme to an industry. `source` says where the edge comes from (bea,
+    themes, curated) and `year` the data year."""
+
+    __tablename__ = "graph_edges"
+
+    src: Mapped[str] = mapped_column(String, primary_key=True)
+    dst: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    kind: Mapped[str] = mapped_column(String, primary_key=True)
+    source: Mapped[str] = mapped_column(String)
+    year: Mapped[int | None]
+    value: Mapped[float | None] = mapped_column(Float)
+    buyer_share: Mapped[float | None] = mapped_column(Float)
+    supplier_share: Mapped[float | None] = mapped_column(Float)
+    note: Mapped[str | None] = mapped_column(Text)

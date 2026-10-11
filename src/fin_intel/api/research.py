@@ -100,3 +100,47 @@ def event_study(
     result = events.study(session, found)
     result.unpriced = result.unpriced[:100]
     return result
+
+
+@router.get("/themes")
+def theme_list():
+    """The themes: one taxonomy over every source's own codes."""
+    from fin_intel import themes
+
+    return [{"name": t.name, "label": t.label} for t in themes.THEMES]
+
+
+@router.get("/themes/{name}")
+def theme_detail(session: SessionDep, name: str):
+    """A theme's codes in every vocabulary and its direct graph edges (BEA industries,
+    suppliers, buyers)."""
+    from fin_intel import graph, themes
+
+    try:
+        theme = themes.get(name)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from None
+    return {**asdict(theme), "graph": graph.neighbors(session, f"theme:{name}")}
+
+
+@router.get("/graph/{node}")
+def graph_node(
+    session: SessionDep,
+    node: str,
+    direction: str = Query("edges", pattern="^(edges|upstream|downstream)$"),
+    hops: int = Query(2, ge=1, le=4),
+    min_share: float = Query(0.02, ge=0, le=1),
+):
+    """The supply-chain graph around a node (`theme:defense`, `industry:334413`,
+    `summary:334`, or a theme name or BEA code): its direct edges, or its suppliers
+    (`upstream`, by share of its inputs) or buyers (`downstream`, by share of its output)
+    within `hops` edges."""
+    from fin_intel import graph
+
+    try:
+        key = graph.resolve(session, node)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from None
+    if direction == "edges":
+        return {"node": key, "edges": graph.neighbors(session, key)}
+    return {"node": key, direction: graph.walk(session, key, direction, hops, min_share)}

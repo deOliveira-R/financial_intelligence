@@ -47,6 +47,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 | EIA API v2 | 13 weekly petroleum and natural gas series | Free key (`FI_EIA_API_KEY`; the shared DEMO_KEY is rate-limited per IP) | `providers/eia.py`, `energy.py`, `sync-eia` | Public |
 | Japan Ministry of Finance (CSV files) | JGB constant-maturity yields 1-40 years since 1974; weekly international transactions in securities since 2005 | Free, no key | `providers/mof.py`, `japan.py`, `sync-japan` | Public |
 | Bank of Japan website | Monetary policy meeting schedule since 2010 | Free | `providers/boj.py`, `releases.py` | Public |
+| BEA input-output accounts (static zip) | Use tables, supply-use framework: detail (402 industries, close to 6-digit NAICS) for 2007, 2012, 2017; summary (71) for 1997-2023; BEA-to-NAICS concordance. Feeds the supply-chain graph | Free, no key; one ~20 MB zip, revised each September | `providers/bea.py`, `industries.py`, `graph.py`, `sync-bea` | Public |
 | CFTC Public Reporting (Socrata) | Commitments of Traders: legacy, disaggregated, financial futures, 26 markets since 2006 | Free, no key | `providers/cftc.py`, `cot.py`, `sync-cot` | Public |
 
 ### Ownership, politics, identifiers
