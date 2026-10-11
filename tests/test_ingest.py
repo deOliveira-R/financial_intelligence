@@ -6,7 +6,7 @@ import respx
 from conftest import COMPANY_FACTS, FRED_OBS, TICKERS, mock_fred, tiingo_bar
 from sqlalchemy import func, select
 
-from fin_intel import ingest
+from fin_intel import edgar, macro, market, pipeline
 from fin_intel.db import upsert
 from fin_intel.models import (
     Concept,
@@ -44,10 +44,10 @@ def test_sec_sync_normalizes_filings_concepts_and_facts(session, raw_store):
     respx.get(SEC_FACTS).respond(json=COMPANY_FACTS)
     sec = SecProvider(raw_store=raw_store)
 
-    assert ingest.sync_tickers(session, sec) == 2
+    assert market.sync_tickers(session, sec) == 2
     assert tickers_route.calls[0].request.headers["User-Agent"] == "Test test@example.com"
-    ingest.sync_fundamentals(session, sec, "AAPL")
-    ingest.sync_fundamentals(session, sec, "AAPL")  # idempotent
+    edgar.sync_fundamentals(session, sec, "AAPL")
+    edgar.sync_fundamentals(session, sec, "AAPL")  # idempotent
 
     assert count(session, Filing) == 3
     assert count(session, Concept) == 3
@@ -66,7 +66,7 @@ def test_sec_sync_normalizes_filings_concepts_and_facts(session, raw_store):
 @respx.mock
 def test_every_response_is_recorded_without_credentials(session, raw_store):
     mock_fred()
-    ingest.sync_economic(session, FredProvider(raw_store=raw_store), "UNRATE")
+    macro.sync_economic(session, FredProvider(raw_store=raw_store), "UNRATE")
 
     rows = session.scalars(select(RawResponse).order_by(RawResponse.id)).all()
     assert [(r.provider, r.dataset, r.key, r.status) for r in rows] == [
@@ -104,8 +104,8 @@ def test_prices_store_unadjusted_bars_and_actions_incrementally(session, raw_sto
         ),
     ]
     tiingo = TiingoProvider(raw_store=raw_store)
-    ingest.sync_prices(session, tiingo, "MSFT")
-    ingest.sync_prices(session, tiingo, "MSFT")
+    market.sync_prices(session, tiingo, "MSFT")
+    market.sync_prices(session, tiingo, "MSFT")
 
     # A split no longer forces a full refetch: stored bars are unadjusted.
     assert prices.call_count == 2
@@ -122,9 +122,9 @@ def test_sync_state_records_success_and_failure(session, raw_store):
     respx.get(SEC_FACTS).respond(500)
     sec = SecProvider(raw_store=raw_store)
     sec.max_retries = 0
-    ingest.sync_tickers(session, sec)
+    market.sync_tickers(session, sec)
     with pytest.raises(ProviderError):
-        ingest.sync_fundamentals(session, sec, "AAPL")
+        edgar.sync_fundamentals(session, sec, "AAPL")
 
     states = {s.dataset: s for s in session.scalars(select(SyncState))}
     assert states["company_tickers"].last_error is None and states["company_tickers"].rows == 2
@@ -174,7 +174,7 @@ def test_synced_since(session):
         for d, k, ok in [*rows, ("sic", "4", now)]
     )
     session.commit()
-    assert ingest.synced_since(session, "sec", "events", now - timedelta(days=6)) == {"1"}
+    assert pipeline.synced_since(session, "sec", "events", now - timedelta(days=6)) == {"1"}
 
 
 @respx.mock
@@ -243,7 +243,7 @@ def test_fred_vintages_are_stored_and_fetched_incrementally(session, raw_store):
 
     mock_fred()
     fred = FredProvider(raw_store=raw_store)
-    ingest.sync_economic(session, fred, "UNRATE")
+    macro.sync_economic(session, fred, "UNRATE")
     versions = session.execute(
         select(
             EconomicVintage.date, EconomicVintage.realtime_start, EconomicVintage.value
@@ -258,5 +258,5 @@ def test_fred_vintages_are_stored_and_fetched_incrementally(session, raw_store):
     route = respx.get("https://api.stlouisfed.org/fred/series/vintagedates").respond(
         json={"count": 0, "vintage_dates": []}
     )
-    ingest.sync_economic(session, fred, "UNRATE")
+    macro.sync_economic(session, fred, "UNRATE")
     assert route.calls[-1].request.url.params["realtime_start"] == "2026-09-06"

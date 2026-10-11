@@ -3,7 +3,7 @@ from datetime import date
 import respx
 from sqlalchemy import select
 
-from fin_intel import ingest
+from fin_intel import market, symbols
 from fin_intel.models import DailyBar, Security, TickerHistory
 from fin_intel.providers import MassiveProvider
 from fin_intel.rebuild import rebuild
@@ -52,10 +52,10 @@ def bars(session, security_id):
 def run(session, raw_store, active, delisted):
     """Market data first (as it arrived historically), then the reference sync."""
     massive = MassiveProvider(raw_store=raw_store)
-    ingest.sync_market_daily(session, massive, OLD_DAY)
-    ingest.sync_market_daily(session, massive, NEW_DAY)
+    market.sync_market_daily(session, massive, OLD_DAY)
+    market.sync_market_daily(session, massive, NEW_DAY)
     reference(active, delisted)
-    ingest.sync_reference_tickers(session, massive)
+    market.sync_reference_tickers(session, massive)
 
 
 @respx.mock
@@ -64,7 +64,7 @@ def test_delisted_security_gets_its_history_from_raw(session, raw_store):
     grouped(NEW_DAY, [("SPY", 600.0)])
     run(session, raw_store, [ticker("SPY")], [ticker("GONE", cik=7, delisted=date(2025, 9, 1))])
 
-    gone = ingest.get_security(session, "GONE")  # resolves through ticker history
+    gone = symbols.get_security(session, "GONE")  # resolves through ticker history
     assert (gone.ticker, gone.active, gone.origin) == (None, False, "massive-delisted")
     assert gone.delisted_on == date(2025, 9, 1) and gone.cik == 7
     assert bars(session, gone.id) == [(OLD_DAY, 5.0)]
@@ -129,7 +129,7 @@ def test_resync_is_idempotent_and_rebuild_reproduces_it(session, raw_store):
         ticker("GONE", cik=7, delisted=date(2025, 9, 1)),
     ]
     run(session, raw_store, active, delisted)
-    ingest.sync_reference_tickers(session, MassiveProvider(raw_store=raw_store))  # again
+    market.sync_reference_tickers(session, MassiveProvider(raw_store=raw_store))  # again
 
     def state():
         securities = sorted(

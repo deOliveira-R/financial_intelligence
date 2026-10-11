@@ -2,7 +2,7 @@ from datetime import date
 
 from sqlalchemy import select
 
-from fin_intel import ingest, world
+from fin_intel import edinet, world
 from fin_intel.models import Issuer, StatementItem
 
 JPPFS = "http://disclosure.edinet-fsa.go.jp/taxonomy/jppfs/2025-11-01/jppfs_cor"
@@ -80,7 +80,7 @@ def instance() -> bytes:
 
 
 def test_edinet_report_loads_consolidated_statements(session):
-    rows = ingest.load_edinet_instance(session, "S100YE9I|E00776|120|2026-06-19", instance())
+    rows = edinet.load_edinet_instance(session, "S100YE9I|E00776|120|2026-06-19", instance())
     assert rows > 0
     cik = world.issuer_id("edinet", "E00776")
     issuer = session.get(Issuer, cik)

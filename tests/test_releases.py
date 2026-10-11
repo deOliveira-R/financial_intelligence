@@ -4,7 +4,7 @@ import respx
 from conftest import mock_fred
 from sqlalchemy import select
 
-from fin_intel import ingest, releases
+from fin_intel import macro, releases
 from fin_intel.models import EconomicReleaseDate, EconomicSeries
 from fin_intel.providers import FedProvider, FredProvider
 from fin_intel.rebuild import rebuild
@@ -46,7 +46,7 @@ def dates(release_id, *days):
 def test_sync_calendar_then_rebuild(session, raw_store):
     mock_fred()
     fred = FredProvider(raw_store=raw_store)
-    ingest.sync_economic(session, fred, "UNRATE")
+    macro.sync_economic(session, fred, "UNRATE")
     respx.get(f"{FRED}/series/release").respond(
         json={"releases": [{"id": 50, "name": "Employment Situation", "link": "http://bls"}]}
     )
@@ -57,7 +57,7 @@ def test_sync_calendar_then_rebuild(session, raw_store):
         content=FOMC_PAGE
     )
     fed = FedProvider(raw_store=raw_store)
-    assert ingest.sync_release_calendar(session, fred, fed) == 3
+    assert releases.sync_release_calendar(session, fred, fed) == 3
     assert session.get(EconomicSeries, "UNRATE").release_id == 50
 
     events = releases.upcoming(session, days=40, start=date(2026, 10, 1))

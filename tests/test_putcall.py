@@ -4,7 +4,7 @@ import pytest
 import respx
 from sqlalchemy import select
 
-from fin_intel import ingest, putcall
+from fin_intel import putcall
 from fin_intel.models import EconomicObservation
 from fin_intel.providers import CboeProvider
 from fin_intel.rebuild import rebuild
@@ -53,7 +53,7 @@ def test_sync_loads_archive_once_skips_holidays_and_rebuilds(session, raw_store,
         403, text="<Error><Code>AccessDenied</Code></Error>"
     )
     cboe = CboeProvider(raw_store=raw_store)
-    ingest.sync_cboe(session, cboe, date(2026, 10, 3))
+    putcall.sync_cboe(session, cboe, date(2026, 10, 3))
     assert archive.call_count == 3
 
     def pc():
@@ -66,7 +66,7 @@ def test_sync_loads_archive_once_skips_holidays_and_rebuilds(session, raw_store,
         )
 
     assert pc()[date(2026, 10, 1)] == 0.8 and date(2026, 10, 2) not in pc()
-    ingest.sync_cboe(session, cboe, date(2026, 10, 3))
+    putcall.sync_cboe(session, cboe, date(2026, 10, 3))
     assert archive.call_count == 3  # archive once; only new days afterwards
     before = pc()
     with respx.mock:

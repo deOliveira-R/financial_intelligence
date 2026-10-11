@@ -4,7 +4,7 @@ import pytest
 from conftest import COMPANY_FACTS, FRED_OBS, FRED_SERIES, TICKERS, tiingo_bar
 from fastapi.testclient import TestClient
 
-from fin_intel import ingest
+from fin_intel import edgar, macro, market
 from fin_intel.api import app
 from fin_intel.db import get_session, session_factory
 from fin_intel.models import SyncRun
@@ -12,10 +12,10 @@ from fin_intel.models import SyncRun
 
 @pytest.fixture
 def client(engine, session):
-    ingest.load_company_tickers(session, TICKERS, date(2026, 1, 1))
-    ingest.load_company_facts(session, 320193, COMPANY_FACTS)
+    market.load_company_tickers(session, TICKERS, date(2026, 1, 1))
+    edgar.load_company_facts(session, 320193, COMPANY_FACTS)
     # AAPL 2-for-1 split on 2026-09-02 and a $1 dividend on 2026-09-03.
-    ingest.load_tiingo_daily(
+    market.load_tiingo_daily(
         session,
         "AAPL",
         [
@@ -24,8 +24,8 @@ def client(engine, session):
             tiingo_bar("2026-09-03", 101, div=1.0),
         ],
     )
-    ingest.load_fred_series(session, FRED_SERIES)
-    ingest.load_fred_observations(session, "UNRATE", FRED_OBS)
+    macro.load_fred_series(session, FRED_SERIES)
+    macro.load_fred_observations(session, "UNRATE", FRED_OBS)
     session.add(SyncRun(job="sync-prices", started_at=datetime.now(UTC), status="ok"))
     session.commit()
 

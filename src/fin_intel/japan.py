@@ -14,10 +14,23 @@ Stored as economic series (source "mof"); timeseries reads them as `jp:<alias>`.
 
 import csv
 import io
+import logging
 import re
 import unicodedata
 from datetime import date, timedelta
 from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from fin_intel import registry
+from fin_intel.db import upsert
+from fin_intel.models import EconomicObservation, EconomicSeries
+from fin_intel.pipeline import tracked, utc_today
+from fin_intel.providers import MofProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 TENORS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, 40)
 JGB_SERIES = {f"JGB{t}Y": f"JGB {t}-year yield" for t in TENORS}
@@ -121,3 +134,56 @@ def parse_flows(body: bytes) -> tuple[list[dict], list[dict]]:
                 observations.append({"series_id": series_id, "date": end, "value": v})
     series = [_series_row(s, t, "100 million yen", "W") for s, t in FLOW_COLUMNS.values()]
     return series, observations
+
+
+# --- loading and syncs ---
+
+
+def load_mof(session: Session, dataset: str, body: bytes) -> int:
+    """A JGB curve file (history or this month) or the weekly flows file."""
+    series, observations = (parse_jgb if dataset == "jgb_curve" else parse_flows)(body)
+    upsert(session, EconomicSeries, series, key=["id"])
+    return upsert(session, EconomicObservation, observations, key=["series_id", "date"])
+
+
+def sync_japan(session: Session, mof: MofProvider, history: bool = False) -> int:
+    """This month's JGB yields, the weekly flows and (with `history`, or when nothing before
+    this month is stored) the JGB history file, which MoF updates monthly."""
+    with tracked(session, "mof", "jgb_curve", "history" if history else "current") as result:
+        session.commit()  # fetch-then-load
+        today = utc_today()
+        if not history:
+            history = not session.scalar(
+                select(func.count())
+                .select_from(EconomicObservation)
+                .where(
+                    EconomicObservation.series_id == "JGB10Y",
+                    EconomicObservation.date < today.replace(day=1),
+                )
+            )
+        bodies = [("jgb_curve", mof.fetch_jgb_current(today)), ("flows", mof.fetch_flows())]
+        if history:
+            bodies.insert(0, ("jgb_curve", mof.fetch_jgb_history()))
+        result["rows"] = sum(load_mof(session, dataset, body) for dataset, body in bodies)
+    return result["rows"]
+
+
+registry.register(
+    Dataset(
+        "mof",
+        "jgb_curve",
+        lambda s, k, p, t: load_mof(s, "jgb_curve", p),
+        ("economic",),
+        payload="bytes",
+        snapshot=True,
+        note="history file, each month",
+    ),
+    Dataset(
+        "mof",
+        "flows",
+        lambda s, k, p, t: load_mof(s, "flows", p),
+        ("economic",),
+        payload="bytes",
+        snapshot=True,
+    ),
+)

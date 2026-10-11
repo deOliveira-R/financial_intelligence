@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from sqlalchemy import select
 
-from fin_intel import ingest
+from fin_intel import edgar
 from fin_intel.models import Concept, StatementItem
 
 
@@ -38,7 +38,7 @@ def items(session, cik, line_item):
 
 
 def test_total_revenue_wins_and_concept_switches_are_continuous(session):
-    ingest.load_company_facts(
+    edgar.load_company_facts(
         session,
         1,
         payload(
@@ -71,7 +71,7 @@ def test_total_revenue_wins_and_concept_switches_are_continuous(session):
 
 
 def test_ifrs_filer_maps_to_the_same_items(session):
-    ingest.load_company_facts(
+    edgar.load_company_facts(
         session,
         2,
         payload(
@@ -134,7 +134,7 @@ def test_ifrs_filer_maps_to_the_same_items(session):
 
 
 def test_balance_items_take_instants_and_flows_take_durations(session):
-    ingest.load_company_facts(
+    edgar.load_company_facts(
         session,
         3,
         payload(
@@ -175,7 +175,7 @@ def test_q4_derived_for_flows_not_for_eps(session):
         for s, e, _, q in quarters
     ]
     eps.append(fact("2025-01-01", "2025-12-31", 4.5, "K25", 2025, "FY", filed="2026-02-20"))
-    ingest.load_company_facts(
+    edgar.load_company_facts(
         session,
         4,
         payload(
@@ -192,7 +192,7 @@ def test_q4_derived_for_flows_not_for_eps(session):
 
 
 def test_restatement_wins(session):
-    ingest.load_company_facts(
+    edgar.load_company_facts(
         session,
         5,
         payload(
@@ -217,7 +217,7 @@ def test_restatement_wins(session):
 
 def test_proxy_statement_figures_are_ignored(session):
     # Pay-versus-performance tables in proxies tag net income too, often mis-scaled.
-    ingest.load_company_facts(
+    edgar.load_company_facts(
         session,
         6,
         payload(
@@ -251,8 +251,8 @@ def test_rederiving_replaces_rows(session):
     data = payload(
         6, {("us-gaap", "Assets"): ("USD", [fact(None, "2025-12-31", 1.0, "K", 2025, "FY")])}
     )
-    ingest.load_company_facts(session, 6, data)
-    ingest.load_company_facts(session, 6, data)
+    edgar.load_company_facts(session, 6, data)
+    edgar.load_company_facts(session, 6, data)
     assert len(items(session, 6, "total_assets")) == 1
     assert session.scalar(select(StatementItem.period_end).where(StatementItem.cik == 6)) == date(
         2025, 12, 31
@@ -261,9 +261,7 @@ def test_rederiving_replaces_rows(session):
 
 def test_company_without_facts_loads_cleanly(session):
     # Some filers' company facts contain no facts at all; this crashed the bulk load.
-    assert (
-        ingest.load_company_facts(session, 7, {"cik": 7, "entityName": "Empty", "facts": {}}) == 0
-    )
+    assert edgar.load_company_facts(session, 7, {"cik": 7, "entityName": "Empty", "facts": {}}) == 0
     assert items(session, 7, "revenue") == []
 
 
@@ -275,7 +273,7 @@ def test_quarters_derived_from_year_to_date_cash_flows(session):
         ("2024-09-29", "2025-06-28", 81.8, "Q3", "10-Q"),
         ("2024-09-29", "2025-09-27", 111.5, "FY", "10-K"),
     ]
-    ingest.load_company_facts(
+    edgar.load_company_facts(
         session,
         8,
         payload(
@@ -306,7 +304,7 @@ def test_quarters_derived_from_year_to_date_cash_flows(session):
 
 def test_first_filed_dates_figures_from_their_first_report(session):
     rev = ("us-gaap", "Revenues")
-    ingest.load_company_facts(
+    edgar.load_company_facts(
         session,
         7,
         payload(

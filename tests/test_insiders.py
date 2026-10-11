@@ -5,7 +5,7 @@ from datetime import date
 import respx
 from sqlalchemy import func, select
 
-from fin_intel import ingest, insiders
+from fin_intel import insiders
 from fin_intel.models import InsiderTransaction
 from fin_intel.providers import SecProvider
 from fin_intel.providers.sec import parse_daily_index
@@ -160,7 +160,7 @@ def test_dataset_and_form4_produce_the_same_row(session):
     )
     insiders.load(session, rows)
     # The same filing's XML, as fetched from the daily index, is recognized as the same row.
-    ingest.load_form4(session, "0001-26-000001", form4())
+    insiders.load_form4(session, "0001-26-000001", form4())
     assert count(session) == 1
     stored = session.scalar(select(InsiderTransaction))
     assert stored.filing_date == date(2026, 6, 30) and stored.issuer_symbol == "DDS"
@@ -248,7 +248,7 @@ def test_sync_day_skips_loaded_filings_and_rebuilds(session, raw_store):
     )
     session.commit()
 
-    assert ingest.sync_insider_day(session, sec, date(2026, 6, 30)) == 1
+    assert insiders.sync_insider_day(session, sec, date(2026, 6, 30)) == 1
     assert not first.called and second.called  # already loaded from the data set
     assert count(session) == 2
     with respx.mock:
@@ -270,7 +270,7 @@ def test_sync_day_skips_filings_missing_from_the_archive(session, raw_store):
     respx.get("https://www.sec.gov/Archives/edgar/data/28917/0001-26-000002.txt").respond(
         content=form4()
     )
-    assert ingest.sync_insider_day(session, SecProvider(raw_store=raw_store), date(2026, 6, 30))
+    assert insiders.sync_insider_day(session, SecProvider(raw_store=raw_store), date(2026, 6, 30))
     assert count(session) == 1
 
 
@@ -280,7 +280,7 @@ def test_holiday_index_is_empty(session, raw_store):
             "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.20260907.idx"
         ).respond(404)
         assert (
-            ingest.sync_insider_day(session, SecProvider(raw_store=raw_store), date(2026, 9, 7))
+            insiders.sync_insider_day(session, SecProvider(raw_store=raw_store), date(2026, 9, 7))
             == 0
         )
 
@@ -293,7 +293,7 @@ def test_holiday_index_answered_with_access_denied(session, raw_store):
             "https://www.sec.gov/Archives/edgar/daily-index/2026/QTR3/form.20260703.idx"
         ).respond(403, text=body)
         sec = SecProvider(raw_store=raw_store)
-        assert ingest.sync_insider_day(session, sec, date(2026, 7, 3)) == 0
+        assert insiders.sync_insider_day(session, sec, date(2026, 7, 3)) == 0
 
 
 def test_implausible_dates_are_dropped():

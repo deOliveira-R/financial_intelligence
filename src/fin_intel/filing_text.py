@@ -11,6 +11,7 @@ PostgreSQL full-text search (`filing_texts.search`).
 """
 
 import html
+import logging
 import re
 from dataclasses import dataclass
 from datetime import date
@@ -19,8 +20,14 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
 from fin_intel.models import FilingText
+from fin_intel.pipeline import tracked
+from fin_intel.providers import SecProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 # (form, section) -> (start heading, end headings)
 _ITEM = r"^\s*item\s*"
@@ -220,3 +227,47 @@ def get(session: Session, accession: str, name: str | None = None) -> list[Filin
     if name:
         stmt = stmt.where(FilingText.section == name)
     return list(session.scalars(stmt))
+
+
+# --- loading and syncs ---
+
+
+def sync_filing_text(session: Session, sec_provider: SecProvider, cik: int, since: date) -> int:
+    """A company's 10-K/10-Q sections and earnings press releases filed since `since` that
+    haven't been fetched yet."""
+    with tracked(session, "sec", "filing_text", str(cik)) as result:
+        session.commit()  # fetch-then-load
+        store = sec_provider.raw_store
+        have = (
+            {k.split("|")[1] for k in store.latest_hashes("sec", "filing_document")}
+            if store
+            else set()
+        )
+        filings = [
+            f
+            for f in wanted(sec_provider.fetch_submissions(cik), since)
+            if f["accession"] not in have
+        ]
+        documents = []
+        for f in filings:
+            if f["form"] in FORMS:
+                targets = [(f["document"], "report")]
+            else:  # an earnings 8-K: its press release exhibits
+                page = sec_provider.fetch_index_page(cik, f["accession"])
+                targets = [(e.document, e.kind) for e in exhibits(page)]
+            for document, kind in targets:
+                key = document_key(cik, f["accession"], f["form"], f["filed"], f["period"], kind)
+                body = sec_provider.fetch_document(cik, f["accession"], document, key)
+                documents.append((key, body))
+        rows = 0
+        for key, body in documents:
+            rows += load(session, key, body)
+        result["rows"] = rows
+    return result["rows"]
+
+
+registry.register(
+    Dataset(
+        "sec", "filing_document", lambda s, k, p, t: load(s, k, p), ("texts",), payload="bytes"
+    ),
+)

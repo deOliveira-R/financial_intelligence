@@ -27,6 +27,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
 from fin_intel.models import (
     CommitteeMembership,
@@ -34,6 +35,9 @@ from fin_intel.models import (
     CongressReportMember,
     CongressTrade,
 )
+from fin_intel.pipeline import tracked
+from fin_intel.providers import HouseProvider, NotFoundError, SenateProvider
+from fin_intel.registry import Dataset
 
 log = logging.getLogger(__name__)
 
@@ -512,3 +516,80 @@ def most_traded(session: Session, days: int = 90, as_of: date | None = None) -> 
         for ticker, items in by_ticker.items()
     ]
     return sorted(out, key=lambda p: (-p.members, -p.amount_min))
+
+
+# --- loading and syncs ---
+
+
+def sync_house_index(session: Session, house: HouseProvider, year: int) -> int:
+    """The year's filing index: which PTRs exist (each is then fetched on its own)."""
+    with tracked(session, "house", "fd_index", str(year)) as result:
+        session.commit()  # fetch-then-load
+        result["rows"] = load_index(session, parse_house_index(house.fetch_index(year)))
+    return result["rows"]
+
+
+def sync_house_ptr(session: Session, house: HouseProvider, doc_id: str, year: int) -> int:
+    with tracked(session, "house", "ptr", doc_id) as result:
+        session.commit()
+        try:
+            body = house.fetch_ptr(doc_id, year)
+        except NotFoundError:
+            # Listed but never published (withdrawn): don't retry it every day.
+            load_report(session, {"doc_id": doc_id, "chamber": "house"}, [])
+            result["rows"] = 0
+        else:
+            result["rows"] = load_report(session, *parse_house_ptr(doc_id, body))
+    return result["rows"]
+
+
+def sync_senate_index(session: Session, senate: SenateProvider, since: date) -> int:
+    """Every PTR submitted since `since`, page by page."""
+    with tracked(session, "senate", "search", since.isoformat()) as result:
+        rows, start = 0, 0
+        while True:
+            session.commit()
+            page = senate.search_ptrs(since.strftime("%m/%d/%Y"), start)
+            rows += load_index(session, parse_senate_search(page))
+            start += senate.page_size
+            if start >= int(page.get("recordsFiltered") or 0):
+                break
+        result["rows"] = rows
+    return result["rows"]
+
+
+def sync_senate_ptr(session: Session, senate: SenateProvider, doc_id: str) -> int:
+    with tracked(session, "senate", "ptr", doc_id) as result:
+        session.commit()
+        result["rows"] = load_report(session, *parse_senate_ptr(doc_id, senate.fetch_ptr(doc_id)))
+    return result["rows"]
+
+
+registry.register(
+    Dataset(
+        "house",
+        "fd_index",
+        lambda s, k, p, t: load_index(s, parse_house_index(p)),
+        ("congress",),
+        payload="bytes",
+        snapshot=True,
+        note="the year's complete index",
+    ),
+    Dataset(
+        "house",
+        "ptr",
+        lambda s, k, p, t: load_report(s, *parse_house_ptr(k, p)),
+        ("congress",),
+        payload="bytes",
+    ),
+    Dataset(
+        "senate", "search", lambda s, k, p, t: load_index(s, parse_senate_search(p)), ("congress",)
+    ),
+    Dataset(
+        "senate",
+        "ptr",
+        lambda s, k, p, t: load_report(s, *parse_senate_ptr(k, p)),
+        ("congress",),
+        payload="bytes",
+    ),
+)

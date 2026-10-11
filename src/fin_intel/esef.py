@@ -8,8 +8,18 @@ totals), as for SEC filings. In xBRL-JSON periods end at midnight of the next da
 """
 
 import json
+import logging
 from datetime import date, timedelta
 from typing import Any
+
+from sqlalchemy.orm import Session
+
+from fin_intel import registry, world
+from fin_intel.edgar import load_company_facts
+from fin_intel.pipeline import tracked
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 PLAIN = {"concept", "entity", "period", "unit", "language"}
 
@@ -91,3 +101,39 @@ def parse_report(data: bytes, accession: str, filed: date | None) -> dict[str, A
             units[unit] = [e | {"fy": year, "fp": "FY"} for e in entries.values()]
         out[concept] = {"units": units}
     return {"facts": {"ifrs-full": out} if out else {}}
+
+
+# --- loading and syncs ---
+
+
+def load_esef_report(session: Session, key: str, body: bytes) -> int:
+    """One ESEF annual report. Key: `LEI|period end|country|date added|name`."""
+    lei, _, country, added, name = key.split("|", 4)
+    cik = world.ensure_issuer(session, "esef", lei, name or None, country=country, lei=lei)
+    payload = parse_report(body, f"esef:{lei}:{key.split('|')[1]}", date.fromisoformat(added))
+    if not payload["facts"]:
+        return 0
+    return load_company_facts(session, cik, payload, supplement=True)
+
+
+def sync_esef_report(session: Session, provider: Any, filing: dict[str, Any]) -> int:
+    name = (filing["name"] or "").replace("|", " ")
+    key = f"{filing['lei']}|{filing['period_end']}|{filing['country']}|{filing['added']}|{name}"
+    with tracked(session, "esef", "report", f"{filing['lei']}|{filing['period_end']}") as result:
+        session.commit()
+        result["rows"] = load_esef_report(
+            session, key, provider.fetch_report(filing["json_url"], key)
+        )
+    return result["rows"]
+
+
+registry.register(
+    Dataset("esef", "index", lambda s, k, p, t: len(filings(p))),
+    Dataset(
+        "esef",
+        "report",
+        lambda s, k, p, t: load_esef_report(s, k, p),
+        ("fundamentals",),
+        payload="bytes",
+    ),
+)

@@ -263,7 +263,7 @@ def lot_book(session: Session) -> LotBook:
 
 
 def _security_ids(session: Session, symbols: set[str]) -> dict[str, int]:
-    from fin_intel.ingest import get_security
+    from fin_intel.symbols import get_security
 
     out = {}
     for symbol in symbols:
@@ -586,7 +586,7 @@ def _returns(closes: list[tuple[date, float]]) -> dict[str, float | None]:
 
 
 def context(session: Session, symbol: str) -> Context | None:
-    from fin_intel.ingest import get_security
+    from fin_intel.symbols import get_security
 
     security, spy = get_security(session, symbol), get_security(session, "SPY")
     closes = _adjusted_closes(session, security.id) if security else []
@@ -632,7 +632,7 @@ def replacements(
     they move in the same direction but by a multiple. An ETF tracking the very same index
     may be considered "substantially identical"; that call is yours (or your tax adviser's).
     """
-    from fin_intel.ingest import get_security
+    from fin_intel.symbols import get_security
 
     target = get_security(session, symbol)
     if target is None:

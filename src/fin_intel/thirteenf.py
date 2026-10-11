@@ -19,8 +19,10 @@ The raw files are complete, so a different threshold is one rebuild away.
 
 import csv
 import io
+import logging
 import zipfile
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
@@ -28,6 +30,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
 from fin_intel.models import (
     CusipMapping,
@@ -36,6 +39,11 @@ from fin_intel.models import (
     InstitutionalPosition,
     Security,
 )
+from fin_intel.pipeline import tracked
+from fin_intel.providers import OpenFigiProvider, SecProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 VALUE_IN_DOLLARS_FROM = date(2023, 1, 3)
 FULL_SINCE = date(2025, 6, 1)  # data sets covering filings from here on: every filer
@@ -379,3 +387,68 @@ def find_filers(session: Session, query: str, limit: int = 20) -> list[Instituti
             .limit(limit)
         )
     )
+
+
+# --- loading and syncs ---
+
+
+def load_13f_dataset(session: Session, body: bytes, period: str = "") -> int:
+    """`period` is the data set's key (`2013-01-01_2013-03-31`): data sets of filings before
+    FULL_SINCE keep only large and watched filers."""
+    end = period.split("_")[-1]
+    historical = bool(end) and date.fromisoformat(end) < FULL_SINCE
+    count = load(session, body, HISTORY_MIN_AUM if historical else None)
+    link_securities(session)
+    return count
+
+
+def load_openfigi_mapping(session: Session, request: list[dict], response: list[dict]) -> int:
+    count = load_openfigi(session, [job["idValue"] for job in request], response)
+    link_securities(session)
+    return count
+
+
+def sync_13f_dataset(session: Session, sec_provider: SecProvider, period: str, url: str) -> int:
+    with tracked(session, "sec", "13f_dataset", period) as result:
+        body = sec_provider.fetch_13f_dataset(period, url)
+        result["rows"] = load_13f_dataset(session, body, period)
+    return result["rows"]
+
+
+def sync_cusip_mappings(
+    session: Session, openfigi: OpenFigiProvider, progress: Callable[[int, int], None] | None = None
+) -> int:
+    """Look up every unmapped CUSIP on OpenFIGI, one committed batch at a time (a first
+    run without an API key takes hours; progress survives interruptions)."""
+    cusips = unmapped_cusips(session)
+    done = 0
+    for i in range(0, len(cusips), openfigi.batch):
+        batch = cusips[i : i + openfigi.batch]
+        session.commit()  # fetch-then-load: no write lock held during the request
+        results = openfigi.map_cusips(batch)
+        load_openfigi(session, batch, results)
+        session.commit()
+        done += len(batch)
+        if progress:
+            progress(done, len(cusips))
+    link_securities(session)
+    session.commit()
+    return done
+
+
+registry.register(
+    Dataset(
+        "sec",
+        "13f_dataset",
+        lambda s, k, p, t: load_13f_dataset(s, p, k),
+        ("holdings",),
+        payload="bytes",
+    ),
+    Dataset(
+        "openfigi",
+        "mapping",
+        lambda s, k, p, t: load_openfigi_mapping(s, p["request"], p["response"]),
+        ("holdings",),
+        payload="request",
+    ),
+)

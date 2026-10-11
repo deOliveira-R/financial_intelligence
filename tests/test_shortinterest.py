@@ -6,7 +6,7 @@ import respx
 from sqlalchemy import func, select
 from test_timeseries import add_bars
 
-from fin_intel import ingest, shortinterest, timeseries
+from fin_intel import shortinterest, timeseries
 from fin_intel.models import Security, ShortInterest
 from fin_intel.providers import FinraProvider
 from fin_intel.rebuild import rebuild
@@ -71,11 +71,11 @@ def test_discovers_settlement_dates_loads_pages_and_rebuilds(session, raw_store,
     )
     finra = FinraProvider(raw_store=raw_store)
     monkeypatch.setattr(finra, "page_size", 1)  # several pages per date
-    due = ingest.short_interest_due(session, finra, date(2026, 9, 26))
+    due = shortinterest.short_interest_due(session, finra, date(2026, 9, 26))
     # 2026-09-15 is published on 09-25; September's month-end isn't yet.
     assert due == [date(2026, 8, 14), date(2026, 8, 28), date(2026, 9, 15)]
     for d in due:
-        ingest.sync_short_interest(session, finra, d)
+        shortinterest.sync_short_interest(session, finra, d)
 
     def count():
         return session.scalar(select(func.count()).select_from(ShortInterest))

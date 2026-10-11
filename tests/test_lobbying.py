@@ -6,7 +6,7 @@ import respx
 from sqlalchemy import func, select
 from test_timeseries import add_bars
 
-from fin_intel import ingest, lobbying, timeseries
+from fin_intel import lobbying, timeseries
 from fin_intel.models import LobbyingReport
 from fin_intel.providers import LdaProvider
 from fin_intel.rebuild import rebuild
@@ -56,7 +56,7 @@ def test_quarter_sync_spend_by_issue_and_rebuild(session, raw_store):
 
     respx.get(url__startswith="https://lda.gov/api/v1/filings/").mock(side_effect=answer)
     lda = LdaProvider(raw_store=raw_store)
-    assert ingest.sync_lobbying_quarter(session, lda, 2025, 1) == 3  # registration skipped
+    assert lobbying.sync_lobbying_quarter(session, lda, 2025, 1) == 3  # registration skipped
     # The amendment replaces the original: 120k split over DEF and BUD, plus 40k on DEF.
     assert lobbying.by_issue(session, "DEF") == [(2025, 1, pytest.approx(100000.0), 2)]
     assert lobbying.by_issue(session, "bud") == [(2025, 1, pytest.approx(60000.0), 1)]
@@ -96,5 +96,5 @@ def test_due_quarters_skip_settled_ones(session):
         )
     )
     session.commit()
-    due = ingest.lobbying_quarters_due(session, 2025, date(2026, 10, 6))
+    due = lobbying.lobbying_quarters_due(session, 2025, date(2026, 10, 6))
     assert (2025, 1) not in due and (2025, 2) in due and (2026, 3) in due and (2026, 4) not in due

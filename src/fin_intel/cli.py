@@ -9,10 +9,32 @@ import typer
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import derive, ingest
+from fin_intel import (
+    congress_members,
+    contracts,
+    crosslist,
+    dart,
+    derive,
+    edgar,
+    edinet,
+    filing_text,
+    funds,
+    insiders,
+    japan,
+    lobbying,
+    macro,
+    market,
+    pipeline,
+    putcall,
+    registry,
+    releases,
+    shortinterest,
+    symbols,
+    taiwan,
+    thirteenf,
+)
 from fin_intel.config import get_settings
 from fin_intel.db import init_db, session_factory
-from fin_intel.ingest import SNAPSHOT_DATASETS
 from fin_intel.models import CongressReport, DailyBar, SyncRun, SyncState
 from fin_intel.providers import (
     FredProvider,
@@ -84,14 +106,14 @@ def _run(job: str, items: list[str], fn: Callable[[Session, str], Any]) -> None:
 def sync_tickers() -> None:
     """Load all SEC-registered tickers and their CIKs."""
     sec = SecProvider(raw_store=default_store())
-    _run("sync-tickers", ["all"], lambda s, _: ingest.sync_tickers(s, sec))
+    _run("sync-tickers", ["all"], lambda s, _: market.sync_tickers(s, sec))
 
 
 @app.command()
 def sync_fundamentals(tickers: list[str]) -> None:
     """Load SEC XBRL financial facts for the given tickers."""
     sec = SecProvider(raw_store=default_store())
-    _run("sync-fundamentals", tickers, lambda s, t: ingest.sync_fundamentals(s, sec, t))
+    _run("sync-fundamentals", tickers, lambda s, t: edgar.sync_fundamentals(s, sec, t))
 
 
 @app.command()
@@ -122,13 +144,13 @@ def sync_fundamentals_bulk(
         if downloaded:
             typer.echo("downloading companyfacts.zip ...")
             SecProvider(raw_store=store).download_bulk_company_facts(path)
-        ciks = None if all_filers else ingest.tracked_ciks(session)
+        ciks = None if all_filers else pipeline.tracked_ciks(session)
 
         def progress(n: int, total: int) -> None:
             if n % 250 == 0 or n == total:
                 typer.echo(f"  {n}/{total} companies")
 
-        loaded, unchanged = ingest.load_bulk_company_facts(session, store, path, ciks, progress)
+        loaded, unchanged = edgar.load_bulk_company_facts(session, store, path, ciks, progress)
         typer.echo(f"loaded {loaded}, unchanged {unchanged}")
         return loaded
 
@@ -162,7 +184,7 @@ def sync_insiders(
         _run(
             "sync-insiders",
             pending,
-            lambda s, q: ingest.sync_insider_dataset(s, sec, q, datasets[q]),
+            lambda s, q: insiders.sync_insider_dataset(s, sec, q, datasets[q]),
         )
 
     latest = max(datasets, default=None)
@@ -186,7 +208,7 @@ def sync_insiders(
         _run(
             "sync-insiders",
             days,
-            lambda s, d: ingest.sync_insider_day(s, sec, date.fromisoformat(d)),
+            lambda s, d: insiders.sync_insider_day(s, sec, date.fromisoformat(d)),
         )
 
 
@@ -221,14 +243,14 @@ def sync_13f(
         )
     pending = [p for p in wanted if p not in loaded]
     if pending:
-        _run("sync-13f", pending, lambda s, p: ingest.sync_13f_dataset(s, sec, p, available[p]))
+        _run("sync-13f", pending, lambda s, p: thirteenf.sync_13f_dataset(s, sec, p, available[p]))
     openfigi = OpenFigiProvider(raw_store=store)
 
     def progress(done: int, total: int) -> None:
         if done % 1000 < openfigi.batch or done == total:
             typer.echo(f"  mapped {done}/{total} CUSIPs")
 
-    _run("sync-13f", ["cusips"], lambda s, _: ingest.sync_cusip_mappings(s, openfigi, progress))
+    _run("sync-13f", ["cusips"], lambda s, _: thirteenf.sync_cusip_mappings(s, openfigi, progress))
 
 
 @app.command()
@@ -252,7 +274,7 @@ def sync_congress(
         # Past years' indexes are final; the current one grows daily.
         years = [str(y) for y in range(first, today.year + 1) if str(y) not in loaded]
         years = sorted(set(years) | {str(today.year)})
-        _run("sync-congress", years, lambda s, y: ingest.sync_house_index(s, house, int(y)))
+        _run("sync-congress", years, lambda s, y: congress.sync_house_index(s, house, int(y)))
         with session_factory()() as session:
             pending = {
                 r.doc_id: r.year or (r.filed.year if r.filed else today.year)
@@ -263,7 +285,7 @@ def sync_congress(
             _run(
                 "sync-congress",
                 list(pending),
-                lambda s, d: ingest.sync_house_ptr(s, house, d, pending[d]),
+                lambda s, d: congress.sync_house_ptr(s, house, d, pending[d]),
             )
     if chamber in ("senate", "all"):
         senate = SenateProvider(raw_store=store)
@@ -282,12 +304,12 @@ def sync_congress(
         _run(
             "sync-congress",
             [start.isoformat()],
-            lambda s, d: ingest.sync_senate_index(s, senate, date.fromisoformat(d)),
+            lambda s, d: congress.sync_senate_index(s, senate, date.fromisoformat(d)),
         )
         with session_factory()() as session:
             ids = [r.doc_id for r in congress.pending_reports(session, "senate")]
         if ids:
-            _run("sync-congress", ids, lambda s, d: ingest.sync_senate_ptr(s, senate, d))
+            _run("sync-congress", ids, lambda s, d: congress.sync_senate_ptr(s, senate, d))
     from fin_intel import congress_members
 
     with session_factory()() as session:  # new reports to their members (no network)
@@ -319,7 +341,7 @@ def sync_dart(
     if fresh is not None and fresh.tzinfo is None:  # SQLite returns naive datetimes
         fresh = fresh.replace(tzinfo=UTC)
     if fresh is None or fresh < datetime.now(UTC) - timedelta(days=7):
-        _run("sync-dart", ["corp codes"], lambda s, _: ingest.sync_dart_corps(s, provider))
+        _run("sync-dart", ["corp codes"], lambda s, _: dart.sync_dart_corps(s, provider))
     with session_factory()() as session:
         listed = session.execute(
             select(Issuer.source_id, Issuer.fiscal_month).where(
@@ -329,9 +351,9 @@ def sync_dart(
     corps = sorted(c for c, _ in listed if not corp or c in corp)
     profiles = [c for c, month in listed if month is None and c in corps]
     if profiles:
-        _run("sync-dart", profiles, lambda s, c: ingest.sync_dart_company(s, provider, c))
+        _run("sync-dart", profiles, lambda s, c: dart.sync_dart_company(s, provider, c))
     done = {k.rsplit("|", 1)[0] for k in store.latest_hashes("dart", "statements") if k}
-    periods = ingest.dart_periods(date.today(), first_year)
+    periods = dart.dart_periods(date.today(), first_year)
     latest = periods[0] if periods else None
     items = [
         f"{c}|{year}|{report}"
@@ -343,7 +365,7 @@ def sync_dart(
         _run(
             "sync-dart",
             items,
-            lambda s, item: ingest.sync_dart_report(
+            lambda s, item: dart.sync_dart_report(
                 s,
                 provider,
                 item.split("|")[0],
@@ -389,7 +411,7 @@ def sync_edinet(
         _run(
             "sync-edinet",
             days,
-            lambda s, d: ingest.sync_edinet_day(s, provider, date.fromisoformat(d)),
+            lambda s, d: edinet.sync_edinet_day(s, provider, date.fromisoformat(d)),
         )
 
 
@@ -428,7 +450,7 @@ def sync_esef(
         _run(
             "sync-esef",
             list(pending),
-            lambda s, k: ingest.sync_esef_report(s, provider, pending[k]),
+            lambda s, k: esef.sync_esef_report(s, provider, pending[k]),
         )
 
 
@@ -463,7 +485,7 @@ def sync_tw_prices(
         _run(
             "sync-tw-prices",
             items,
-            lambda s, item: ingest.sync_tw_prices(
+            lambda s, item: taiwan.sync_tw_prices(
                 s, provider, item.split("|")[0], date.fromisoformat(item.split("|")[1])
             ),
         )
@@ -479,7 +501,7 @@ def sync_crosslist() -> None:
     openfigi, gleif = OpenFigiProvider(raw_store=store), GleifProvider(raw_store=store)
 
     def work(session: Session, _: str) -> int:
-        stats = ingest.sync_crosslist(session, openfigi, gleif)
+        stats = crosslist.sync_crosslist(session, openfigi, gleif)
         typer.echo(", ".join(f"{k} {v}" for k, v in stats.items()))
         return sum(stats.values())
 
@@ -500,7 +522,7 @@ def sync_twse() -> None:
     _run(
         "sync-twse",
         items,
-        lambda s, item: ingest.sync_twse_table(s, provider, *item.split("|"), today),
+        lambda s, item: taiwan.sync_twse_table(s, provider, *item.split("|"), today),
     )
 
 
@@ -512,13 +534,13 @@ def fill_xbrl_gaps(
     financials are stale (SEC's company facts can lag, e.g. new IFRS taxonomies)."""
     sec = SecProvider(raw_store=default_store())
     with session_factory()() as session:
-        ciks = cik or ingest.stale_issuers(session)
+        ciks = cik or edgar.stale_issuers(session)
     typer.echo(f"{len(ciks)} issuers with stale financials")
     if ciks:
         _run(
             "fill-xbrl-gaps",
             [str(c) for c in ciks],
-            lambda s, c: ingest.sync_xbrl_gaps(s, sec, int(c)),
+            lambda s, c: edgar.sync_xbrl_gaps(s, sec, int(c)),
         )
 
 
@@ -539,12 +561,12 @@ def sync_events(
     with session_factory()() as session:
         ciks = cik or sorted(c for c in metrics.primary_securities(session) if c < 10**10)
         if not cik:
-            fresh = ingest.synced_since(
+            fresh = pipeline.synced_since(
                 session, "sec", "events", datetime.now(UTC) - timedelta(days=refresh_days)
             )
             ciks = [c for c in ciks if str(c) not in fresh]
     if ciks:
-        _run("sync-events", [str(c) for c in ciks], lambda s, c: ingest.sync_events(s, sec, int(c)))
+        _run("sync-events", [str(c) for c in ciks], lambda s, c: edgar.sync_events(s, sec, int(c)))
 
 
 @app.command()
@@ -553,9 +575,9 @@ def sync_sic() -> None:
     submissions, one request each; later runs only fetch new issuers)."""
     sec = SecProvider(raw_store=default_store())
     with session_factory()() as session:
-        ciks = [str(c) for c in ingest.issuers_without_sic(session)]
+        ciks = [str(c) for c in edgar.issuers_without_sic(session)]
     if ciks:
-        _run("sync-sic", ciks, lambda s, c: ingest.sync_submissions(s, sec, int(c)))
+        _run("sync-sic", ciks, lambda s, c: edgar.sync_submissions(s, sec, int(c)))
 
 
 @app.command()
@@ -566,9 +588,9 @@ def sync_adr_shares(
     first; each is refreshed every four weeks."""
     massive = MassiveProvider(raw_store=default_store())
     with session_factory()() as session:
-        tickers = ingest.due_listing_shares(session, limit=limit)
+        tickers = market.due_listing_shares(session, limit=limit)
     if tickers:
-        _run("sync-adr-shares", tickers, lambda s, t: ingest.sync_listing_shares(s, massive, t))
+        _run("sync-adr-shares", tickers, lambda s, t: market.sync_listing_shares(s, massive, t))
 
 
 @app.command()
@@ -580,7 +602,7 @@ def sync_calendar() -> None:
     store = default_store()
     fred, fed = FredProvider(raw_store=store), FedProvider(raw_store=store)
     boj = BojProvider(raw_store=store)
-    _run("sync-calendar", ["all"], lambda s, _: ingest.sync_release_calendar(s, fred, fed, boj))
+    _run("sync-calendar", ["all"], lambda s, _: releases.sync_release_calendar(s, fred, fed, boj))
 
 
 @app.command("sync-japan")
@@ -592,7 +614,7 @@ def sync_japan(
     from fin_intel.providers import MofProvider
 
     mof = MofProvider(raw_store=default_store())
-    _run("sync-japan", ["mof"], lambda s, _: ingest.sync_japan(s, mof, history))
+    _run("sync-japan", ["mof"], lambda s, _: japan.sync_japan(s, mof, history))
 
 
 @app.command("sync-filing-text")
@@ -610,7 +632,7 @@ def sync_filing_text(
     _run(
         "sync-filing-text",
         [str(c) for c in ciks],
-        lambda s, c: ingest.sync_filing_text(s, sec, int(c), start),
+        lambda s, c: filing_text.sync_filing_text(s, sec, int(c), start),
     )
 
 
@@ -627,7 +649,7 @@ def search_filings(
     with session_factory()() as session:
         ciks = None
         if ticker:
-            securities = [ingest.get_security(session, t) for t in ticker]
+            securities = [symbols.get_security(session, t) for t in ticker]
             ciks = [s.cik for s in securities if s is not None and s.cik]
         hits = filing_text.search(
             session, query, ciks, date.fromisoformat(since) if since else None, limit
@@ -645,9 +667,9 @@ def sync_funds(
     """Load index ETF holdings (N-PORT reports since 2019) for the tracked funds in
     funds.py: point-in-time index membership and weights."""
     sec = SecProvider(raw_store=default_store())
-    series = ingest.fund_series(sec)
+    series = funds.fund_series(sec)
     tickers = [t.upper() for t in fund] if fund else sorted(series)
-    _run("sync-funds", tickers, lambda s, t: ingest.sync_fund(s, sec, t, series[t]))
+    _run("sync-funds", tickers, lambda s, t: funds.sync_fund(s, sec, t, series[t]))
 
 
 @app.command("fund-holdings")
@@ -680,12 +702,12 @@ def sync_lobbying(
 
     lda = LdaProvider(raw_store=default_store())
     with session_factory()() as session:
-        quarters = ingest.lobbying_quarters_due(session, since, date.today())
+        quarters = lobbying.lobbying_quarters_due(session, since, date.today())
     if quarters:
         _run(
             "sync-lobbying",
             [f"{y}-Q{q}" for y, q in quarters],
-            lambda s, k: ingest.sync_lobbying_quarter(s, lda, int(k[:4]), int(k[-1])),
+            lambda s, k: lobbying.sync_lobbying_quarter(s, lda, int(k[:4]), int(k[-1])),
         )
 
 
@@ -701,11 +723,11 @@ def sync_bills(
     govinfo = GovinfoProvider(raw_store=default_store())
     current = bills.congress_for(date.today())
     with session_factory()() as session:
-        done = ingest.synced_since(
+        done = pipeline.synced_since(
             session, "govinfo", "billstatus", datetime(2000, 1, 1, tzinfo=UTC)
         )
     congresses = [str(c) for c in range(since, current + 1) if str(c) not in done or c == current]
-    _run("sync-bills", congresses, lambda s, c: ingest.sync_bills(s, govinfo, int(c)))
+    _run("sync-bills", congresses, lambda s, c: bills.sync_bills(s, govinfo, int(c)))
 
 
 @app.command("sync-presidential")
@@ -720,7 +742,7 @@ def sync_presidential(
     provider = FederalRegisterProvider(raw_store=default_store())
     this_year = date.today().year
     with session_factory()() as session:
-        done = ingest.synced_since(
+        done = pipeline.synced_since(
             session, "federalregister", "presidential_list", datetime(2000, 1, 1, tzinfo=UTC)
         )
     years = [
@@ -731,7 +753,7 @@ def sync_presidential(
     _run(
         "sync-presidential",
         years,
-        lambda s, y: ingest.sync_presidential_year(s, provider, int(y)),
+        lambda s, y: presidential.sync_presidential_year(s, provider, int(y)),
     )
 
 
@@ -780,7 +802,7 @@ def sync_legislators() -> None:
     from fin_intel.providers import LegislatorsProvider
 
     provider = LegislatorsProvider(raw_store=default_store())
-    _run("sync-legislators", ["all"], lambda s, _: ingest.sync_legislators(s, provider))
+    _run("sync-legislators", ["all"], lambda s, _: congress_members.sync_legislators(s, provider))
 
 
 @app.command("sync-cboe")
@@ -790,7 +812,7 @@ def sync_cboe() -> None:
     from fin_intel.providers import CboeProvider
 
     cboe = CboeProvider(raw_store=default_store())
-    _run("sync-cboe", ["cboe"], lambda s, _: ingest.sync_cboe(s, cboe, date.today()))
+    _run("sync-cboe", ["cboe"], lambda s, _: putcall.sync_cboe(s, cboe, date.today()))
 
 
 @app.command("sync-short-interest")
@@ -801,12 +823,12 @@ def sync_short_interest() -> None:
 
     finra = FinraProvider(raw_store=default_store())
     with session_factory()() as session:
-        dates = ingest.short_interest_due(session, finra, date.today())
+        dates = shortinterest.short_interest_due(session, finra, date.today())
     if dates:
         _run(
             "sync-short-interest",
             [d.isoformat() for d in dates],
-            lambda s, d: ingest.sync_short_interest(s, finra, date.fromisoformat(d)),
+            lambda s, d: shortinterest.sync_short_interest(s, finra, date.fromisoformat(d)),
         )
 
 
@@ -820,12 +842,12 @@ def sync_contracts(
 
     provider = UsaspendingProvider(raw_store=default_store())
     with session_factory()() as session:
-        months = ingest.contract_months_due(session, date.today())[:limit]
+        months = contracts.contract_months_due(session, date.today())[:limit]
     if months:
         _run(
             "sync-contracts",
             [m.isoformat() for m in months],
-            lambda s, m: ingest.sync_contracts_month(s, provider, date.fromisoformat(m)),
+            lambda s, m: contracts.sync_contracts_month(s, provider, date.fromisoformat(m)),
         )
 
 
@@ -894,7 +916,7 @@ def sync_eia(
         if not ids:
             typer.echo("EIA: every series is current")
             return
-    _run("sync-eia", ids, lambda s, i: ingest.sync_eia(s, eia, i))
+    _run("sync-eia", ids, lambda s, i: energy.sync_eia(s, eia, i))
 
 
 @app.command()
@@ -922,7 +944,7 @@ def sync_cot(
     _run(
         "sync-cot",
         list(cot.REPORTS),
-        lambda s, r: ingest.sync_cot(s, cftc, r, start),
+        lambda s, r: cot.sync_cot(s, cftc, r, start),
     )
 
 
@@ -934,7 +956,7 @@ def sync_prices(
     """Load daily prices, splits and dividends from Tiingo."""
     tiingo = TiingoProvider(raw_store=default_store())
     start_date = date.fromisoformat(start) if start else None
-    _run("sync-prices", tickers, lambda s, t: ingest.sync_prices(s, tiingo, t, start_date))
+    _run("sync-prices", tickers, lambda s, t: market.sync_prices(s, tiingo, t, start_date))
 
 
 @app.command("universe")
@@ -976,12 +998,12 @@ def sync_deep_history(
     # stops the run, and the next one resumes with what's left.
     tiingo.limiter.max_wait = 3700
     with session_factory()() as session:
-        done = ingest.synced_since(
+        done = pipeline.synced_since(
             session, "tiingo", "daily_prices", datetime.min.replace(tzinfo=UTC)
         )
     pending = [m.ticker for m in universe.read() if m.ticker not in done][:limit]
     if pending:
-        _run("sync-deep-history", pending, lambda s, t: ingest.sync_prices(s, tiingo, t))
+        _run("sync-deep-history", pending, lambda s, t: market.sync_prices(s, tiingo, t))
 
 
 def _weekdays(start: date, end: date) -> list[date]:
@@ -1019,7 +1041,7 @@ def sync_market_daily(
     _run(
         "sync-market-daily",
         [d.isoformat() for d in days],
-        lambda s, d: ingest.sync_market_daily(s, massive, date.fromisoformat(d), otc),
+        lambda s, d: market.sync_market_daily(s, massive, date.fromisoformat(d), otc),
     )
 
 
@@ -1033,7 +1055,7 @@ def sync_reference(
     doesn't list. Run after sync-tickers; weekly is plenty."""
     massive = MassiveProvider(raw_store=default_store())
     markets = ["stocks", "otc"] if otc else ["stocks"]
-    _run("sync-reference", markets, lambda s, m: ingest.sync_reference_tickers(s, massive, m))
+    _run("sync-reference", markets, lambda s, m: market.sync_reference_tickers(s, massive, m))
 
 
 @app.command()
@@ -1048,7 +1070,7 @@ def sync_actions(
     _run(
         "sync-actions",
         ["splits", "dividends"],
-        lambda s, dataset: ingest.sync_market_actions(s, massive, dataset, start),
+        lambda s, dataset: market.sync_market_actions(s, massive, dataset, start),
     )
 
 
@@ -1062,7 +1084,7 @@ def sync_economic(
     (macro.py) or FI_FRED_SERIES."""
     fred = FredProvider(raw_store=default_store())
     ids = [s.upper() for s in series] if series else get_settings().fred_series_ids
-    _run("sync-economic", ids, lambda s, i: ingest.sync_economic(s, fred, i))
+    _run("sync-economic", ids, lambda s, i: macro.sync_economic(s, fred, i))
 
 
 def _steps(job: str, steps: list[tuple[str, Callable[[], None]]]) -> None:
@@ -1223,7 +1245,7 @@ def prune_raw(
 
     result = prune(
         default_store(),
-        SNAPSHOT_DATASETS,
+        registry.where(snapshot=True),
         keep=keep,
         min_age=timedelta(days=min_age_days),
         dry_run=dry_run,

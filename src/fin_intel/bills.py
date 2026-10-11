@@ -11,6 +11,7 @@ the "Became Public Law" action.
 """
 
 import io
+import logging
 import re
 import xml.etree.ElementTree as ET
 import zipfile
@@ -20,8 +21,14 @@ from typing import Any
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
 from fin_intel.models import Bill, BillSubject
+from fin_intel.pipeline import tracked
+from fin_intel.providers import GovinfoProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 FIRST_CONGRESS = 112  # 2011-2012
 ALIASES = {
@@ -140,3 +147,31 @@ def monthly(session: Session, area: str, enacted: bool = False) -> list[tuple[da
         .order_by(month)
     )
     return [(m, n) for m, n in rows]
+
+
+# --- loading and syncs ---
+
+
+def sync_bills(session: Session, govinfo: GovinfoProvider, congress: int) -> int:
+    """A congress's bills and joint resolutions, one bulk zip per type."""
+    from fin_intel.providers.govinfo import BILL_TYPES
+
+    with tracked(session, "govinfo", "billstatus", str(congress)) as result:
+        rows = 0
+        for kind in BILL_TYPES:
+            session.commit()  # fetch-then-load, a zip at a time
+            rows += load_zip(session, govinfo.fetch_billstatus(congress, kind))
+        result["rows"] = rows
+    return result["rows"]
+
+
+registry.register(
+    Dataset(
+        "govinfo",
+        "billstatus",
+        lambda s, k, p, t: load_zip(s, p),
+        ("bills",),
+        payload="bytes",
+        snapshot=True,
+    ),
+)

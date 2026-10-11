@@ -3,7 +3,7 @@ from datetime import date
 import respx
 from sqlalchemy import func, select
 
-from fin_intel import filing_text, ingest
+from fin_intel import filing_text
 from fin_intel.models import FilingText
 from fin_intel.providers import SecProvider
 from fin_intel.rebuild import rebuild
@@ -76,8 +76,8 @@ def test_sync_search_and_rebuild(session, raw_store):
         content=b"<p>Record quarterly revenue of $50 billion, up 60% from a year ago.</p>"
     )
     sec = SecProvider(raw_store=raw_store)
-    assert ingest.sync_filing_text(session, sec, 1, date(2023, 1, 1)) == 3
-    ingest.sync_filing_text(session, sec, 1, date(2023, 1, 1))
+    assert filing_text.sync_filing_text(session, sec, 1, date(2023, 1, 1)) == 3
+    filing_text.sync_filing_text(session, sec, 1, date(2023, 1, 1))
     assert report.call_count == 1  # fetched documents aren't fetched again
 
     hits = filing_text.search(session, '"export controls" china')

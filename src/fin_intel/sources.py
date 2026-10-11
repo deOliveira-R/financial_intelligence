@@ -1,0 +1,28 @@
+"""Import every module that registers datasets (registry.py), so the registry is complete."""
+
+from fin_intel import (  # noqa: F401
+    bills,
+    congress,
+    congress_members,
+    contracts,
+    cot,
+    crosslist,
+    dart,
+    edgar,
+    edinet,
+    energy,
+    esef,
+    filing_text,
+    funds,
+    insiders,
+    japan,
+    lobbying,
+    macro,
+    market,
+    presidential,
+    putcall,
+    releases,
+    shortinterest,
+    taiwan,
+    thirteenf,
+)

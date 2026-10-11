@@ -5,7 +5,7 @@ import respx
 from sqlalchemy import select
 from test_timeseries import add_bars
 
-from fin_intel import energy, ingest, timeseries
+from fin_intel import energy, timeseries
 from fin_intel.models import EconomicObservation, EconomicSeries
 from fin_intel.providers import EiaProvider
 from fin_intel.rebuild import rebuild
@@ -49,7 +49,7 @@ def test_sync_then_rebuild(session, raw_store):
     route = respx.get("https://api.eia.gov/v2/seriesid/PET.WCESTUS1.W").respond(
         200, json=payload(("2026-09-18", 430000), ("2026-09-25", 427320))
     )
-    assert ingest.sync_eia(session, EiaProvider(raw_store=raw_store), "WCESTUS1") == 2
+    assert energy.sync_eia(session, EiaProvider(raw_store=raw_store), "WCESTUS1") == 2
     assert route.calls.last.request.url.params["api_key"] == "DEMO_KEY"
     rebuild(session, raw_store, "economic")
     assert session.get(EconomicSeries, "WCESTUS1").source == "eia"
@@ -62,7 +62,7 @@ def test_sync_then_rebuild(session, raw_store):
 
 def test_timeseries_waits_for_the_wednesday_release(session):
     add_bars(session, "SPY", date(2026, 9, 21), [100.0] * 14)
-    ingest.load_eia_series(
+    energy.load_eia_series(
         session, "WCESTUS1", payload(("2026-09-18", 430000), ("2026-09-25", 427320))
     )
     session.commit()

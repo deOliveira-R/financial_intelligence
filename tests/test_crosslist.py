@@ -118,7 +118,7 @@ def test_sync_maps_home_european_and_us_listings_then_links(session, raw_store):
     import httpx
     import respx
 
-    from fin_intel import ingest
+    from fin_intel import crosslist
     from fin_intel.providers import GleifProvider, OpenFigiProvider
     from fin_intel.rebuild import rebuild
 
@@ -173,7 +173,7 @@ def test_sync_maps_home_european_and_us_listings_then_links(session, raw_store):
         respx.get("https://mapping.gleif.org/api/v2/isin-lei/latest/download").respond(
             content=buf.getvalue()
         )
-        stats = ingest.sync_crosslist(
+        stats = crosslist.sync_crosslist(
             session, OpenFigiProvider(raw_store=raw_store), GleifProvider(raw_store=raw_store)
         )
     assert stats["home"] == 1 and stats["isin"] == 1 and stats["us"] == 2

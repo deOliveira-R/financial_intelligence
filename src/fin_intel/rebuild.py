@@ -10,16 +10,9 @@ from datetime import datetime
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
-from fin_intel import breadth, metrics
-from fin_intel.ingest import (
-    BINARY_DATASETS,
-    LOADERS,
-    REFERENCE_DATASETS,
-    REQUEST_DATASETS,
-    SNAPSHOT_DATASETS,
-    deactivate_unseen_massive,
-    get_security,
-)
+from fin_intel import breadth, metrics, registry
+from fin_intel.db import Base
+from fin_intel.market import deactivate_unseen_massive
 from fin_intel.models import (
     Bill,
     BillSubject,
@@ -63,164 +56,48 @@ from fin_intel.models import (
     TickerHistory,
 )
 from fin_intel.raw import RawStore
+from fin_intel.symbols import get_security
 
-# Every dataset that writes facts: wiping facts means replaying all of them, whichever
-# regulator they come from (issuer profiles first, for fiscal year ends).
-FACT_DATASETS = [
-    ("dart", "company"),
-    ("sec", "companyfacts"),
-    ("sec", "filing_xbrl"),
-    ("sec", "submissions"),
-    ("dart", "statements"),
-    ("dart", "share_counts"),
-    ("edinet", "instance"),
-    ("twse", "table"),
-    ("esef", "report"),
-]
-
-# target -> (datasets to replay, tables to wipe first, in foreign-key-safe order)
-TARGETS = {
-    "fundamentals": (
-        FACT_DATASETS,
-        [StatementItem, Fact, FiscalCalendar, Filing, Concept],
-    ),
-    "prices": (
-        [
-            ("tiingo", "metadata"),
-            ("tiingo", "daily_prices"),
-            ("massive", "grouped_daily"),
-            ("massive", "splits"),
-            ("massive", "dividends"),
-            ("twse", "prices"),
-        ],
-        [DailyBar, CorporateAction],
-    ),
-    "insiders": (
-        [("sec", "insider_dataset"), ("sec", "form4")],
-        [InsiderTransaction],
-    ),
-    "holdings": (
-        [("sec", "13f_dataset"), ("openfigi", "mapping")],
-        [InstitutionalPosition, InstitutionalFiler, CusipMapping],
-    ),
-    "congress": (
-        [
-            ("house", "fd_index"),
-            ("house", "ptr"),
-            ("senate", "search"),
-            ("senate", "ptr"),
-            ("legislators", "file"),
-        ],
-        [
-            CongressReportMember,
-            CongressTrade,
-            CongressReport,
-            CommitteeMembership,
-            Committee,
-            LegislatorTerm,
-        ],
-    ),
-    "policy": ([("usaspending", "naics_month")], [FederalObligation]),
-    "shorts": ([("finra", "short_interest")], [ShortInterest]),
-    "funds": ([("sec", "nport")], [FundHolding]),
-    "lobbying": ([("lda", "filings")], [LobbyingIssue, LobbyingReport]),
-    "bills": ([("govinfo", "billstatus")], [BillSubject, Bill]),
-    "presidential": (
-        [("federalregister", "presidential_list"), ("federalregister", "presidential_text")],
-        [PresidentialText, PresidentialDocument],
-    ),
-    "texts": ([("sec", "filing_document")], [FilingText]),
-    "cot": (
-        [("cftc", "legacy"), ("cftc", "disaggregated"), ("cftc", "tff")],
-        [CotPosition],
-    ),
-    "events": (
-        [("sec", "submissions"), ("sec", "submissions_page")],
-        [CorporateEvent],
-    ),
-    "economic": (
-        [
-            ("fred", "series"),
-            ("fred", "observations"),
-            ("fred", "vintages"),
-            ("eia", "series"),
-            ("fred", "series_release"),
-            ("fred", "release_dates"),
-            ("fed", "fomc_calendar"),
-            ("boj", "mpm_schedule"),
-            ("mof", "jgb_curve"),
-            ("mof", "flows"),
-            ("cboe", "pc_archive"),
-            ("cboe", "daily_options"),
-        ],
-        [
-            EconomicVintage,
-            EconomicObservation,
-            EconomicSeries,
-            EconomicReleaseDate,
-            EconomicRelease,
-        ],
-    ),
-    # Securities and market data, without re-loading fundamentals (minutes, not hours).
-    "market": (
-        [
-            *REFERENCE_DATASETS,
-            ("tiingo", "daily_prices"),
-            ("massive", "grouped_daily"),
-            ("massive", "splits"),
-            ("massive", "dividends"),
-            ("massive", "ticker_details"),
-            ("twse", "prices"),
-            ("openfigi", "listings"),
-        ],
-        [ForwardOutcome, CompanyMetrics, DailyBar, CorporateAction, TickerHistory, Security],
-    ),
-    # Everything: reference data in fetch order (so renames happen as they did), then the rest.
-    "all": (
-        list(LOADERS),
-        [
-            ForwardOutcome,
-            CompanyMetrics,
-            StatementItem,
-            Fact,
-            FiscalCalendar,
-            Filing,
-            Concept,
-            DailyBar,
-            CorporateAction,
-            TickerHistory,
-            Security,
-            Issuer,
-            EconomicVintage,
-            EconomicObservation,
-            EconomicSeries,
-            EconomicReleaseDate,
-            EconomicRelease,
-            InsiderTransaction,
-            InstitutionalPosition,
-            InstitutionalFiler,
-            CusipMapping,
-            CongressReportMember,
-            CongressTrade,
-            CongressReport,
-            CommitteeMembership,
-            Committee,
-            LegislatorTerm,
-            CotPosition,
-            CorporateEvent,
-            FederalObligation,
-            ShortInterest,
-            FundHolding,
-            FilingText,
-            LobbyingIssue,
-            LobbyingReport,
-            BillSubject,
-            Bill,
-            PresidentialText,
-            PresidentialDocument,
-        ],
-    ),
+# target -> tables it wipes before replaying its datasets (each dataset names its targets in
+# its registry declaration). "fundamentals" replays every dataset that writes facts,
+# whichever regulator they come from; "market" securities and market data without
+# re-loading fundamentals (minutes, not hours).
+TABLES: dict[str, list] = {
+    "fundamentals": [StatementItem, Fact, FiscalCalendar, Filing, Concept],
+    "prices": [DailyBar, CorporateAction],
+    "insiders": [InsiderTransaction],
+    "holdings": [InstitutionalPosition, InstitutionalFiler, CusipMapping],
+    "congress": [
+        CongressReportMember,
+        CongressTrade,
+        CongressReport,
+        CommitteeMembership,
+        Committee,
+        LegislatorTerm,
+    ],
+    "policy": [FederalObligation],
+    "shorts": [ShortInterest],
+    "funds": [FundHolding],
+    "lobbying": [LobbyingIssue, LobbyingReport],
+    "bills": [BillSubject, Bill],
+    "presidential": [PresidentialText, PresidentialDocument],
+    "texts": [FilingText],
+    "cot": [CotPosition],
+    "events": [CorporateEvent],
+    "economic": [
+        EconomicVintage,
+        EconomicObservation,
+        EconomicSeries,
+        EconomicReleaseDate,
+        EconomicRelease,
+    ],
+    "market": [ForwardOutcome, CompanyMetrics, DailyBar, CorporateAction, TickerHistory, Security],
 }
+# Everything, children before parents: every table above plus issuers.
+_ALL = {t for tables in TABLES.values() for t in tables} | {Issuer}
+_ORDER = {table: i for i, table in enumerate(Base.metadata.sorted_tables)}
+TABLES["all"] = sorted(_ALL, key=lambda m: _ORDER[m.__table__], reverse=True)
+TARGETS = list(TABLES)
 
 
 def _restart_ids(session: Session, tables: list) -> None:
@@ -242,7 +119,7 @@ def _restart_ids(session: Session, tables: list) -> None:
 
 
 def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
-    datasets, tables = TARGETS[target]
+    datasets, tables = registry.in_target(target), TABLES[target]
     # Read the raw index before writing anything (bodies load lazily, one at a time).
     records = [
         r
@@ -259,21 +136,24 @@ def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
 
     # Reference datasets first (in fetch order), so market data fetched before a security
     # was discovered still finds it: the result is independent of the order syncs ran in.
-    records.sort(key=lambda r: (r.provider, r.dataset) not in REFERENCE_DATASETS)
+    references = registry.where(reference=True)
+    snapshots = registry.where(snapshot=True)
+    records.sort(key=lambda r: (r.provider, r.dataset) not in references)
     # Snapshot datasets (each response is complete) only need their latest response.
     latest = {(r.provider, r.dataset, r.key): r.id for r in records}
     loaded: Counter[str] = Counter()
     for r in records:
         dataset = (r.provider, r.dataset)
-        if dataset in SNAPSHOT_DATASETS and latest[(r.provider, r.dataset, r.key)] != r.id:
+        if dataset in snapshots and latest[(r.provider, r.dataset, r.key)] != r.id:
             continue
-        if dataset in BINARY_DATASETS:
+        declared = registry.get(*dataset)
+        if declared.payload == "bytes":
             payload = r.body
-        elif dataset in REQUEST_DATASETS:
+        elif declared.payload == "request":
             payload = {"request": r.params.get("body"), "response": r.json()}
         else:
             payload = r.json()
-        LOADERS[dataset](session, r.key, payload, r.fetched_at)
+        declared.load(session, r.key, payload, r.fetched_at)
         loaded[f"{r.provider}/{r.dataset}"] += 1
     # Deactivation needs a complete list, which page-by-page replay doesn't see; apply it
     # as of each market's latest reference sync, as the live sync did.

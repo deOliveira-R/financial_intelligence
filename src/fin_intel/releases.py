@@ -5,16 +5,23 @@ dates helps avoid opening positions into an event, or plan around one.
 """
 
 import html
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from fin_intel import registry
 from fin_intel.db import upsert
 from fin_intel.models import EconomicRelease, EconomicReleaseDate, EconomicSeries
+from fin_intel.pipeline import tracked, utc_today
+from fin_intel.providers import BojProvider, FedProvider, FredProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 # FOMC rate decisions aren't a FRED release; they come from the Fed's calendar page and
 # are stored as a release of our own (an ID outside FRED's range).
@@ -195,3 +202,90 @@ def upcoming(
         for d, rid, name in rows
         if daily or "D" not in frequencies.get(rid, set())
     ]
+
+
+# --- loading and syncs ---
+
+
+def sync_release_calendar(
+    session: Session,
+    fred_provider: FredProvider,
+    fed_provider: FedProvider,
+    boj_provider: BojProvider | None = None,
+) -> int:
+    """Which release each tracked FRED series comes out in (looked up once per series),
+    then every such release's dates (past year plus the published schedule), and the
+    FOMC and Bank of Japan meeting calendars."""
+    with tracked(session, "fred", "release_dates", "all") as result:
+        session.commit()
+        load_fomc(session, fed_provider.fetch_fomc_calendar())
+        if boj_provider is not None:
+            have_past = session.scalar(
+                select(func.count())
+                .select_from(EconomicReleaseDate)
+                .where(
+                    EconomicReleaseDate.release_id == BOJ_RELEASE_ID,
+                    EconomicReleaseDate.date < date(utc_today().year - 1, 1, 1),
+                )
+            )
+            pages = ["current"] if have_past else ["past", "current"]
+            fetched = [boj_provider.fetch_mpm_schedule(page) for page in pages]
+            for body in fetched:  # past first: each page replaces only its own years
+                load_boj(session, body)
+        unmapped = session.scalars(
+            select(EconomicSeries.id).where(
+                EconomicSeries.source == "fred", EconomicSeries.release_id.is_(None)
+            )
+        ).all()
+        for series_id in unmapped:
+            session.commit()  # fetch-then-load
+            load_series_release(session, series_id, fred_provider.fetch_series_release(series_id))
+        ids = set(
+            session.scalars(
+                select(EconomicSeries.release_id).where(EconomicSeries.release_id.is_not(None))
+            )
+        )
+        since = HISTORY_START
+        rows = 0
+        for release_id in sorted(ids):
+            session.commit()
+            rows += load_release_dates(
+                session, release_id, fred_provider.fetch_release_dates(release_id, since)
+            )
+        result["rows"] = rows
+    return result["rows"]
+
+
+registry.register(
+    Dataset(
+        "fred",
+        "series_release",
+        lambda s, k, p, t: load_series_release(s, k, p),
+        ("economic",),
+        snapshot=True,
+    ),
+    Dataset(
+        "fred",
+        "release_dates",
+        lambda s, k, p, t: load_release_dates(s, int(k), p),
+        ("economic",),
+        snapshot=True,
+    ),
+    Dataset(
+        "fed",
+        "fomc_calendar",
+        lambda s, k, p, t: load_fomc(s, p),
+        ("economic",),
+        payload="bytes",
+        snapshot=True,
+    ),
+    Dataset(
+        "boj",
+        "mpm_schedule",
+        lambda s, k, p, t: load_boj(s, p),
+        ("economic",),
+        payload="bytes",
+        snapshot=True,
+        note="per page",
+    ),
+)

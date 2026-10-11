@@ -6,7 +6,7 @@ import respx
 from sqlalchemy import func, select
 from test_timeseries import add_bars
 
-from fin_intel import bills, ingest, timeseries
+from fin_intel import bills, timeseries
 from fin_intel.models import Bill, BillSubject
 from fin_intel.providers import GovinfoProvider
 from fin_intel.rebuild import rebuild
@@ -77,7 +77,7 @@ def test_sync_counts_and_rebuild(session, raw_store):
     )
     respx.get(url__regex=r".*/BILLSTATUS/118/hr/.*").respond(content=hr)
     respx.get(url__regex=r".*/BILLSTATUS/118/(s|hjres|sjres)/.*").respond(content=bulk([]))
-    assert ingest.sync_bills(session, GovinfoProvider(raw_store=raw_store), 118) == 3
+    assert bills.sync_bills(session, GovinfoProvider(raw_store=raw_store), 118) == 3
     assert bills.monthly(session, "defense") == [(date(2024, 3, 1), 2)]
     assert bills.monthly(session, "defense", enacted=True) == [(date(2024, 6, 1), 1)]
 

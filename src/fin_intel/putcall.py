@@ -10,8 +10,21 @@ the next day.
 
 import csv
 import io
+import logging
 from datetime import date, datetime, timedelta
 from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from fin_intel import registry
+from fin_intel.db import upsert
+from fin_intel.models import EconomicObservation, EconomicSeries
+from fin_intel.pipeline import tracked
+from fin_intel.providers import CboeProvider
+from fin_intel.registry import Dataset
+
+log = logging.getLogger(__name__)
 
 ARCHIVE_PRODUCTS = ("total", "equity", "index")
 ARCHIVE_END = date(2019, 10, 4)
@@ -92,3 +105,59 @@ def parse_daily(day: date, payload: dict[str, Any]) -> list[dict[str, Any]]:
         if volume and volume.get("call") is not None and volume.get("put") is not None:
             out += _observations(product, day, float(volume["call"]), float(volume["put"]))
     return out
+
+
+# --- loading and syncs ---
+
+
+def load_cboe(session: Session, dataset: str, key: str, payload: Any) -> int:
+    """An archive file (key: product) or a day's statistics (key: date)."""
+    if dataset == "pc_archive":
+        observations = parse_archive(key, payload)
+    else:
+        observations = parse_daily(date.fromisoformat(key), payload)
+    upsert(session, EconomicSeries, series_rows(), key=["id"])
+    return upsert(session, EconomicObservation, observations, key=["series_id", "date"])
+
+
+def sync_cboe(session: Session, cboe: CboeProvider, today: date) -> int:
+    """The archive files once, then every trading day's statistics not stored yet."""
+    with tracked(session, "cboe", "daily_options", "all") as result:
+        session.commit()  # fetch-then-load
+        latest = session.scalar(
+            select(func.max(EconomicObservation.date)).where(
+                EconomicObservation.series_id == "CBOE_TOTAL_PC"
+            )
+        )
+        rows = 0
+        if latest is None:
+            archives = [(p, cboe.fetch_archive(p)) for p in ARCHIVE_PRODUCTS]
+            rows += sum(load_cboe(session, "pc_archive", p, body) for p, body in archives)
+            session.commit()
+        day = max(DAILY_START, (latest or date.min) + timedelta(days=1))
+        while day < today:
+            if day.weekday() < 5:
+                payload = cboe.fetch_daily(day)
+                if payload is not None:
+                    rows += load_cboe(session, "daily_options", day.isoformat(), payload)
+                    session.commit()  # per day: progress survives an interruption
+            day += timedelta(days=1)
+        result["rows"] = rows
+    return result["rows"]
+
+
+registry.register(
+    Dataset(
+        "cboe",
+        "pc_archive",
+        lambda s, k, p, t: load_cboe(s, "pc_archive", k, p),
+        ("economic",),
+        payload="bytes",
+    ),
+    Dataset(
+        "cboe",
+        "daily_options",
+        lambda s, k, p, t: load_cboe(s, "daily_options", k, p),
+        ("economic",),
+    ),
+)

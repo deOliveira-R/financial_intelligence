@@ -8,7 +8,7 @@ import httpx
 import respx
 from sqlalchemy import func, select
 
-from fin_intel import congress, ingest
+from fin_intel import congress
 from fin_intel.models import CongressReport, CongressTrade
 from fin_intel.providers import HouseProvider, SenateProvider
 from fin_intel.rebuild import rebuild
@@ -190,11 +190,11 @@ def test_sync_house_then_rebuild(session, raw_store):
     respx.get(f"{HOUSE}/ptr-pdfs/2026/20099999.pdf").respond(404)
     house = HouseProvider(raw_store=raw_store)
 
-    assert ingest.sync_house_index(session, house, 2026) == 4
+    assert congress.sync_house_index(session, house, 2026) == 4
     pending = congress.pending_reports(session, "house")
     assert {r.doc_id for r in pending} == {"20034836", "20034660", "20099999"}  # not paper
     for r in pending:
-        ingest.sync_house_ptr(session, house, r.doc_id, 2026)
+        congress.sync_house_ptr(session, house, r.doc_id, 2026)
     assert congress.pending_reports(session, "house") == []
     assert session.get(CongressReport, "20034836").transactions == 2
     assert session.get(CongressReport, "20099999").transactions == 0  # withdrawn: not retried
@@ -223,7 +223,7 @@ def test_sync_senate(session, raw_store):
     respx.get(f"{SENATE}/search/view/ptr/abc-123/").respond(200, content=SENATE_PTR)
     senate = SenateProvider(raw_store=raw_store)
 
-    assert ingest.sync_senate_index(session, senate, date(2026, 1, 1)) == 2
+    assert congress.sync_senate_index(session, senate, date(2026, 1, 1)) == 2
     assert home.called and agree.called
     request = search.calls.last.request
     assert request.headers["X-CSRFToken"] == "cookie-tok"
@@ -232,7 +232,7 @@ def test_sync_senate(session, raw_store):
     assert [r.doc_id for r in congress.pending_reports(session, "senate")] == ["abc-123"]
     assert session.get(CongressReport, "def-456").electronic is False
 
-    assert ingest.sync_senate_ptr(session, senate, "abc-123") == 2
+    assert congress.sync_senate_ptr(session, senate, "abc-123") == 2
     assert [t.ticker for t in congress.trades(session, member="whitehouse")] == ["JPM", "BRK-B"]
     # The recorded search request carries the form, not the session's token.
     params = json.loads(

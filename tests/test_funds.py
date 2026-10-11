@@ -3,7 +3,7 @@ from datetime import date
 import respx
 from sqlalchemy import func, select
 
-from fin_intel import funds, ingest, thirteenf
+from fin_intel import funds, thirteenf
 from fin_intel.models import CusipMapping, FundHolding, Security
 from fin_intel.providers import SecProvider
 from fin_intel.rebuild import rebuild
@@ -80,10 +80,10 @@ def test_sync_fund_maps_series_fetches_new_reports_and_rebuilds(session, raw_sto
         "https://www.sec.gov/Archives/edgar/data/1100663/000126000002/primary_doc.xml"
     ).respond(content=nport("2026-06-30", [("Microsoft", MSFT, 50, 900, 6.3)]))
     sec = SecProvider(raw_store=raw_store)
-    series = ingest.fund_series(sec)
+    series = funds.fund_series(sec)
     assert series == {"IVV": {"cik": 1100663, "series_id": "S000004310"}}
-    assert ingest.sync_fund(session, sec, "IVV", series["IVV"]) == 2
-    ingest.sync_fund(session, sec, "IVV", series["IVV"])
+    assert funds.sync_fund(session, sec, "IVV", series["IVV"]) == 2
+    funds.sync_fund(session, sec, "IVV", series["IVV"])
     assert second.call_count == 1  # stored reports aren't fetched again
 
     security = Security(ticker="MSFT", origin="sec")
