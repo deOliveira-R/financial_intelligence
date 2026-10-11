@@ -4,6 +4,10 @@ The working plan across sessions. Agreed with the user on 2026-10-11: clean and 
 the backend before extending it. Read this first when resuming; update the status lines as
 work lands. Deferred ideas stay in [backlog.md](backlog.md); this file is the sequence.
 
+**Status (2026-10-11 13:30 UTC):** phases 1-4 v1 are deployed (main = `graph`). Open: push
+notifications (ask the user: ntfy.sh?), Fidelity/Vanguard imports (waiting on the user's
+exports), delete the server's SQLite file after 2026-10-18; then phase 5 with the user.
+
 ## Why
 
 Every source was built well on its own, but the backend grew as silos (46 tables, 30 GB):
@@ -49,7 +53,9 @@ live, so the move and the restructure are validated separately.
 - [x] `@timeseries.source("name")` registered from domain modules.
 - [x] `cli/` package by area (help panels; schedules in `cli/ops.py`), `api/` package of
   routers by area (all 40 routes and auth verified).
-- [ ] Merge `themes` into main, deploy, run `sync-daily` once live, check `/status`.
+- [x] Merge `themes` into main, deploy, run `sync-daily` once live, check `/status`
+  (2026-10-11; `graph` followed the same day: `sync-industries`, `rebuild insiders` removed
+  12,399 duplicate trades, dossiers, timeline and MCP over SSH checked live).
 
 ## Phase 3: themes and the supply-chain graph
 
