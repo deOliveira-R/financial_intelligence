@@ -4,9 +4,9 @@ The working plan across sessions. Agreed with the user on 2026-10-11: clean and 
 the backend before extending it. Read this first when resuming; update the status lines as
 work lands. Deferred ideas stay in [backlog.md](backlog.md); this file is the sequence.
 
-**Status (2026-10-11 13:30 UTC):** phases 1-4 v1 are deployed (main = `graph`). Open: push
-notifications (ask the user: ntfy.sh?), Fidelity/Vanguard imports (waiting on the user's
-exports), delete the server's SQLite file after 2026-10-18; then phase 5 with the user.
+**Status (2026-10-11 23:45 UTC):** phases 1-4 v1 are deployed (main = `graph`); the old
+SQLite file is deleted. Deferred by the user (2026-10-11): phone notifications and the
+Fidelity/Vanguard imports ("other stuff first"). Next: phase 5 with the user.
 
 ## Why
 
@@ -37,9 +37,10 @@ expensive as data grows.
 - [x] Cut over (2026-10-11 08:26 UTC): API up, `sync-weekly` run manually, timers enabled,
   backup run and verified (`essential/essential-*.dump` uploaded; `pg_restore --list` reads
   it).
-- [ ] Keep `data/fin_intel.db` (SQLite, 31.5 GB) until 2026-10-18 as a fallback, then delete.
+- [x] Deleted `data/fin_intel.db` (SQLite, 31.5 GB) on 2026-10-11 at the user's request (Postgres
+  verified, nightly backups verified).
 
-## Phase 2: structure (done on branch `themes`, not yet merged)
+## Phase 2: structure (done, deployed 2026-10-11)
 
 Branch `registry` → `themes` (7 commits ahead of main): merge and deploy after phase 1 is
 live, so the move and the restructure are validated separately.

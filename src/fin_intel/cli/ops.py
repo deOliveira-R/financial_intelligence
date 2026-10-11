@@ -130,7 +130,9 @@ def catalog_cmd(
     check: Annotated[
         bool, typer.Option(help="Exit non-zero if any feed is stale or failing")
     ] = False,
-    all_feeds: Annotated[bool, typer.Option("--all", help="Every feed, not just alerts")] = True,
+    all_feeds: Annotated[
+        bool, typer.Option("--all/--alerts", help="Every feed, or only stale and failing ones")
+    ] = True,
 ) -> None:
     """Every feed: items, failing items, last success against its expected freshness,
     raw responses, and the tables it loads. Alerts (stale, failing) first."""
