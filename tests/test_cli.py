@@ -76,7 +76,8 @@ def test_failed_item_marks_run_partial(db_file):
 def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch):
     import typer
 
-    from fin_intel import cli, fx
+    from fin_intel import fx
+    from fin_intel.cli import ops
 
     calls = []
 
@@ -89,21 +90,21 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
 
     monkeypatch.setenv("FI_WATCHLIST", "aapl, msft")
     monkeypatch.setenv("FI_FRED_SERIES", "GDP")
-    monkeypatch.setattr(cli, "sync_market_daily", failing)
-    monkeypatch.setattr(cli, "sync_actions", ok("actions"))
-    monkeypatch.setattr(cli, "sync_economic", lambda series: calls.append(("fred", series)))
-    monkeypatch.setattr(cli, "sync_prices", lambda tickers: calls.append(("prices", tickers)))
-    monkeypatch.setattr(cli, "derive_breadth_cmd", ok("breadth"))
-    monkeypatch.setattr(cli, "sync_fundamentals_bulk", ok("fundamentals"))
-    monkeypatch.setattr(cli, "derive_metrics_cmd", ok("metrics"))
-    monkeypatch.setattr(cli, "sync_insiders", ok("insiders"))
-    monkeypatch.setattr(cli, "sync_congress", ok("congress"))
-    monkeypatch.setattr(cli, "sync_eia", ok("eia"))
-    monkeypatch.setattr(cli, "sync_japan", ok("japan"))
-    monkeypatch.setattr(cli, "sync_cboe", ok("cboe"))
-    monkeypatch.setattr(cli, "sync_dart", ok("dart"))
-    monkeypatch.setattr(cli, "sync_edinet", ok("edinet"))
-    monkeypatch.setattr(cli, "sync_tw_prices", ok("tw prices"))
+    monkeypatch.setattr(ops, "sync_market_daily", failing)
+    monkeypatch.setattr(ops, "sync_actions", ok("actions"))
+    monkeypatch.setattr(ops, "sync_economic", lambda series: calls.append(("fred", series)))
+    monkeypatch.setattr(ops, "sync_prices", lambda tickers: calls.append(("prices", tickers)))
+    monkeypatch.setattr(ops, "derive_breadth_cmd", ok("breadth"))
+    monkeypatch.setattr(ops, "sync_fundamentals_bulk", ok("fundamentals"))
+    monkeypatch.setattr(ops, "derive_metrics_cmd", ok("metrics"))
+    monkeypatch.setattr(ops, "sync_insiders", ok("insiders"))
+    monkeypatch.setattr(ops, "sync_congress", ok("congress"))
+    monkeypatch.setattr(ops, "sync_eia", ok("eia"))
+    monkeypatch.setattr(ops, "sync_japan", ok("japan"))
+    monkeypatch.setattr(ops, "sync_cboe", ok("cboe"))
+    monkeypatch.setattr(ops, "sync_dart", ok("dart"))
+    monkeypatch.setattr(ops, "sync_edinet", ok("edinet"))
+    monkeypatch.setattr(ops, "sync_tw_prices", ok("tw prices"))
 
     result = CliRunner().invoke(app, ["sync-daily"])
     # A failed step doesn't stop the others, but the command still fails.
