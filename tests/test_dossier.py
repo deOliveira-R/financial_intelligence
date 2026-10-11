@@ -7,6 +7,7 @@ from fin_intel.api import app
 from fin_intel.db import get_session, session_factory
 from fin_intel.models import (
     CompanyMetrics,
+    Concept,
     CusipMapping,
     FilingText,
     FundHolding,
@@ -17,6 +18,7 @@ from fin_intel.models import (
     Issuer,
     Security,
     ShortInterest,
+    StatementItem,
 )
 
 AS_OF = date(2026, 6, 30)
@@ -117,6 +119,34 @@ def setup(session):
             ),
         ]
     )
+    session.add(Concept(id=1, taxonomy="us-gaap", name="Revenues"))
+    session.flush()
+
+    def item(year, name, value, first_filed, ptype="annual"):
+        start = date(year, 1, 1) if ptype == "annual" else date(year, 12, 31)
+        return StatementItem(
+            cik=1,
+            line_item=name,
+            period_start=start,
+            period_end=date(year, 12, 31),
+            period_type=ptype,
+            fiscal_year=year,
+            fiscal_period="FY",
+            unit="USD",
+            value=value,
+            filed=first_filed,
+            first_filed=first_filed,
+            concept_id=1,
+        )
+
+    session.add_all(
+        [
+            item(2024, "revenue", 100.0, date(2025, 2, 15)),
+            item(2025, "revenue", 120.0, date(2026, 2, 15)),
+            item(2025, "cash", 30.0, date(2026, 2, 15), "instant"),
+            item(2026, "revenue", 150.0, date(2027, 2, 15)),  # not public yet
+        ]
+    )
     session.commit()
 
 
@@ -125,6 +155,10 @@ def test_company_dossier_is_point_in_time(session):
     d = dossier.company(session, 1, AS_OF)
     assert d["identity"]["ticker"] == "AERO" and d["identity"]["sic"] == 3721
     assert d["metrics"]["pe"] == 20.0
+    years = d["financials"]["years"]
+    assert set(years) == {2024, 2025}
+    assert years[2025]["revenue"] == 120.0 and years[2025]["cash"] == 30.0
+    assert d["financials"]["units"]["revenue"] == "USD"
     own = d["ownership"]
     assert own["period"] == date(2026, 3, 31) and own["holders"] == 2
     assert own["holders_change"] == 1 and own["shares_change"] == 600

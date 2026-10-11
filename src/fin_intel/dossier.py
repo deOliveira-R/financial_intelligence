@@ -32,6 +32,7 @@ from fin_intel.models import (
     Issuer,
     Security,
     ShortInterest,
+    StatementItem,
 )
 
 log = logging.getLogger(__name__)
@@ -79,6 +80,7 @@ def company(session: Session, cik: int, as_of: date) -> dict[str, Any]:
         "as_of": as_of,
         "identity": _identity(session, issuer, security),
         "metrics": _section("metrics", _metrics, session, cik, as_of),
+        "financials": _section("financials", _financials, session, cik, as_of),
         "ownership": _section("ownership", _ownership, session, security, as_of),
         "short_interest": _section("short_interest", _short_interest, session, security, as_of),
         "index_funds": _section("index_funds", _funds, session, security, as_of),
@@ -147,6 +149,57 @@ def _metrics(session: Session, cik: int, as_of: date) -> dict[str, Any] | None:
         .limit(1)
     ).first()
     return {f: getattr(row, f) for f in METRIC_FIELDS} if row else None
+
+
+FINANCIAL_ITEMS = (
+    "revenue",
+    "gross_profit",
+    "operating_income",
+    "net_income",
+    "eps_diluted",
+    "operating_cash_flow",
+    "capex",
+    "cash",
+    "total_assets",
+    "total_liabilities",
+    "long_term_debt",
+    "equity",
+    "shares_outstanding",
+)
+FINANCIAL_YEARS = 5
+
+
+def _financials(session: Session, cik: int, as_of: date) -> dict[str, Any]:
+    """Annual figures of the last FINANCIAL_YEARS fiscal years public by the date (first
+    filed by then; a later restatement's value shows, as in metrics.py), in the reporting
+    currency."""
+    rows = session.execute(
+        select(
+            StatementItem.fiscal_year,
+            StatementItem.line_item,
+            StatementItem.value,
+            StatementItem.unit,
+            StatementItem.period_end,
+        )
+        .where(
+            StatementItem.cik == cik,
+            StatementItem.line_item.in_(FINANCIAL_ITEMS),
+            StatementItem.fiscal_period == "FY",
+            StatementItem.period_type.in_(("annual", "instant")),
+            StatementItem.fiscal_year.is_not(None),
+            func.coalesce(StatementItem.first_filed, StatementItem.filed) <= as_of,
+        )
+        .order_by(StatementItem.fiscal_year.desc(), StatementItem.period_end.desc())
+    ).all()
+    years: dict[int, dict[str, Any]] = {}
+    units: dict[str, str] = {}
+    for year, item, value, unit, period_end in rows:
+        if year not in years and len(years) >= FINANCIAL_YEARS:
+            continue
+        figures = years.setdefault(year, {"period_end": period_end})
+        figures.setdefault(item, value)  # latest period end within the fiscal year
+        units.setdefault(item, unit)
+    return {"years": years, "units": units}
 
 
 def _cusips(session: Session, security: Security) -> list[str]:
