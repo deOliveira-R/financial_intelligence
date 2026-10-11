@@ -10,7 +10,7 @@ How the backend is put together and why. For what it can do, see
 providers/*.py ── fetch ──► raw store: data/raw/<provider>/<hh>/<sha256>.gz + raw_responses index
   rate limits, retries,          (every response, errors included, credentials stripped)
   raw capture                     │
-                                  │ loaders: ingest.LOADERS[(provider, dataset)]
+                                  │ loaders declared per dataset (registry.py)
                                   │ (the same code for live syncs and for `rebuild`)
                                   ▼
 normalized tables   issuers, securities, ticker_history, daily_bars, corporate_actions,
@@ -26,7 +26,7 @@ research            timeseries.py (specs on a trading calendar), backtest.py, sc
                     screentest.py, events.py, portfolio.py
                                   │
                                   ▼
-interfaces          cli.py (typer: syncs, rebuilds, research)   api.py (FastAPI, read-only)
+interfaces          cli/ (typer, by area: syncs, rebuilds, research)   api.py (FastAPI, read-only)
 ```
 
 Rules that hold everywhere:
@@ -51,8 +51,8 @@ Rules that hold everywhere:
 |---|---|---|
 | Plumbing | `config.py`, `db.py`, `raw.py`, `models.py`, `migrations/` | Settings from `.env` (`FI_*`); PostgreSQL 16 (BIGINT ids, generated tsvector columns for text search); Alembic migrations from a 0001 baseline, run by every CLI command |
 | Providers | `providers/base.py`, `providers/ratelimit.py` + one file per source | Rate limits are seeded from recorded calls, so they hold across processes. `QuotaExceededError` stops a batch; `NotFoundError` on 404 |
-| Loading | `ingest.py`, `rebuild.py` | `LOADERS`, `BINARY_DATASETS`, `REQUEST_DATASETS`, `SNAPSHOT_DATASETS`, `REFERENCE_DATASETS`; `rebuild.TARGETS` and `FACT_DATASETS` |
-| Identity | `ingest.SymbolResolver`, `world.py`, `crosslist.py` | See [Identity](#identity) |
+| Loading | `registry.py`, `sources.py`, `pipeline.py`, `rebuild.py` | Each domain module declares its datasets (`Dataset`: loader, payload json/bytes/request, snapshot, reference, symbol-keyed, rebuild targets) and loads and syncs them; `pipeline.tracked` records each sync item; `rebuild.TABLES` lists what each target wipes |
+| Identity | `symbols.py` (`SymbolResolver`), `world.py`, `crosslist.py` | See [Identity](#identity) |
 | Fundamentals | `periods.py`, `derive.py`, `statements.py`, `xbrl.py`, `fundamentals.py` | Fiscal calendars from annual reports; 28 standard line items mapped from US GAAP, IFRS, J-GAAP and others |
 | Non-US filings | `dart.py` (Korea), `edinet.py` (Japan), `taiwan.py`, `esef.py` (Europe), `world.py` | Each turns its regulator's format into companyfacts-shaped facts |
 | Metrics and screens | `metrics.py`, `fx.py`, `sectors.py`, `screener.py`, `screentest.py` | Point in time; foreign financials converted to USD |
@@ -107,13 +107,16 @@ Rules that hold everywhere:
    self-describing: the loader gets only `(key, payload, fetched_at)`.
 2. **Parser:** a module that turns the payload into rows or companyfacts-shaped facts
    (`world.facts_payload`).
-3. **Loader:** register in `ingest.LOADERS`. Add to `BINARY_DATASETS` (bytes),
-   `REQUEST_DATASETS` (needs its request), or `SNAPSHOT_DATASETS` (only the latest
-   response per key matters) as needed.
-4. **Rebuild:** add the dataset to the right `rebuild.TARGETS` entry. Anything that writes
-   facts goes in `FACT_DATASETS`, since `rebuild fundamentals` wipes every fact.
-5. **Sync:** a `sync_*` function in `ingest.py` wrapped in `tracked(...)` (it records
-   `sync_state` and commits), a CLI command, and a step in `sync-daily` or `sync-weekly`.
+3. **Loader and declaration:** in the domain module, a loader taking `(session, key,
+   payload, fetched_at)` registered with `registry.register(Dataset(provider, name, load,
+   targets=(...), payload="bytes" | "request", snapshot=..., reference=...))`. Add the
+   module to `sources.py`. Anything that writes facts targets `fundamentals`.
+4. **Rebuild:** give the dataset a target; a new target needs its tables in
+   `rebuild.TABLES`.
+5. **Sync and CLI:** a `sync_*` function in the domain module wrapped in
+   `pipeline.tracked(...)` (it records `sync_state` and commits), a command in the right
+   `cli/` module, and a step in `cli/ops.py`'s daily or weekly schedule. Research series
+   register with `@timeseries.source("name")`.
 6. **Statements:** map new concepts in `statements.LINE_ITEMS` (or the per-region dicts).
 7. **Tests:** fixtures in code (or small real files in `tests/fixtures/`), `respx` for HTTP,
    and a rebuild check where it applies. Patch the provider's limits in `tests/conftest.py`.
