@@ -127,14 +127,14 @@ def theme_detail(session: SessionDep, name: str):
 def graph_node(
     session: SessionDep,
     node: str,
-    direction: str = Query("edges", pattern="^(edges|upstream|downstream)$"),
+    direction: str = Query("edges", pattern="^(edges|upstream|downstream|companies)$"),
     hops: int = Query(2, ge=1, le=4),
     min_share: float = Query(0.02, ge=0, le=1),
 ):
     """The supply-chain graph around a node (`theme:defense`, `industry:334413`,
     `summary:334`, or a theme name or BEA code): its direct edges, or its suppliers
     (`upstream`, by share of its inputs) or buyers (`downstream`, by share of its output)
-    within `hops` edges."""
+    within `hops` edges, or the `companies` in it (industries: by SIC mapping weight)."""
     from fin_intel import graph
 
     try:
@@ -143,4 +143,6 @@ def graph_node(
         raise HTTPException(404, str(exc)) from None
     if direction == "edges":
         return {"node": key, "edges": graph.neighbors(session, key)}
+    if direction == "companies":
+        return {"node": key, "companies": graph.companies(session, key)}
     return {"node": key, direction: graph.walk(session, key, direction, hops, min_share)}

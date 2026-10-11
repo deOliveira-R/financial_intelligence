@@ -1,5 +1,6 @@
 import io
 import zipfile
+from types import SimpleNamespace
 
 import openpyxl
 import pytest
@@ -7,11 +8,12 @@ import respx
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-from fin_intel import graph, industries
+from fin_intel import graph, industries, themes
 from fin_intel.api import app
 from fin_intel.db import get_session, session_factory
-from fin_intel.models import GraphEdge, IoCode, IoNaics, IoUse
-from fin_intel.providers import BeaProvider
+from fin_intel.models import Concordance, GraphEdge, IoCode, IoNaics, IoUse, Issuer, Security
+from fin_intel.providers import BeaProvider, CensusProvider
+from fin_intel.providers.census import CONCORDANCES
 from fin_intel.rebuild import rebuild
 
 URL = "https://apps.bea.gov/industry/iTables%20Static%20Files/AllTablesSUP.zip"
@@ -38,6 +40,7 @@ HIERARCHY = [
     (None, None, None, 334413, "Semiconductor manufacturing", None, 334413),
     (None, "3364OT", "Other transportation equipment"),
     (None, None, None, 336411, "Aircraft manufacturing", None, 336411),
+    (None, None, None, 336414, "Guided missile manufacturing", None, 336414),
     (54, "PROFESSIONAL"),
     (None, "5412OP", "Miscellaneous professional services"),
     (None, None, None, 541700, "Scientific research and development services", None, 5417),
@@ -103,6 +106,33 @@ def bea_zip():
     return out.getvalue()
 
 
+# Census concordances (title rows, a header, then code pairs): missile making splits between
+# manufacturing and R&D, and R&D splits again in later NAICS revisions.
+STEPS = {
+    "sic1987-naics2002": [
+        (3674, "Semiconductors", 334413),
+        (3761, "Guided missiles", 336414),
+        (3761, "Guided missiles (research and development)", 541710),
+        ("Aux", "Auxiliaries", 551114),
+    ],
+    "naics2002-naics2007": [(541710, "R&D", 541711), (541710, "R&D", 541712)],
+    "naics2007-naics2012": [],
+    "naics2012-naics2017": [(541711, "R&D", 541713), (541711, "R&D", 541714)],
+}
+
+
+def concordance(name):
+    book = openpyxl.Workbook()
+    ws = book.active
+    ws.append([f"{name} (Full Concordance)"])
+    ws.append(["Code", "Title", "Code", "Title"])
+    for code, title, target in STEPS[name]:
+        ws.append([code, title, target, "target title"])
+    data = io.BytesIO()
+    book.save(data)
+    return data.getvalue()
+
+
 def test_parse_naics():
     assert industries.parse_naics("1122, 1124-5, 1129") == ["1122", "1124", "1125", "1129"]
     assert industries.parse_naics("722514-5") == ["722514", "722515"]
@@ -113,12 +143,34 @@ def test_parse_naics():
 
 
 @pytest.fixture
-def loaded(session, raw_store):
+def loaded(session, raw_store, monkeypatch):
+    monkeypatch.setattr(
+        graph.universe, "read", lambda: [SimpleNamespace(cik=1, industry="semiconductors")]
+    )
+    session.add_all(
+        [
+            Issuer(cik=1, name="Chips", sic=3674),
+            Issuer(cik=2, name="Missiles", sic=3760),  # SEC group code: 376x
+            Issuer(cik=3, name="Blank check", sic=6770),
+            Issuer(cik=4, name="Unlisted chips", sic=3674),
+        ]
+    )
+    session.flush()
+    session.add_all(
+        [
+            Security(ticker="CHIP", cik=1),
+            Security(ticker="MSL", cik=2),
+            Security(ticker="SPAC", cik=3),
+        ]
+    )
+    session.commit()
     with respx.mock:
         route = respx.get(URL).respond(content=bea_zip())
-        bea = BeaProvider(raw_store=raw_store)
-        industries.sync_bea(session, bea)
-        industries.sync_bea(session, bea)  # synced this month: no download
+        for name, path in CONCORDANCES.items():
+            respx.get(f"https://www.census.gov{path}").respond(content=concordance(name))
+        bea, census = BeaProvider(raw_store=raw_store), CensusProvider(raw_store=raw_store)
+        industries.sync_industries(session, bea, census)
+        industries.sync_industries(session, bea, census)  # synced this month: no download
         assert route.call_count == 1
     return session
 
@@ -169,7 +221,7 @@ def test_graph_edges_and_shares(loaded):
 def test_theme_layer(loaded):
     session = loaded
     members = graph.theme_industries(session)
-    assert members["defense"] == {"336411": "full", "541700": "partial"}
+    assert members["defense"] == {"336411": "full", "336414": "full", "541700": "partial"}
     assert members["semiconductors"] == {"334413": "full", "333242": "full"}
     assert members["ai_power"]["233240"] == "curated"
     assert "233240" not in members["shipping"]  # construction's "23" isn't a partial match
@@ -190,6 +242,44 @@ def test_theme_layer(loaded):
     )
     assert graph.resolve(session, "defense") == "theme:defense"
     assert graph.resolve(session, "334413") == "industry:334413"
+
+
+def test_company_layer(loaded):
+    session = loaded
+    pairs = set(session.execute(select(Concordance.code, Concordance.target_code)).all())
+    assert ("3674", "334413") in pairs and not any(code == "Aux" for code, _ in pairs)
+
+    def maps(cik):
+        rows = session.execute(
+            select(GraphEdge.dst, GraphEdge.value).where(
+                GraphEdge.src == f"company:{cik}", GraphEdge.kind == "maps_to"
+            )
+        ).all()
+        return {dst: pytest.approx(value) for dst, value in rows}
+
+    assert maps(1) == {"industry:334413": 1.0}
+    # 3760 isn't a SIC code: its group's 3761 splits half manufacturing, half R&D (R&D's
+    # later splits don't add weight).
+    assert maps(2) == {"industry:336414": 0.5, "industry:541700": 0.5}
+    assert (
+        maps(3) == {}
+        and session.get(GraphEdge, ("company:3", "theme:semiconductors", "part_of")) is None
+    )
+    assert graph.resolve(session, "company:1")
+    with pytest.raises(ValueError):
+        graph.resolve(session, "company:4")  # no listed security
+    theme = graph.companies(session, "theme:semiconductors")
+    assert [(c["node"], c["note"]) for c in theme] == [("company:1", "universe")]
+    missiles = graph.companies(session, "industry:336414")
+    assert missiles[0]["label"] == "Missiles (MSL)" and missiles[0]["weight"] == 0.5
+
+
+def test_themes_for():
+    assert themes.themes_for(1311, "energy_materials") == ["oil_gas"]
+    assert themes.themes_for(1040, "energy_materials") == ["critical_minerals"]
+    assert themes.themes_for(3674, "semiconductors") == ["semiconductors"]
+    assert themes.themes_for(7372) == ["technology"]
+    assert themes.themes_for(None) == []
 
 
 def test_rebuild_reproduces(loaded, raw_store):
@@ -225,4 +315,6 @@ def test_api_graph_and_themes(loaded, engine):
     assert up["upstream"][0]["node"] == "industry:331410"
     assert "maps_to_out" in client.get("/graph/defense").json()["edges"]
     assert client.get("/graph/999999").status_code == 404
+    found = client.get("/graph/semiconductors", params={"direction": "companies"}).json()
+    assert found["companies"][0]["label"] == "Chips (CHIP)"
     app.dependency_overrides.clear()

@@ -903,6 +903,19 @@ class IoUse(Base):
     value: Mapped[float] = mapped_column(Float)
 
 
+class Concordance(Base):
+    """One step of a published classification concordance (Census, industries.py): a code
+    of one system (`sic1987`, `naics2002`...) and a code of the next that covers part or
+    all of it. Many-to-many; Census doesn't give shares."""
+
+    __tablename__ = "concordances"
+
+    system: Mapped[str] = mapped_column(String, primary_key=True)  # sic1987
+    code: Mapped[str] = mapped_column(String, primary_key=True)
+    target_system: Mapped[str] = mapped_column(String, primary_key=True)  # naics2002
+    target_code: Mapped[str] = mapped_column(String, primary_key=True)
+
+
 class GraphNode(Base):
     """Derived (graph.py): a node of the supply-chain graph. Keys are typed:
     `industry:334413` (BEA detail), `summary:334` (BEA summary), `theme:defense`."""
@@ -917,8 +930,10 @@ class GraphNode(Base):
 class GraphEdge(Base):
     """Derived (graph.py): a typed edge. `supplies` runs from supplier to buyer, with the
     dollars (millions) and the share of the buyer's intermediate inputs (`buyer_share`) and
-    of the supplier's output (`supplier_share`); `part_of` runs from a node to its parent;
-    `maps_to` from a theme to an industry. `source` says where the edge comes from (bea,
+    of the supplier's output (`supplier_share`); `part_of` runs from a node to its parent
+    (industry to summary, company to theme); `maps_to` from a theme or a company to an
+    industry, with `value` the company's weight in it (its SIC code's share of NAICS codes
+    there). `source` says where the edge comes from (bea,
     themes, curated) and `year` the data year."""
 
     __tablename__ = "graph_edges"

@@ -60,7 +60,7 @@ The shared vocabulary every connecting feature uses.
   estate, consumer), each mapped to SIC/universe industry, NAICS, LDA issue codes, CRS
   policy areas and subjects, a presidential-document query, ETFs, CFTC markets, FRED/EIA.
   Codes validated against the loaded data. The user found it reasonable (2026-10-11).
-- [x] Layer 1 (branch `graph`): `sync-bea` stores BEA's supply-use zip raw and loads
+- [x] Layer 1 (branch `graph`): `sync-industries` stores BEA's supply-use zip raw and loads
   `io_codes`, `io_naics`, `io_uses` (detail 2007/2012/2017, summary 1997-2023, 269k cells);
   `graph.py` builds industry, summary, final-demand and theme nodes with `supplies`
   (dollars, buyer_share, supplier_share), `part_of` and `maps_to` edges; `graph`, `theme`,
@@ -74,8 +74,11 @@ The shared vocabulary every connecting feature uses.
   each theme's NAICS codes; curated edges only where codes are too coarse, marked as such.
 - [x] Graph storage in Postgres: `graph_nodes` / `graph_edges` (typed: supplies, maps_to,
   part_of; source, as_of, weight), recursive-CTE queries for upstream/downstream N hops.
-- [ ] Layer 3, companies: companies → industries via the Census SIC-NAICS concordance (and
-  universe industries); company-company edges from XBRL customer-concentration facts and a
+- [x] Layer 3a (branch `graph`): companies → BEA industries through Census's concordances
+  (1987 SIC → 2017 NAICS, weights split equally per step; SEC-only and group codes fall
+  back to their SIC group), companies → themes (`themes.themes_for`: universe industry or
+  SIC ranges); `graph X --direction companies`. 90% of listed companies with a SIC map.
+- [ ] Layer 3b: company-company edges from XBRL customer-concentration facts and a
   small curated core (ASML → TSMC → NVIDIA → hyperscalers). Text-extracted supplier and
   customer links wait for the LLM skills (phase 5).
 

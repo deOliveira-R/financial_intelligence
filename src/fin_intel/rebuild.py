@@ -20,6 +20,7 @@ from fin_intel.models import (
     CommitteeMembership,
     CompanyMetrics,
     Concept,
+    Concordance,
     CongressReport,
     CongressReportMember,
     CongressTrade,
@@ -96,7 +97,7 @@ TABLES: dict[str, list] = {
         EconomicReleaseDate,
         EconomicRelease,
     ],
-    "industries": [GraphEdge, GraphNode, IoUse, IoNaics, IoCode],
+    "industries": [GraphEdge, GraphNode, IoUse, IoNaics, IoCode, Concordance],
     "market": [ForwardOutcome, CompanyMetrics, DailyBar, CorporateAction, TickerHistory, Security],
 }
 # Everything, children before parents: every table above plus issuers.

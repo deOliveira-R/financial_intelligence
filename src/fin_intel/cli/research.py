@@ -363,7 +363,7 @@ def lobbying_cmd(
 @app.command("build-graph", rich_help_panel="Research")
 def build_graph_cmd() -> None:
     """Rebuild the supply-chain graph from the BEA tables and the themes (after editing
-    themes.py; sync-bea rebuilds it on its own)."""
+    themes.py; sync-industries rebuilds it on its own)."""
     from fin_intel import graph
 
     with session_factory()() as session:
@@ -376,14 +376,15 @@ def build_graph_cmd() -> None:
 def graph_cmd(
     node: Annotated[str, typer.Argument(help="theme:defense, industry:334413, or a name/code")],
     direction: Annotated[
-        str, typer.Option(help="upstream (suppliers), downstream (buyers) or edges")
+        str, typer.Option(help="upstream (suppliers), downstream (buyers), edges or companies")
     ] = "upstream",
     hops: Annotated[int, typer.Option(help="Most edges from the node")] = 2,
     min_share: Annotated[float, typer.Option(help="Smallest share an edge must carry")] = 0.02,
     rows: Annotated[int, typer.Option(help="Rows to print")] = 25,
 ) -> None:
     """Walk the supply-chain graph: who a node buys from (upstream: share of its inputs) or
-    sells to (downstream: share of its output), N hops out; or its direct edges."""
+    sells to (downstream: share of its output), N hops out; its direct edges; or the
+    companies in it."""
     from fin_intel import graph
 
     with session_factory()() as session:
@@ -391,6 +392,11 @@ def graph_cmd(
             key = graph.resolve(session, node)
         except ValueError as exc:
             raise typer.BadParameter(str(exc)) from None
+        if direction == "companies":
+            for c in graph.companies(session, key)[:rows]:
+                weight = f"{c['weight']:5.0%}" if c["weight"] is not None else "     "
+                typer.echo(f"  {weight}  {c['node']:<18} {c['label'][:60]}  ({c['note']})")
+            return
         if direction == "edges":
             for kind, edges in graph.neighbors(session, key).items():
                 typer.secho(kind, bold=True)
@@ -447,7 +453,7 @@ def theme_cmd(
         try:
             key = graph.resolve(session, f"theme:{name}")
         except ValueError:
-            typer.echo("  (no graph yet: run fin-intel sync-bea)")
+            typer.echo("  (no graph yet: run fin-intel sync-industries)")
             return
         edges = graph.neighbors(session, key)
     for kind, title, share in (

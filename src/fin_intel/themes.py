@@ -218,3 +218,21 @@ def get(name: str) -> Theme:
         return BY_NAME[name]
     except KeyError:
         raise ValueError(f"unknown theme {name!r}; one of {', '.join(BY_NAME)}") from None
+
+
+def themes_for(sic: int | None, universe_industry: str | None = None) -> list[str]:
+    """The themes a company belongs to: by its deep-history universe industry (narrowed by
+    the theme's SIC ranges when it has both, as oil and gas and critical minerals share one
+    industry), or by SIC ranges alone."""
+
+    def in_ranges(t: Theme) -> bool:
+        return sic is not None and any(lo <= sic <= hi for lo, hi in t.sic)
+
+    out = []
+    for t in THEMES:
+        if t.universe_industry and t.universe_industry == universe_industry:
+            if not t.sic or in_ranges(t):
+                out.append(t.name)
+        elif t.sic and in_ranges(t):
+            out.append(t.name)
+    return out

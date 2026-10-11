@@ -130,6 +130,11 @@ only on exceptions), the speculation track high-attention with its own signals.
   upstream (suppliers, by share of the buyer's inputs) or downstream (buyers, by share of
   the supplier's output), N hops: `graph theme:defense --direction upstream`,
   `graph 334413 --direction downstream --hops 3`, `/graph/{node}?direction=upstream`.
+- **Companies in the graph:** ~5,000 listed companies placed on BEA industries through
+  their SIC codes (Census concordances; weights split equally where a code maps to several,
+  as Census gives no shares) and on themes: `graph defense --direction companies`,
+  `graph 336414 --direction companies`, `/graph/{node}?direction=companies`. Construction
+  companies and blank checks stay unmapped.
   Limits: capital equipment (semiconductor machinery to chip makers) is investment, not an
   intermediate input, so it shows as sales to private investment, not to the buyer; single
   detail cells can reflect BEA's classification of establishments (2017 shows $26B of chips
@@ -144,7 +149,7 @@ only on exceptions), the speculation track high-attention with its own signals.
 - `sync-weekly` (Sunday): SEC and Massive reference lists, 13F, CFTC, ADR share counts, SIC
   codes, missing SEC filings (direct XBRL), Taiwanese and European statements,
   cross-listings, release calendar, contracts, short interest, N-PORT, legislators,
-  lobbying, bills, presidential documents, BEA tables (monthly check), outcomes, raw
+  lobbying, bills, presidential documents, BEA tables and Census concordances (monthly check), outcomes, raw
   retention.
 - `rebuild <target|all>` (`fin-intel rebuild --help` lists the targets, e.g. industries)
   reproduces tables from raw without the network; `migrate`, `prune-raw`, `derive*`.

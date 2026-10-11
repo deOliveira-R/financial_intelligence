@@ -8,6 +8,10 @@ years (2007, 2012, 2017) and at the summary level (71 industries) for every year
 industry (contracts by NAICS, companies by SIC through NAICS, themes) into a supply chain:
 graph.py builds the graph from these tables.
 
+Companies come in through their SIC codes: SEC still assigns 1987 SIC codes, so Census's
+concordances chain them to 2017 NAICS (1987 SIC -> 2002 -> 2007 -> 2012 -> 2017 NAICS),
+stored as published, one row per code pair.
+
 Stored as published (supply-use framework, millions of dollars). Suppressed cells ("...")
 and empty cells are left out. A table describes its year's economy but is published years
 later (the 2017 detail tables in 2024); the structure changes slowly, so the graph uses the
@@ -26,9 +30,10 @@ from sqlalchemy.orm import Session
 
 from fin_intel import registry
 from fin_intel.db import upsert
-from fin_intel.models import IoCode, IoNaics, IoUse
+from fin_intel.models import Concordance, IoCode, IoNaics, IoUse
 from fin_intel.pipeline import synced_since, tracked
-from fin_intel.providers import BeaProvider
+from fin_intel.providers import BeaProvider, CensusProvider
+from fin_intel.providers.census import CONCORDANCES
 from fin_intel.registry import Dataset
 
 log = logging.getLogger(__name__)
@@ -182,7 +187,61 @@ def parse_supply_use(data: bytes) -> dict[str, list[dict[str, Any]]]:
     return {"codes": list(codes.values()), "naics": naics, "uses": cells}
 
 
+def _rows(data: bytes) -> list[list[Any]]:
+    """The first sheet of an .xls (Census's older files) or .xlsx workbook."""
+    if data[:4] == b"PK\x03\x04":
+        import openpyxl
+
+        sheet = openpyxl.load_workbook(io.BytesIO(data), read_only=True).worksheets[0]
+        return [list(r) for r in sheet.iter_rows(values_only=True)]
+    import xlrd
+
+    sheet = xlrd.open_workbook(file_contents=data).sheet_by_index(0)
+    return [sheet.row_values(i) for i in range(sheet.nrows)]
+
+
+def _number(value: Any, width: int) -> str | None:
+    """A code cell (Excel stores 0111 as 111.0) as a zero-padded string."""
+    if isinstance(value, (int, float)) and value > 0:
+        return f"{int(value):0{width}d}"
+    text = str(value or "").strip()
+    return text.zfill(width) if text.isdigit() else None
+
+
+def parse_concordance(name: str, data: bytes) -> list[dict[str, Any]]:
+    """Census concordance sheets: source code in column A, target code in column C, after
+    title rows (skipped: their cells aren't codes)."""
+    system, target = name.split("-")
+    width = 4 if system.startswith("sic") else 6
+    out = []
+    for row in _rows(data):
+        if len(row) < 3:
+            continue
+        code, target_code = _number(row[0], width), _number(row[2], 6)
+        if code and target_code:
+            out.append(
+                {
+                    "system": system,
+                    "code": code,
+                    "target_system": target,
+                    "target_code": target_code,
+                }
+            )
+    return out
+
+
 # --- loading and syncs ---
+
+
+def load_concordance(session: Session, key: str, payload: bytes, fetched_at: datetime) -> int:
+    system, target = key.split("-")
+    session.execute(
+        delete(Concordance).where(Concordance.system == system, Concordance.target_system == target)
+    )
+    rows = parse_concordance(key, payload)
+    return upsert(
+        session, Concordance, rows, key=["system", "code", "target_system", "target_code"]
+    )
 
 
 def load_supply_use(session: Session, key: str, payload: bytes, fetched_at: datetime) -> int:
@@ -195,21 +254,34 @@ def load_supply_use(session: Session, key: str, payload: bytes, fetched_at: date
     return upsert(session, IoUse, parsed["uses"], key=["level", "year", "commodity", "buyer"])
 
 
-def sync_bea(session: Session, bea: BeaProvider, *, force: bool = False) -> int:
-    """The supply-use tables, refreshed monthly (BEA's release is yearly), then the graph."""
+def sync_industries(
+    session: Session, bea: BeaProvider, census: CensusProvider, *, force: bool = False
+) -> int:
+    """BEA's supply-use tables and Census's concordances, checked monthly (both change at
+    most yearly), then the graph when anything was loaded."""
     since = datetime.now(UTC) - REFRESH
-    if not force and "AllTablesSUP" in synced_since(session, "bea", "supply_use", since):
-        log.info("BEA supply-use tables synced within %s", REFRESH)
-        return 0
-    with tracked(session, "bea", "supply_use", "AllTablesSUP") as result:
-        session.commit()  # fetch-then-load
-        data = bea.fetch_supply_use()
-        result["rows"] = load_supply_use(session, "AllTablesSUP", data, datetime.now(UTC))
-    from fin_intel import graph
+    rows = 0
+    if force or "AllTablesSUP" not in synced_since(session, "bea", "supply_use", since):
+        with tracked(session, "bea", "supply_use", "AllTablesSUP") as result:
+            session.commit()  # fetch-then-load
+            data = bea.fetch_supply_use()
+            result["rows"] = load_supply_use(session, "AllTablesSUP", data, datetime.now(UTC))
+        rows += result["rows"]
+    done = synced_since(session, "census", "concordance", since)
+    for name in CONCORDANCES:
+        if not force and name in done:
+            continue
+        with tracked(session, "census", "concordance", name) as result:
+            session.commit()
+            data = census.fetch_concordance(name)
+            result["rows"] = load_concordance(session, name, data, datetime.now(UTC))
+        rows += result["rows"]
+    if rows:
+        from fin_intel import graph
 
-    graph.build(session)
-    session.commit()
-    return result["rows"]
+        graph.build(session)
+        session.commit()
+    return rows
 
 
 registry.register(
@@ -220,5 +292,13 @@ registry.register(
         ("industries",),
         payload="bytes",
         snapshot=True,
-    )
+    ),
+    Dataset(
+        "census",
+        "concordance",
+        load_concordance,
+        ("industries",),
+        payload="bytes",
+        snapshot=True,
+    ),
 )

@@ -130,17 +130,23 @@ def sync_cboe() -> None:
     run_items("sync-cboe", ["cboe"], lambda s, _: putcall.sync_cboe(s, cboe, date.today()))
 
 
-@app.command("sync-bea", rich_help_panel="Macro and markets")
-def sync_bea(
+@app.command("sync-industries", rich_help_panel="Macro and markets")
+def sync_industries(
     force: Annotated[bool, typer.Option(help="Download even if synced this month")] = False,
 ) -> None:
     """Load BEA's input-output tables (which industries buy from which: detail 2007, 2012,
-    2017; summary since 1997), then rebuild the supply-chain graph."""
+    2017; summary since 1997) and Census's SIC-to-NAICS concordances, then rebuild the
+    supply-chain graph."""
     from fin_intel import industries
-    from fin_intel.providers import BeaProvider
+    from fin_intel.providers import BeaProvider, CensusProvider
 
     bea = BeaProvider(raw_store=default_store())
-    run_items("sync-bea", ["bea"], lambda s, _: industries.sync_bea(s, bea, force=force))
+    census = CensusProvider(raw_store=default_store())
+    run_items(
+        "sync-industries",
+        ["industries"],
+        lambda s, _: industries.sync_industries(s, bea, census, force=force),
+    )
 
 
 @app.command("sync-contracts", rich_help_panel="Macro and markets")
