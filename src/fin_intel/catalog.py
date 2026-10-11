@@ -2,10 +2,11 @@
 
 Investing here is meant to be low-attention, with alerts only on exceptions, and a feed
 that silently stops is the first exception to catch (from 2026-10-09 every FRED update
-failed, asking for revisions from a date FRED considered future, and nothing said so). Freshness comes from `sync_state`: a sync that finds
-nothing new still records a success, where raw fetches would look stale for quarterly
-sources. Each monitored feed has the most days its latest success may age (`EXPECTED`,
-following the schedules in cli/ops.py); a feed is
+failed, asking for revisions from a date FRED considered future, and nothing said so).
+Freshness comes from `sync_state`: a sync that finds nothing new still records a success,
+where raw fetches would look stale for quarterly sources. Each monitored feed has the most
+days its latest success may age (`EXPECTED`, following the schedules in cli/ops.py); a
+feed is
 
 - `stale` when its latest success is older than that,
 - `failing` when more of its items are failing than a few stragglers (some items fail for
@@ -76,30 +77,13 @@ STRAGGLERS, STRAGGLER_SHARE = 2, 0.01
 # (a commercial provider's free plan), "check terms" (a third party's site or mixed rights:
 # some FRED series, such as the ICE BofA spreads, are copyrighted by their source).
 PUBLIC, PERSONAL, CHECK = "public", "personal use", "check terms"
+# GLEIF's LEI data is CC0.
+PUBLIC_PROVIDERS = (
+    "sec bea census cftc eia fed govinfo federalregister usaspending house senate lda "
+    "legislators edinet dart twse mof boj gleif"
+).split()
 TERMS: dict[str, str] = {
-    **dict.fromkeys(
-        (
-            "sec",
-            "bea",
-            "census",
-            "cftc",
-            "eia",
-            "fed",
-            "govinfo",
-            "federalregister",
-            "usaspending",
-            "house",
-            "senate",
-            "lda",
-            "legislators",
-            "edinet",
-            "dart",
-            "twse",
-            "mof",
-            "boj",
-        ),
-        PUBLIC,
-    ),  # fmt: skip
+    **dict.fromkeys(PUBLIC_PROVIDERS, PUBLIC),
     "massive": PERSONAL,
     "tiingo": PERSONAL,
     **dict.fromkeys(("fred", "cboe", "finra", "openfigi", "esef"), CHECK),
