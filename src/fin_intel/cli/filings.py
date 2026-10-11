@@ -122,6 +122,27 @@ def sync_events(
         )
 
 
+@app.command("sync-population", rich_help_panel="Filings and fundamentals")
+def sync_population() -> None:
+    """The research population (every company that filed financial statements since 2009,
+    dead or alive; population.py): EDGAR's quarterly XBRL indexes, then the events of
+    members never synced (their fundamentals come with sync-fundamentals-bulk). Members
+    no longer filing don't change, so each is fetched once."""
+    from fin_intel import population
+
+    sec = SecProvider(raw_store=default_store())
+    with session_factory()() as session:
+        rows = population.sync_population(session, sec)
+        typer.echo(f"{rows} index rows")
+        synced = pipeline.synced_since(session, "sec", "events", datetime(2000, 1, 1, tzinfo=UTC))
+        ciks = sorted(c for c in population.members(session) if str(c) not in synced)
+    typer.echo(f"{len(ciks)} members without events")
+    if ciks:
+        run_items(
+            "sync-events", [str(c) for c in ciks], lambda s, c: edgar.sync_events(s, sec, int(c))
+        )
+
+
 @app.command(rich_help_panel="Filings and fundamentals")
 def sync_sic() -> None:
     """Look up SIC codes (industry) of issuers with a primary listing that lack one (SEC

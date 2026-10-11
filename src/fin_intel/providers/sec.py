@@ -104,6 +104,11 @@ class SecProvider(Provider):
             raise
         return parse_daily_index(text)
 
+    def fetch_xbrl_index(self, year: int, quarter: int) -> bytes:
+        """EDGAR's quarterly index of filings with XBRL financial data."""
+        url = f"https://www.sec.gov/Archives/edgar/full-index/{year}/QTR{quarter}/xbrl.idx"
+        return self.get_bytes(url, dataset="xbrl_index", key=f"{year}Q{quarter}")
+
     def fetch_submission(self, accession: str, path: str) -> bytes:
         return self.get_bytes(
             f"https://www.sec.gov/Archives/{path}", dataset="form4", key=accession

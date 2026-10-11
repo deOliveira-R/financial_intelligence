@@ -62,5 +62,9 @@ def synced_since(session: Session, provider: str, dataset: str, since: datetime)
 
 
 def tracked_ciks(session: Session) -> set[int]:
-    """Issuers we follow: those with at least one security, active or delisted."""
-    return set(session.scalars(select(Security.cik).where(Security.cik.is_not(None)).distinct()))
+    """Issuers we follow: those with at least one security, active or delisted, and the
+    research population (population.py: every periodic filer since 2009, dead or alive)."""
+    from fin_intel import population
+
+    listed = set(session.scalars(select(Security.cik).where(Security.cik.is_not(None)).distinct()))
+    return listed | population.members(session)

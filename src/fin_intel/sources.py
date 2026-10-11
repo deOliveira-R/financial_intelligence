@@ -20,6 +20,7 @@ from fin_intel import (  # noqa: F401
     lobbying,
     macro,
     market,
+    population,
     presidential,
     putcall,
     releases,

@@ -818,6 +818,20 @@ class FederalObligation(Base):
     amount: Mapped[float] = mapped_column(Float)
 
 
+class XbrlFiling(Base):
+    """A filing with XBRL financial data, from EDGAR's quarterly xbrl.idx (population.py):
+    every company that filed one since 2009, alive or dead, which is the research
+    population free of survivorship bias."""
+
+    __tablename__ = "xbrl_filings"
+
+    accession: Mapped[str] = mapped_column(String, primary_key=True)
+    cik: Mapped[int] = mapped_column(index=True)
+    form: Mapped[str] = mapped_column(String, index=True)
+    filed: Mapped[date] = mapped_column(Date, index=True)
+    company: Mapped[str | None] = mapped_column(String)  # name when filed
+
+
 class CorporateEvent(Base):
     """A dated corporate event from SEC filings (filing_events.py): one row per 8-K item, or
     per filing for other event forms (13D/13G stakes, late filings, delistings, tender

@@ -60,6 +60,7 @@ from fin_intel.models import (
     ShortInterest,
     StatementItem,
     TickerHistory,
+    XbrlFiling,
 )
 from fin_intel.raw import RawStore
 from fin_intel.symbols import get_security
@@ -90,6 +91,7 @@ TABLES: dict[str, list] = {
     "texts": [FilingText],
     "cot": [CotPosition],
     "events": [CorporateEvent],
+    "population": [XbrlFiling],
     "economic": [
         EconomicVintage,
         EconomicObservation,
