@@ -252,3 +252,29 @@ def test_sec_country_prefers_incorporation():
     )
     abroad = {"addresses": {"business": {"isForeignLocation": 1, "country": "Japan"}}}
     assert world.sec_country(abroad) == "JP" and world.sec_country({}) is None
+
+
+def test_sec_steps_skip_issuers_from_other_regulators(session):
+    from fin_intel import edgar
+
+    tsmc = world.ensure_issuer(session, "twse", "2330", "TSMC")
+    session.add(Issuer(cik=320193, name="Apple Inc."))
+    session.flush()
+    session.add_all(
+        [
+            Security(
+                ticker="2330.TW",
+                security_type="CS",
+                origin="twse",
+                cik=tsmc,
+                mic="XTAI",
+                currency="TWD",
+            ),
+            Security(ticker="AAPL", security_type="CS", origin="sec", cik=320193, mic="XNAS"),
+        ]
+    )
+    session.commit()
+    assert set(metrics.primary_securities(session)) == {tsmc, 320193}
+    assert edgar.sec_filers(session) == [320193]
+    assert edgar.issuers_without_sic(session) == [320193]
+    assert edgar.stale_issuers(session) == [320193]

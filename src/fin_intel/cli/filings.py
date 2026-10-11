@@ -108,11 +108,9 @@ def sync_events(
     acquisitions, restatements; 13D/13G stakes; late filings; delistings) for every SEC
     filer with a primary listing, including the full history on first run. Filers synced
     recently are skipped, so a run stopped by SEC throttling resumes where it left off."""
-    from fin_intel import metrics
-
     sec = SecProvider(raw_store=default_store())
     with session_factory()() as session:
-        ciks = cik or sorted(c for c in metrics.primary_securities(session) if c < 10**10)
+        ciks = cik or edgar.sec_filers(session)
         if not cik:
             fresh = pipeline.synced_since(
                 session, "sec", "events", datetime.now(UTC) - timedelta(days=refresh_days)

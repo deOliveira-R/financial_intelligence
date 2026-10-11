@@ -179,10 +179,9 @@ def stale_issuers(session: Session) -> list[int]:
     """Issuers of primary listings whose latest financials are older than their filing
     rhythm allows (a quarter for 10-Q filers, a year for 20-F filers): a periodic report
     is probably missing from SEC's company facts."""
-    from fin_intel import metrics
     from fin_intel.models import StatementItem
 
-    ciks = list(metrics.primary_securities(session))
+    ciks = sec_filers(session)
     latest = dict(
         session.execute(
             select(StatementItem.cik, func.max(StatementItem.period_end))
@@ -258,12 +257,20 @@ def sync_xbrl_gaps(session: Session, sec_provider: SecProvider, cik: int) -> int
     return result["rows"]
 
 
-def issuers_without_sic(session: Session) -> list[int]:
-    """Issuers of primary listings whose SEC profile hasn't been looked up yet."""
+def sec_filers(session: Session) -> list[int]:
+    """SEC filers with a primary listing: issuers from other regulators (world.py) have
+    synthetic ids that SEC has never heard of."""
     from fin_intel import metrics
 
+    return sorted(
+        cik for cik in metrics.primary_securities(session) if cik < metrics.FOREIGN_ISSUERS
+    )
+
+
+def issuers_without_sic(session: Session) -> list[int]:
+    """SEC filers with a primary listing whose SEC profile hasn't been looked up yet."""
     looked_up = set(session.scalars(select(Issuer.cik).where(Issuer.filer_category.is_not(None))))
-    return sorted(cik for cik in metrics.primary_securities(session) if cik not in looked_up)
+    return [cik for cik in sec_filers(session) if cik not in looked_up]
 
 
 def sync_submissions(session: Session, sec_provider: SecProvider, cik: int) -> int:
