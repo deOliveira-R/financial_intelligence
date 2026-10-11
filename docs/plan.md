@@ -13,7 +13,7 @@ we know about NVDA on 2022-03-31?") and needed hand-made joins. The order is: a 
 the supply-chain graph), and only then the connecting features (timeline, dossiers,
 catalog), which the signal-design session will consume.
 
-## Phase 1: PostgreSQL (in progress)
+## Phase 1: PostgreSQL (done 2026-10-11)
 
 Why: SQLite's single write lock kept crashing concurrent jobs; the move only gets more
 expensive as data grows.
@@ -25,15 +25,14 @@ expensive as data grows.
   id sequences, tests on a Docker Postgres (`fi-pg`, port 5433), pg_dump backups.
 - [x] Server `.env` points at Postgres; schema at 0001; weekly sync of 2026-10-11 stopped
   half-way (its committed steps are in the copy).
-- [ ] Copy (`deploy/sqlite_to_postgres.py`, unit `fin-intel-pgcopy`): resumable (skips
-  tables with rows), checks row counts. At 07:00 UTC on 2026-10-11 it was on
-  institutional_positions (~57M rows copied); facts, statement_items, company_metrics,
-  daily_bars, forward_outcomes and the rest follow.
-- [ ] Verify: the script exits non-zero on any count mismatch; then spot-check (a metric, a
-  timeseries, a search, `/status`).
-- [ ] Cut over: start `fin-intel-api`, run `sync-weekly` manually (it resumes what
-  stopped), enable the timers (`fin-intel-daily.timer`, `fin-intel-weekly.timer`,
-  `fin-intel-backup.timer`), run the backup once and check it uploads `essential/*.dump`.
+- [x] Copy (`deploy/sqlite_to_postgres.py`, unit `fin-intel-pgcopy`): finished 2026-10-11
+  08:20 UTC, every table's row count matched (facts 94.9M, institutional_positions 56.7M,
+  daily_bars 12.1M, statement_items 7.2M), sequences reset.
+- [x] Verify: metrics (`/metrics/NVDA`), a timeseries (`fred:DGS10`), a full-text search and
+  `/status` all answer from Postgres.
+- [x] Cut over (2026-10-11 08:26 UTC): API up, `sync-weekly` run manually, timers enabled,
+  backup run and verified (`essential/essential-*.dump` uploaded; `pg_restore --list` reads
+  it).
 - [ ] Keep `data/fin_intel.db` (SQLite, 31.5 GB) until 2026-10-18 as a fallback, then delete.
 
 ## Phase 2: structure (done on branch `themes`, not yet merged)
