@@ -124,6 +124,9 @@ The shared vocabulary every connecting feature uses.
 
 ## Phase 5: the signal-design session (the user's)
 
+Started 2026-10-11: protocol, data audit and steps in [research.md](research.md);
+pre-registered hypotheses in [research/](research/).
+
 Hypotheses, analysis skills, evals and hill-climbing on the historical data, using the
 timeline, dossiers and graph. LLM skills extract supplier/customer links and policy
 relevance from filing and presidential text (feeding graph layer 3).
