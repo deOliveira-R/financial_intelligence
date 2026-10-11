@@ -24,7 +24,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fin_intel import registry
+from fin_intel import indicators, registry, timeseries
 from fin_intel.db import upsert
 from fin_intel.models import CotPosition
 from fin_intel.pipeline import tracked
@@ -356,3 +356,16 @@ registry.register(
         for report in REPORTS
     )
 )
+
+
+@timeseries.source("cot", lowercase=True)
+def _spec(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+
+    market, _, rest = ident.partition(":")
+    group, _, field = rest.partition(":")
+    if not group:
+        raise timeseries.SpecError(f"cot:{ident}: expected cot:market:group[:field]")
+    try:
+        return series_by_day(session, market, group, field or "net", days, pit)
+    except ValueError as exc:
+        raise timeseries.SpecError(str(exc)) from None

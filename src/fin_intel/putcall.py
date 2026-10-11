@@ -17,7 +17,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import registry
+from fin_intel import indicators, registry, timeseries
 from fin_intel.db import upsert
 from fin_intel.models import EconomicObservation, EconomicSeries
 from fin_intel.pipeline import tracked
@@ -161,3 +161,21 @@ registry.register(
         ("economic",),
     ),
 )
+
+
+@timeseries.source("cboe")
+def _spec(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+    """`cboe:equity_pc`, `cboe:spx_puts`... (py)."""
+
+    try:
+        series_id = resolve(ident)
+    except ValueError as exc:
+        raise timeseries.SpecError(str(exc)) from None
+    rows = session.execute(
+        select(EconomicObservation.date, EconomicObservation.value)
+        .where(EconomicObservation.series_id == series_id, EconomicObservation.value.is_not(None))
+        .order_by(EconomicObservation.date)
+    ).all()
+    if not rows:
+        raise timeseries.SpecError(f"no data for {series_id}; run fin-intel sync-cboe")
+    return timeseries.step([(available_on(d) if pit else d, v) for d, v in rows], days)

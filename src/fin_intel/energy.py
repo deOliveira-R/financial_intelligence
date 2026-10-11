@@ -11,9 +11,10 @@ import logging
 from datetime import date, timedelta
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fin_intel import registry
+from fin_intel import indicators, registry, timeseries
 from fin_intel.db import upsert
 from fin_intel.models import EconomicObservation, EconomicSeries
 from fin_intel.pipeline import tracked
@@ -114,3 +115,21 @@ registry.register(
         note="full history in every response",
     ),
 )
+
+
+@timeseries.source("eia")
+def _spec(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+
+    try:
+        series_id = resolve(ident)
+    except ValueError as exc:
+        raise timeseries.SpecError(str(exc)) from None
+    rows = session.execute(
+        select(EconomicObservation.date, EconomicObservation.value)
+        .where(EconomicObservation.series_id == series_id, EconomicObservation.value.is_not(None))
+        .order_by(EconomicObservation.date)
+    ).all()
+    if not rows:
+        raise timeseries.SpecError(f"no EIA data for {series_id}; run fin-intel sync-eia")
+    known = [(available_on(series_id, d) if pit else d, v) for d, v in rows]
+    return timeseries.step(known, days)

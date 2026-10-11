@@ -26,9 +26,9 @@ appear on their Friday release, and EIA weekly data on its Wednesday or Thursday
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from statistics import median
 
 from sqlalchemy import select
@@ -41,26 +41,27 @@ from fin_intel.models import (
     EconomicObservation,
     EconomicVintage,
     MarketBreadth,
-    ShortInterest,
 )
 from fin_intel.prices import adjustments
 
-SOURCES = (
-    "px",
-    "close",
-    "volume",
-    "fred",
-    "breadth",
-    "cot",
-    "eia",
-    "jp",
-    "gov",
-    "si",
-    "cboe",
-    "lobby",
-    "bills",
-)
-_OPERATOR = re.compile(rf"([/-])(?=(?:{'|'.join(SOURCES)}):)")
+# name -> (loader(session, ident, days, pit) -> series, lowercase the ident first). Sources
+# for one domain's data register from its module (`@timeseries.source("eia")`).
+SourceLoader = Callable[[Session, str, list[date], bool], "indicators.Series"]
+SOURCES: dict[str, tuple[SourceLoader, bool]] = {}
+
+
+def source(name: str, lowercase: bool = False) -> Callable[[SourceLoader], SourceLoader]:
+    def register(loader: SourceLoader) -> SourceLoader:
+        SOURCES[name] = (loader, lowercase)
+        return loader
+
+    return register
+
+
+def _sources() -> dict[str, tuple[SourceLoader, bool]]:
+    from fin_intel import sources  # noqa: F401  (domain modules register their sources)
+
+    return SOURCES
 
 
 class SpecError(ValueError):
@@ -75,15 +76,16 @@ class Spec:
 
 
 def parse(text: str) -> Spec:
+    names = _sources()
     head, *steps = text.strip().split("|")
-    parts = _OPERATOR.split(head)
+    parts = re.split(rf"([/-])(?=(?:{'|'.join(map(re.escape, names))}):)", head)
     if len(parts) not in (1, 3):
         raise SpecError(f"{text!r}: at most one ratio or difference per spec")
     terms = []
     for part in parts[::2]:
         source, _, ident = part.partition(":")
-        if source not in SOURCES or not ident:
-            raise SpecError(f"{part!r}: expected one of {', '.join(SOURCES)} followed by :id")
+        if source not in names or not ident:
+            raise SpecError(f"{part!r}: expected one of {', '.join(sorted(names))} followed by :id")
         terms.append((source, ident.upper()))
     transforms = []
     for step in steps:
@@ -154,28 +156,9 @@ def _combine(a: indicators.Series, b: indicators.Series, op: str) -> indicators.
 def _load(
     session: Session, term: tuple[str, str], days: list[date], pit: bool
 ) -> indicators.Series:
-    source, ident = term
-    if source == "eia":
-        return _eia(session, ident, days, pit)
-    if source == "jp":
-        return _japan(session, ident, days, pit)
-    if source == "gov":
-        return _contracts(session, ident, days, pit)
-    if source == "si":
-        return _short_interest(session, ident, days, pit)
-    if source == "cboe":
-        return _cboe(session, ident, days, pit)
-    if source == "lobby":
-        return _lobbying(session, ident, days, pit)
-    if source == "bills":
-        return _bills(session, ident, days)
-    if source == "cot":
-        return _cot(session, ident.lower(), days, pit)
-    if source == "breadth":
-        return _breadth(session, ident.lower(), days)
-    if source == "fred":
-        return _fred_pit(session, ident, days) if pit else _fred_latest(session, ident, days)
-    return _price(session, ident, days, source)
+    name, ident = term
+    loader, lowercase = SOURCES[name]
+    return loader(session, ident.lower() if lowercase else ident, days, pit)
 
 
 def _price(session: Session, ticker: str, days: list[date], field: str) -> indicators.Series:
@@ -280,128 +263,7 @@ def _breadth(session: Session, ident: str, days: list[date]) -> indicators.Serie
     return [by_date.get(d) for d in days]
 
 
-def _eia(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
-    from fin_intel import energy
-
-    try:
-        series_id = energy.resolve(ident)
-    except ValueError as exc:
-        raise SpecError(str(exc)) from None
-    rows = session.execute(
-        select(EconomicObservation.date, EconomicObservation.value)
-        .where(EconomicObservation.series_id == series_id, EconomicObservation.value.is_not(None))
-        .order_by(EconomicObservation.date)
-    ).all()
-    if not rows:
-        raise SpecError(f"no EIA data for {series_id}; run fin-intel sync-eia")
-    known = [(energy.available_on(series_id, d) if pit else d, v) for d, v in rows]
-    return _step(known, days)
-
-
-def _japan(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
-    from fin_intel import japan
-
-    try:
-        series_id = japan.resolve(ident)
-    except ValueError as exc:
-        raise SpecError(str(exc)) from None
-    rows = session.execute(
-        select(EconomicObservation.date, EconomicObservation.value)
-        .where(EconomicObservation.series_id == series_id, EconomicObservation.value.is_not(None))
-        .order_by(EconomicObservation.date)
-    ).all()
-    if not rows:
-        raise SpecError(f"no data for {series_id}; run fin-intel sync-japan")
-    known = [(japan.available_on(series_id, d) if pit else d, v) for d, v in rows]
-    return _step(known, days)
-
-
-def _contracts(session: Session, prefix: str, days: list[date], pit: bool) -> indicators.Series:
-    """Monthly federal contract obligations for NAICS codes starting with `prefix`."""
-    from fin_intel import contracts
-
-    if not prefix.isdigit():
-        raise SpecError(f"gov:{prefix}: expected a NAICS code or prefix, e.g. gov:3364")
-    rows = contracts.series(session, prefix)
-    if not rows:
-        raise SpecError(f"no federal obligations for NAICS {prefix}*; run sync-contracts")
-    return _step([(contracts.available_on(m) if pit else m, v) for m, v in rows], days)
-
-
-def _short_interest(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
-    """`si:GME` short position (shares), `si:GME:dtc` days to cover."""
-    from fin_intel import shortinterest
-    from fin_intel.symbols import get_security
-
-    ticker, _, field = ident.partition(":")
-    column = {"": ShortInterest.short_position, "DTC": ShortInterest.days_to_cover}.get(field)
-    if column is None:
-        raise SpecError(f"si:{ident}: field is empty (shares short) or dtc (days to cover)")
-    security = get_security(session, ticker)
-    if security is None:
-        raise SpecError(f"unknown ticker {ticker}")
-    rows = session.execute(
-        select(ShortInterest.settlement_date, column)
-        .where(ShortInterest.security_id == security.id, column.is_not(None))
-        .order_by(ShortInterest.settlement_date)
-    ).all()
-    if not rows:
-        raise SpecError(f"no short interest for {ticker}; run sync-short-interest")
-    return _step([(shortinterest.available_on(d) if pit else d, v) for d, v in rows], days)
-
-
-def _cboe(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
-    """`cboe:equity_pc`, `cboe:spx_puts`... (putcall.py)."""
-    from fin_intel import putcall
-
-    try:
-        series_id = putcall.resolve(ident)
-    except ValueError as exc:
-        raise SpecError(str(exc)) from None
-    rows = session.execute(
-        select(EconomicObservation.date, EconomicObservation.value)
-        .where(EconomicObservation.series_id == series_id, EconomicObservation.value.is_not(None))
-        .order_by(EconomicObservation.date)
-    ).all()
-    if not rows:
-        raise SpecError(f"no data for {series_id}; run fin-intel sync-cboe")
-    return _step([(putcall.available_on(d) if pit else d, v) for d, v in rows], days)
-
-
-def _lobbying(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
-    """`lobby:DEF` quarterly spend on an issue area, `lobby:DEF:count` its reports."""
-    from fin_intel import lobbying
-
-    code, _, field = ident.partition(":")
-    if field not in ("", "COUNT"):
-        raise SpecError(f"lobby:{ident}: field is empty (spend) or count")
-    rows = lobbying.by_issue(session, code)
-    if not rows:
-        raise SpecError(f"no lobbying data for issue {code}; run fin-intel sync-lobbying")
-    known = [
-        (lobbying.available_on(y, q) if pit else lobbying.quarter_end(y, q), n if field else s)
-        for y, q, s, n in rows
-    ]
-    return _step(known, days)
-
-
-def _bills(session: Session, ident: str, days: list[date]) -> indicators.Series:
-    """`bills:defense` bills introduced in the policy area in the latest full month,
-    `bills:defense:law` enacted (aliases in bills.py)."""
-    from fin_intel import bills
-
-    area, _, field = ident.partition(":")
-    if field not in ("", "LAW"):
-        raise SpecError(f"bills:{ident}: field is empty (introduced) or law (enacted)")
-    rows = bills.monthly(session, area, enacted=bool(field))
-    if not rows:
-        raise SpecError(f"no bills for policy area {area!r}; run fin-intel sync-bills")
-    # A month's count is complete once it ends: known from the first of the next month.
-    known = [((m.replace(day=28) + timedelta(days=4)).replace(day=1), n) for m, n in rows]
-    return _step(known, days)
-
-
-def _step(known: list[tuple[date, float]], days: list[date]) -> indicators.Series:
+def step(known: list[tuple[date, float]], days: list[date]) -> indicators.Series:
     """The latest value known on each day."""
     out, i, current = [], 0, None
     for d in days:
@@ -410,19 +272,6 @@ def _step(known: list[tuple[date, float]], days: list[date]) -> indicators.Serie
             i += 1
         out.append(current)
     return out
-
-
-def _cot(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
-    from fin_intel import cot
-
-    market, _, rest = ident.partition(":")
-    group, _, field = rest.partition(":")
-    if not group:
-        raise SpecError(f"cot:{ident}: expected cot:market:group[:field]")
-    try:
-        return cot.series_by_day(session, market, group, field or "net", days, pit)
-    except ValueError as exc:
-        raise SpecError(str(exc)) from None
 
 
 def _fred_latest(session: Session, series_id: str, days: list[date]) -> indicators.Series:
@@ -466,3 +315,17 @@ def _fred_pit(session: Session, series_id: str, days: list[date]) -> indicators.
             i += 1
         out.append(known[latest] if latest is not None and latest <= d else None)
     return out
+
+
+# Built-in sources; domain modules register theirs (eia:, jp:, gov:, si:, cboe:, lobby:,
+# bills:, cot:).
+for _field in ("px", "close", "volume"):
+    source(_field)(
+        (lambda f: lambda session, ident, days, pit: _price(session, ident, days, f))(_field)
+    )
+source("fred")(
+    lambda session, ident, days, pit: (
+        _fred_pit(session, ident, days) if pit else _fred_latest(session, ident, days)
+    )
+)
+source("breadth", lowercase=True)(lambda session, ident, days, pit: _breadth(session, ident, days))

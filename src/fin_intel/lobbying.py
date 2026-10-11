@@ -19,7 +19,7 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import registry
+from fin_intel import indicators, registry, timeseries
 from fin_intel.db import upsert
 from fin_intel.models import LobbyingIssue, LobbyingReport, SyncState
 from fin_intel.pipeline import tracked
@@ -224,3 +224,21 @@ def lobbying_quarters_due(session: Session, first_year: int, today: date) -> lis
 registry.register(
     Dataset("lda", "filings", lambda s, k, p, t: load_page(s, p), ("lobbying",)),
 )
+
+
+@timeseries.source("lobby")
+def _spec(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
+    """`lobby:DEF` quarterly spend on an issue area, `lobby:DEF:count` its reports."""
+
+    code, _, field = ident.partition(":")
+    if field not in ("", "COUNT"):
+        raise timeseries.SpecError(f"lobby:{ident}: field is empty (spend) or count")
+    rows = by_issue(session, code)
+    if not rows:
+        raise timeseries.SpecError(
+            f"no lobbying data for issue {code}; run fin-intel sync-lobbying"
+        )
+    known = [
+        (available_on(y, q) if pit else quarter_end(y, q), n if field else s) for y, q, s, n in rows
+    ]
+    return timeseries.step(known, days)
