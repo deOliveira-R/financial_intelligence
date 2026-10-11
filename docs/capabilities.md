@@ -165,6 +165,12 @@ only on exceptions), the speculation track high-attention with its own signals.
   breadth, lobbying spend, contracts, FRED/EIA) as known then and a year earlier, and its
   policy timeline. Each section fails on its own, reporting why.
 
+## 9. Agent tools (MCP)
+
+- `fin-intel mcp`: the same research functions as MCP tools for agents (list_themes,
+  company_dossier, theme_dossier, timeline, supply_chain, search_filings, filing_text,
+  timeseries, data_catalog), read-only, errors explained. Connect over SSH (deploy/README.md).
+
 ## Data operations
 
 - `sync-daily` (Mon–Fri after the US close): market bars, splits and dividends, breadth,

@@ -98,8 +98,9 @@ The shared vocabulary every connecting feature uses.
   quarters, contract months, short interest, releases) with its public date, kind, entity
   (company, theme, member) and a link to the source row; rebuilt from the sources.
 - [x] Dossiers v1 (branch `graph`): `dossier.py`, `dossier`, `/dossier/company/{ticker}`,
-  `/dossier/theme/{name}`. Not yet: the MCP server exposing them (and timeline, graph,
-  search) as agent tools; statements history; theme COT positioning (groups differ by
+  `/dossier/theme/{name}`; MCP server `mcp_server.py` (`fin-intel mcp`, stdio over SSH)
+  with dossiers, timeline, supply chain, filing search/text, series, catalog. Not yet:
+  statements history in the company dossier; theme COT positioning (groups differ by
   report type). Original notes: dossiers: company as of a date (fundamentals, metrics, ownership, insiders,
   congress, short interest, filing text, its themes' policy activity) and theme as of a date
   (spend, bills, orders, contracts, breadth, positioning, plus upstream and downstream

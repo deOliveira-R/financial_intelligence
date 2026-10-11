@@ -220,3 +220,12 @@ def serve(host: str = "127.0.0.1", port: int = 8000, reload: bool = False) -> No
     import uvicorn
 
     uvicorn.run("fin_intel.api:app", host=host, port=port, reload=reload)
+
+
+@app.command("mcp", rich_help_panel="Operations")
+def mcp_cmd() -> None:
+    """Serve the research tools to agents over MCP (stdio): dossiers, timeline, supply
+    chain, filing search and text, time series, the data catalog."""
+    from fin_intel.mcp_server import server
+
+    server.run("stdio")

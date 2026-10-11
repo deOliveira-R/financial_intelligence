@@ -105,6 +105,17 @@ Every endpoint except `/health` requires `X-API-Key` when `FI_API_KEY` is set:
 curl -H "X-API-Key: $KEY" https://<host>/securities/AAPL
 ```
 
+### Agents (MCP)
+
+`fin-intel mcp` serves the research tools (dossiers, timeline, supply chain, filing search
+and text, time series, data catalog) over MCP on stdio, read-only. Run it on the server
+through SSH, so nothing new listens on the network. In Claude Code on the laptop:
+
+```sh
+claude mcp add fin-intel -- ssh fin-intel \
+  'sudo -u finintel bash -c "cd /home/finintel/financial_intelligence && exec .venv/bin/fin-intel mcp"'
+```
+
 ## 7. Backups
 
 Any [rclone](https://rclone.org) remote works. [Cloudflare R2](https://developers.cloudflare.com/r2/) has 10 GB free; OCI Object Storage has 20 GB free in an Always Free tenancy (S3-compatible API).
