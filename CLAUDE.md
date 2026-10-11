@@ -15,6 +15,7 @@ high-attention track with its own signals.
 - [docs/capabilities.md](docs/capabilities.md): what it can do, by goal, with commands and endpoints
 - [docs/architecture.md](docs/architecture.md): pipeline, modules, identity, point-in-time rules, how to add a source
 - [docs/data_sources.md](docs/data_sources.md): sources in use, known-unused, rejected, and paid consolidators
+- [docs/plan.md](docs/plan.md): **the current working plan across sessions; read it when resuming**
 - [docs/roadmap.md](docs/roadmap.md) (phases A–E) and [docs/backlog.md](docs/backlog.md) (deferred work)
 - [deploy/README.md](deploy/README.md): the Oracle Cloud server
 
