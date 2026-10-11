@@ -50,7 +50,8 @@ crosslist.py, world.py  non-SEC issuers, their US listings, SEC duplicates
 timeseries.py           research specs (px:, fred:, breadth:, plus registered sources) -> backtest.py,
                         screener.py, screentest.py, events.py
 cli/                    typer CLI by area (market, filings, players, macro, research, analytics,
-                        ops: schedules and rebuilds, portfolio); api.py read-only FastAPI
+                        ops: schedules and rebuilds, portfolio)
+api/                    read-only FastAPI, routers by area (app.py: key check, session, lookups)
 ```
 
 ## Rules that keep the data trustworthy

@@ -26,7 +26,7 @@ research            timeseries.py (specs on a trading calendar), backtest.py, sc
                     screentest.py, events.py, portfolio.py
                                   │
                                   ▼
-interfaces          cli/ (typer, by area: syncs, rebuilds, research)   api.py (FastAPI, read-only)
+interfaces          cli/ (typer, by area: syncs, rebuilds, research)   api/ (FastAPI routers, read-only)
 ```
 
 Rules that hold everywhere:
