@@ -16,7 +16,7 @@ The design notes below cover the US core in detail; docs/architecture.md has the
 
 ```
 providers ──fetch──► raw/ (every response, gzip, content-addressed) + raw_responses index
-                        │ loaders (ingest.py) — same code for live syncs and `rebuild`
+                        │ loaders (declared per dataset) — same code for live syncs and `rebuild`
                         ▼
 normalized   issuers ─┬─ securities ─┬─ ticker_history
                       │              ├─ daily_bars (unadjusted, per source)

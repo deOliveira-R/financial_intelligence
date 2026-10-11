@@ -37,24 +37,30 @@ uv run fin-intel serve                    # API on http://127.0.0.1:8000/docs
 ## How the code is organized
 
 ```
-providers/<source>.py   fetch (rate limits, retries) → raw store (every response kept)
-ingest.py               LOADERS[(provider, dataset)] + sync_* functions (live syncs)
-rebuild.py              TARGETS: wipe tables, replay raw through the same loaders
+providers/<source>.py   fetch (rate limits, retries) -> raw store (every response kept)
+<domain>.py             parse, load, sync one kind of data (edgar, market, dart, japan, lobbying,
+                        bills, ...) and declare its raw datasets: registry.register(Dataset(...))
+                        and timeseries sources: @timeseries.source("jp")
+registry.py, sources.py the dataset declarations; sources.py imports every declaring module
+pipeline.py, symbols.py sync bookkeeping (tracked, synced_since); security lookup, SymbolResolver
+rebuild.py              TABLES per target: wipe, then replay raw through the declared loaders
 statements.py           standard line items from US GAAP / IFRS / J-GAAP / Korean / Taiwanese concepts
 metrics.py              point-in-time company metrics (USD, splits, ADR ratios)
 crosslist.py, world.py  non-SEC issuers, their US listings, SEC duplicates
-timeseries.py           research specs (px:, fred:, cot:, eia:, jp:, gov:, si:, cboe:, lobby:, bills:, breadth:) → backtest.py, screener.py,
-                        screentest.py, events.py
-cli.py, api.py          typer CLI; read-only FastAPI
+timeseries.py           research specs (px:, fred:, breadth:, plus registered sources) -> backtest.py,
+                        screener.py, screentest.py, events.py
+cli/                    typer CLI by area (market, filings, players, macro, research, analytics,
+                        ops: schedules and rebuilds, portfolio); api.py read-only FastAPI
 ```
 
 ## Rules that keep the data trustworthy
 
 - **Raw first, rebuildable.** Every response goes to the raw store before it's parsed.
   Loaders take only `(key, payload, fetched_at)`, so make raw keys self-describing (they
-  carry whatever the loader needs). A new dataset must be registered in `LOADERS` and in
-  the right `rebuild.TARGETS` entry; anything writing facts goes in `FACT_DATASETS`
-  (`rebuild fundamentals` wipes all facts). See the checklist in docs/architecture.md.
+  carry whatever the loader needs). Declare each dataset once, in the module that loads
+  it (`registry.Dataset`: loader, payload kind, snapshot/reference flags, rebuild
+  targets); anything writing facts targets `fundamentals` (`rebuild fundamentals` wipes
+  all facts). A new module must be listed in `sources.py`. See docs/architecture.md.
 - **Fetch, then load.** Never hold a write transaction across a network call: fetch
   everything an item needs first (the raw store commits each response on its own), then
   write, committing per item (per company, per day) so long syncs make durable progress
