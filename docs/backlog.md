@@ -43,7 +43,7 @@ itself before any subscription. Status and order:
    USD/JPY implied vol, cross-currency basis, prime-broker positioning. Flag thresholds are
    judgment calls for the signal-design session to test.
 5. **Filing text** for LLM analysis skills: done for 10-K/10-Q risk factors and MD&A and
-   earnings press releases, deep-history universe since 2023, FTS5 search (`filing_text.py`).
+   earnings press releases, deep-history universe since 2023, full-text search (`filing_text.py`).
    Later: earnings call transcripts (not free), proxies (compensation, related parties),
    EDINET/DART report text, older years.
 6. **Domain data**. Done (2026-10-06): federal contract obligations by NAICS
@@ -152,8 +152,6 @@ walk-forward out-of-sample splits, and storing runs for comparison.
   statement filing dates and historical prices, for screening backtests.
 - **Peer-relative valuation:** SIC codes are loaded (`sectors.py` groups them by SIC
   division); next is comparing each company with its industry's median multiples.
-- **PostgreSQL:** SQLite holds the full fundamentals load (~20-25 GB, read-mostly, one
-  writer); move when concurrency or size demands it.
 
 ## Big players (phase D)
 

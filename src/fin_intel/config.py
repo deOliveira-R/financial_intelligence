@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="FI_", env_file=".env", extra="ignore")
 
-    database_url: str = "sqlite:///data/fin_intel.db"
+    database_url: str = "postgresql+psycopg:///fin_intel"  # local socket, OS user
     raw_dir: str = "data/raw"
     sec_user_agent: str | None = None
     fred_api_key: str | None = None

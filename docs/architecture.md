@@ -37,8 +37,9 @@ Rules that hold everywhere:
   interpreted, so a parser fix never costs quota. `fin-intel rebuild <target>` wipes a set
   of tables and replays the stored responses through the same loaders, without the network.
   A full rebuild reproduces the live database.
-- **Fetch, then load.** The raw store commits each response in its own transaction. SQLite
-  has one write lock, so syncs fetch everything an item needs before writing, and commit
+- **Fetch, then load.** The raw store commits each response in its own transaction. Syncs
+  never hold a write transaction across a network call: they fetch everything an item needs
+  before writing, and commit
   per item (per company, per day). A long write transaction blocks every other job.
 - **Reported vs derived.** Values from providers are never edited after load. Our
   inferences (fiscal labels, statements, metrics, cross-listings) live in separate tables or
@@ -48,7 +49,7 @@ Rules that hold everywhere:
 
 | Area | Modules | Notes |
 |---|---|---|
-| Plumbing | `config.py`, `db.py`, `raw.py`, `models.py`, `migrations/` | Settings from `.env` (`FI_*`); SQLite in WAL mode with a 120 s lock wait; Alembic migrations run by every CLI command |
+| Plumbing | `config.py`, `db.py`, `raw.py`, `models.py`, `migrations/` | Settings from `.env` (`FI_*`); PostgreSQL 16 (BIGINT ids, generated tsvector columns for text search); Alembic migrations from a 0001 baseline, run by every CLI command |
 | Providers | `providers/base.py`, `providers/ratelimit.py` + one file per source | Rate limits are seeded from recorded calls, so they hold across processes. `QuotaExceededError` stops a batch; `NotFoundError` on 404 |
 | Loading | `ingest.py`, `rebuild.py` | `LOADERS`, `BINARY_DATASETS`, `REQUEST_DATASETS`, `SNAPSHOT_DATASETS`, `REFERENCE_DATASETS`; `rebuild.TARGETS` and `FACT_DATASETS` |
 | Identity | `ingest.SymbolResolver`, `world.py`, `crosslist.py` | See [Identity](#identity) |
@@ -130,6 +131,6 @@ Rules that hold everywhere:
 - **Backups:** `deploy/backup.sh` uploads the tables that can't be rebuilt (raw index,
   portfolio) as SQL, plus the raw files present at dump time, to OCI Object Storage
   (rclone remote `oci`), and verifies both. Everything else is rebuilt from raw.
-- **Storage:** about 15 GB of SQLite and a few GB of raw (gzip) as of October 2026.
-  SQLite is enough for one writer at a time with short transactions; PostgreSQL works
-  through `FI_DATABASE_URL` when concurrency demands it.
+- **Storage:** PostgreSQL 16 on a 100 GB block volume (`/data`, about 30 GB of data in
+  October 2026) and the raw store (gzip, about 14 GB) on the boot disk. Concurrent syncs
+  write without contention; heavy research reads run alongside them.

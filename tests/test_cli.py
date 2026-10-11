@@ -1,11 +1,11 @@
-"""CLI runs against a real SQLite file: locking only shows up with separate connections."""
+"""CLI runs against the test database through its own engine and connections."""
 
 import copy
 
 import pytest
 import respx
-from conftest import COMPANY_FACTS
-from sqlalchemy import create_engine, select
+from conftest import COMPANY_FACTS, TEST_DATABASE_URL
+from sqlalchemy import select
 from typer.testing import CliRunner
 
 from fin_intel.cli import app
@@ -19,12 +19,12 @@ TICKERS = {
 
 
 @pytest.fixture
-def db_file(tmp_path, monkeypatch):
-    path = tmp_path / "fin.db"
-    monkeypatch.setenv("FI_DATABASE_URL", f"sqlite:///{path}")
+def db_file(engine, tmp_path, monkeypatch):
+    monkeypatch.setenv("FI_DATABASE_URL", TEST_DATABASE_URL)
     monkeypatch.setenv("FI_RAW_DIR", str(tmp_path / "raw"))
     get_engine.cache_clear()
-    yield create_engine(f"sqlite:///{path}")
+    yield engine
+    get_engine().dispose()
     get_engine.cache_clear()
 
 
@@ -125,32 +125,3 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
         "metrics",
         ("prices", ["AAPL", "MSFT"]),
     ]
-
-
-def test_locked_database_is_retried(monkeypatch):
-    import pytest
-    from sqlalchemy.exc import OperationalError
-
-    from fin_intel import cli
-
-    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
-    attempts = []
-
-    class FakeSession:
-        def rollback(self):
-            attempts.append("rollback")
-
-    def flaky(session, item):
-        attempts.append(item)
-        if len(attempts) < 3:
-            raise OperationalError("UPDATE ...", {}, Exception("database is locked"))
-        return 7
-
-    assert cli._retry_locked(FakeSession(), flaky, "x") == 7
-    assert attempts == ["x", "rollback", "x"]
-
-    def broken(session, item):
-        raise OperationalError("SELECT ...", {}, Exception("no such table: t"))
-
-    with pytest.raises(OperationalError):  # other database errors aren't retried
-        cli._retry_locked(FakeSession(), broken, "y")

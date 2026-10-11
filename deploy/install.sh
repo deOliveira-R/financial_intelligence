@@ -8,9 +8,16 @@ APP_USER=finintel
 APP_DIR="/home/$APP_USER/financial_intelligence"
 
 apt-get update
-apt-get install -y git sqlite3 rclone
+apt-get install -y git rclone postgresql
 
 id "$APP_USER" >/dev/null 2>&1 || useradd --create-home --shell /bin/bash "$APP_USER"
+
+# PostgreSQL: the app user owns the database and connects over the local socket (peer
+# authentication, no password). Data directory and tuning: deploy/README.md.
+sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '$APP_USER'" | grep -q 1 ||
+  sudo -u postgres createuser "$APP_USER"
+sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = 'fin_intel'" | grep -q 1 ||
+  sudo -u postgres createdb --owner "$APP_USER" fin_intel
 
 # uv for the app user; it installs the pinned Python itself (see .python-version).
 if [ ! -x "/home/$APP_USER/.local/bin/uv" ]; then
@@ -37,5 +44,5 @@ if systemctl is-active --quiet fin-intel-api; then
 fi
 
 echo
-echo "Installed. Next (see deploy/README.md): create $APP_DIR/.env, copy data/, then:"
+echo "Installed. Next (see deploy/README.md): create $APP_DIR/.env, restore or load data, then:"
 echo "  sudo systemctl enable --now fin-intel-api fin-intel-daily.timer fin-intel-weekly.timer fin-intel-backup.timer"

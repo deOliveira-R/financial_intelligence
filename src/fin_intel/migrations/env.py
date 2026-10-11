@@ -2,7 +2,7 @@ from alembic import context
 
 from fin_intel import models  # noqa: F401  (registers tables)
 from fin_intel.config import get_settings
-from fin_intel.db import Base, include_name, make_engine
+from fin_intel.db import Base, make_engine
 
 config = context.config
 
@@ -13,7 +13,6 @@ def run_migrations(connection) -> None:
         connection=connection,
         target_metadata=Base.metadata,
         render_as_batch=True,
-        include_name=include_name,
     )
     with context.begin_transaction():
         context.run_migrations()

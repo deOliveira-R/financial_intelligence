@@ -12,6 +12,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
+    Computed,
     Date,
     DateTime,
     Float,
@@ -23,9 +24,24 @@ from sqlalchemy import (
     false,
     true,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.orm import Mapped, deferred, mapped_column
 
 from fin_intel.db import Base
+
+# Full-text search vector of a text column (PostgreSQL caps a tsvector near 1 MB, so very
+# long documents are indexed on their first SEARCH_CHARS characters).
+SEARCH_CHARS = 500_000
+
+
+def _search_vector(column: str):
+    return deferred(
+        mapped_column(
+            TSVECTOR,
+            Computed(f"to_tsvector('english', left({column}, {SEARCH_CHARS}))", persisted=True),
+        )
+    )
+
 
 # --- raw layer and bookkeeping ---------------------------------------------------------
 
@@ -36,13 +52,13 @@ class RawResponse(Base):
     __tablename__ = "raw_responses"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    provider: Mapped[str] = mapped_column(String(32))
-    dataset: Mapped[str] = mapped_column(String(64))  # e.g. companyfacts, daily_prices
-    key: Mapped[str | None] = mapped_column(String(64))  # e.g. CIK, ticker, series id
+    provider: Mapped[str] = mapped_column(String)
+    dataset: Mapped[str] = mapped_column(String)  # e.g. companyfacts, daily_prices
+    key: Mapped[str | None] = mapped_column(String)  # e.g. CIK, ticker, series id
     params: Mapped[str | None] = mapped_column(Text)  # JSON, without credentials
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     status: Mapped[int]
-    content_hash: Mapped[str] = mapped_column(String(64))
+    content_hash: Mapped[str] = mapped_column(String)
     size: Mapped[int]
 
     __table_args__ = (Index("ix_raw_lookup", "provider", "dataset", "key", "fetched_at"),)
@@ -54,10 +70,10 @@ class SyncRun(Base):
     __tablename__ = "sync_runs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    job: Mapped[str] = mapped_column(String(64))
+    job: Mapped[str] = mapped_column(String)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    status: Mapped[str] = mapped_column(String(16))  # running, ok, partial, failed
+    status: Mapped[str] = mapped_column(String)  # running, ok, partial, failed
     items_ok: Mapped[int] = mapped_column(default=0)
     items_failed: Mapped[int] = mapped_column(default=0)
     message: Mapped[str | None] = mapped_column(Text)
@@ -68,9 +84,9 @@ class SyncState(Base):
 
     __tablename__ = "sync_state"
 
-    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
-    dataset: Mapped[str] = mapped_column(String(64), primary_key=True)
-    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String, primary_key=True)
+    dataset: Mapped[str] = mapped_column(String, primary_key=True)
+    key: Mapped[str] = mapped_column(String, primary_key=True)
     last_attempt: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     last_success: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
@@ -86,24 +102,24 @@ class Issuer(Base):
     __tablename__ = "issuers"
 
     cik: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
-    name: Mapped[str | None] = mapped_column(String(256))
+    name: Mapped[str | None] = mapped_column(String)
     # From SEC submissions: Standard Industrial Classification and filer status.
     sic: Mapped[int | None] = mapped_column(index=True)
-    sic_description: Mapped[str | None] = mapped_column(String(256))
-    filer_category: Mapped[str | None] = mapped_column(String(64))
+    sic_description: Mapped[str | None] = mapped_column(String)
+    filer_category: Mapped[str | None] = mapped_column(String)
     # Where the issuer comes from. SEC filers use their CIK; issuers known from other
     # regulators (EDINET, DART, TWSE, ESEF) get an id in a reserved range (world.py).
-    source: Mapped[str] = mapped_column(String(16), server_default="sec")
-    source_id: Mapped[str | None] = mapped_column(String(32), index=True)
-    country: Mapped[str | None] = mapped_column(String(2))
-    lei: Mapped[str | None] = mapped_column(String(20), index=True)
-    home_ticker: Mapped[str | None] = mapped_column(String(16))  # e.g. 005930 (Samsung)
+    source: Mapped[str] = mapped_column(String, server_default="sec")
+    source_id: Mapped[str | None] = mapped_column(String, index=True)
+    country: Mapped[str | None] = mapped_column(String)
+    lei: Mapped[str | None] = mapped_column(String, index=True)
+    home_ticker: Mapped[str | None] = mapped_column(String)  # e.g. 005930 (Samsung)
     fiscal_month: Mapped[int | None]  # month the fiscal year ends, when known
     # The home listing's share class (OpenFIGI): the same on every exchange, so it finds
     # the company's shares traded elsewhere (e.g. OTC in the US). See crosslist.py.
-    share_class_figi: Mapped[str | None] = mapped_column(String(12), index=True)
-    figi_name: Mapped[str | None] = mapped_column(String(128))  # OpenFIGI's name for it
-    isin: Mapped[str | None] = mapped_column(String(12))
+    share_class_figi: Mapped[str | None] = mapped_column(String, index=True)
+    figi_name: Mapped[str | None] = mapped_column(String)  # OpenFIGI's name for it
+    isin: Mapped[str | None] = mapped_column(String)
     # The SEC filer this company is, when it files with both (TSMC, Toyota, ASML): metrics
     # and screens use the SEC filer only, so the company appears once.
     same_as: Mapped[int | None] = mapped_column(index=True)
@@ -121,17 +137,17 @@ class Security(Base):
     __tablename__ = "securities"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    ticker: Mapped[str | None] = mapped_column(String(32), unique=True)
+    ticker: Mapped[str | None] = mapped_column(String, unique=True)
     active: Mapped[bool] = mapped_column(default=True, server_default=true())
-    origin: Mapped[str] = mapped_column(String(16), server_default="sec")
-    name: Mapped[str | None] = mapped_column(String(256))
-    exchange: Mapped[str | None] = mapped_column(String(32))  # as named by SEC, e.g. Nasdaq
-    mic: Mapped[str | None] = mapped_column(String(8))  # ISO 10383 primary exchange
+    origin: Mapped[str] = mapped_column(String, server_default="sec")
+    name: Mapped[str | None] = mapped_column(String)
+    exchange: Mapped[str | None] = mapped_column(String)  # as named by SEC, e.g. Nasdaq
+    mic: Mapped[str | None] = mapped_column(String)  # ISO 10383 primary exchange
     # Massive's type code: CS, ETF, PFD, WARRANT, UNIT, RIGHT, ADRC, ETN, FUND, ...
-    security_type: Mapped[str | None] = mapped_column(String(16), index=True)
+    security_type: Mapped[str | None] = mapped_column(String, index=True)
     cik: Mapped[int | None] = mapped_column(ForeignKey("issuers.cik"), index=True)
-    figi: Mapped[str | None] = mapped_column(String(12), index=True)  # composite FIGI
-    share_class_figi: Mapped[str | None] = mapped_column(String(12))
+    figi: Mapped[str | None] = mapped_column(String, index=True)  # composite FIGI
+    share_class_figi: Mapped[str | None] = mapped_column(String)
     # Last trading listing per Massive. Delisted securities keep `ticker` NULL (the symbol
     # may be reused); their old symbol lives in ticker_history with last_seen = delisted_on.
     delisted_on: Mapped[date | None] = mapped_column(Date)
@@ -140,8 +156,8 @@ class Security(Base):
     shares_outstanding: Mapped[float | None] = mapped_column(Float)
     shares_as_of: Mapped[date | None] = mapped_column(Date)
     # Trading currency of the listing's prices (None: US dollars).
-    currency: Mapped[str | None] = mapped_column(String(3))
-    figi_name: Mapped[str | None] = mapped_column(String(128))  # OpenFIGI's name (crosslist.py)
+    currency: Mapped[str | None] = mapped_column(String)
+    figi_name: Mapped[str | None] = mapped_column(String)  # OpenFIGI's name (crosslist.py)
 
 
 class TickerHistory(Base):
@@ -150,7 +166,7 @@ class TickerHistory(Base):
     __tablename__ = "ticker_history"
 
     security_id: Mapped[int] = mapped_column(ForeignKey("securities.id"), primary_key=True)
-    ticker: Mapped[str] = mapped_column(String(32), primary_key=True, index=True)
+    ticker: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     first_seen: Mapped[date] = mapped_column(Date)
     last_seen: Mapped[date] = mapped_column(Date)
 
@@ -166,7 +182,7 @@ class DailyBar(Base):
 
     security_id: Mapped[int] = mapped_column(ForeignKey("securities.id"), primary_key=True)
     date: Mapped[date] = mapped_column(Date, primary_key=True)
-    source: Mapped[str] = mapped_column(String(32), primary_key=True)
+    source: Mapped[str] = mapped_column(String, primary_key=True)
     open: Mapped[float | None] = mapped_column(Float)
     high: Mapped[float | None] = mapped_column(Float)
     low: Mapped[float | None] = mapped_column(Float)
@@ -182,8 +198,8 @@ class CorporateAction(Base):
 
     security_id: Mapped[int] = mapped_column(ForeignKey("securities.id"), primary_key=True)
     ex_date: Mapped[date] = mapped_column(Date, primary_key=True)
-    action: Mapped[str] = mapped_column(String(16), primary_key=True)  # split, dividend
-    source: Mapped[str] = mapped_column(String(32), primary_key=True)
+    action: Mapped[str] = mapped_column(String, primary_key=True)  # split, dividend
+    source: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[float] = mapped_column(Float)
 
 
@@ -196,12 +212,12 @@ class Filing(Base):
     __tablename__ = "filings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    accession: Mapped[str] = mapped_column(String(32), unique=True)
+    accession: Mapped[str] = mapped_column(String, unique=True)
     cik: Mapped[int] = mapped_column(ForeignKey("issuers.cik"), index=True)
-    form: Mapped[str | None] = mapped_column(String(16))
+    form: Mapped[str | None] = mapped_column(String)
     filed: Mapped[date | None] = mapped_column(Date)
     fiscal_year: Mapped[int | None]
-    fiscal_period: Mapped[str | None] = mapped_column(String(8))
+    fiscal_period: Mapped[str | None] = mapped_column(String)
     # Derived: the filing's primary period end (latest duration end on or before filing).
     report_period_end: Mapped[date | None] = mapped_column(Date)
 
@@ -212,8 +228,8 @@ class Concept(Base):
     __tablename__ = "concepts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    taxonomy: Mapped[str] = mapped_column(String(32))
-    name: Mapped[str] = mapped_column(String(256))
+    taxonomy: Mapped[str] = mapped_column(String)
+    name: Mapped[str] = mapped_column(String)
     label: Mapped[str | None] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
 
@@ -231,18 +247,18 @@ class Fact(Base):
 
     filing_id: Mapped[int] = mapped_column(ForeignKey("filings.id"), primary_key=True)
     concept_id: Mapped[int] = mapped_column(ForeignKey("concepts.id"), primary_key=True)
-    unit: Mapped[str] = mapped_column(String(64), primary_key=True)
+    unit: Mapped[str] = mapped_column(String, primary_key=True)
     period_start: Mapped[date] = mapped_column(Date, primary_key=True)
     period_end: Mapped[date] = mapped_column(Date, primary_key=True)
     instant: Mapped[bool]
     value: Mapped[float]
-    frame: Mapped[str | None] = mapped_column(String(16))
+    frame: Mapped[str | None] = mapped_column(String)
     # Denormalized from filings for the per-company queries every read path makes.
     cik: Mapped[int] = mapped_column(ForeignKey("issuers.cik"))
     # Derived (see derive.py): the fact's own period, from its dates and the fiscal calendar.
-    period_type: Mapped[str | None] = mapped_column(String(16))
+    period_type: Mapped[str | None] = mapped_column(String)
     fiscal_year: Mapped[int | None]
-    fiscal_period: Mapped[str | None] = mapped_column(String(8))
+    fiscal_period: Mapped[str | None] = mapped_column(String)
 
     __table_args__ = (Index("ix_facts_cik_concept", "cik", "concept_id"),)
 
@@ -267,12 +283,12 @@ class FiscalCalendar(Base):
 class EconomicSeries(Base):
     __tablename__ = "economic_series"
 
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    source: Mapped[str] = mapped_column(String(32))
-    title: Mapped[str | None] = mapped_column(String(512))
-    units: Mapped[str | None] = mapped_column(String(128))
-    frequency: Mapped[str | None] = mapped_column(String(16))
-    seasonal_adjustment: Mapped[str | None] = mapped_column(String(16))
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    source: Mapped[str] = mapped_column(String)
+    title: Mapped[str | None] = mapped_column(String)
+    units: Mapped[str | None] = mapped_column(String)
+    frequency: Mapped[str | None] = mapped_column(String)
+    seasonal_adjustment: Mapped[str | None] = mapped_column(String)
     last_updated: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     release_id: Mapped[int | None] = mapped_column(ForeignKey("economic_releases.id"))
 
@@ -283,8 +299,8 @@ class EconomicRelease(Base):
     __tablename__ = "economic_releases"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
-    name: Mapped[str | None] = mapped_column(String(256))
-    link: Mapped[str | None] = mapped_column(String(512))
+    name: Mapped[str | None] = mapped_column(String)
+    link: Mapped[str | None] = mapped_column(String)
 
 
 class EconomicReleaseDate(Base):
@@ -314,11 +330,11 @@ class Account(Base):
     __tablename__ = "accounts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(64), unique=True)  # e.g. "Fidelity Individual"
-    broker: Mapped[str] = mapped_column(String(32))  # fidelity, vanguard, manual, ...
-    account_type: Mapped[str] = mapped_column(String(32))  # taxable, ira, roth_ira, 401k, hsa
+    name: Mapped[str] = mapped_column(String, unique=True)  # e.g. "Fidelity Individual"
+    broker: Mapped[str] = mapped_column(String)  # fidelity, vanguard, manual, ...
+    account_type: Mapped[str] = mapped_column(String)  # taxable, ira, roth_ira, 401k, hsa
     taxable: Mapped[bool]
-    number_last4: Mapped[str | None] = mapped_column(String(4))
+    number_last4: Mapped[str | None] = mapped_column(String)
 
 
 class PortfolioTransaction(Base):
@@ -334,16 +350,16 @@ class PortfolioTransaction(Base):
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
     trade_date: Mapped[date] = mapped_column(Date)
     # buy, sell, reinvest, dividend, interest, split, transfer_in, transfer_out, fee, other
-    action: Mapped[str] = mapped_column(String(16))
-    symbol: Mapped[str | None] = mapped_column(String(32), index=True)
+    action: Mapped[str] = mapped_column(String)
+    symbol: Mapped[str | None] = mapped_column(String, index=True)
     security_id: Mapped[int | None] = mapped_column(ForeignKey("securities.id"))
     quantity: Mapped[float | None] = mapped_column(Float)
     price: Mapped[float | None] = mapped_column(Float)
     amount: Mapped[float | None] = mapped_column(Float)
     fees: Mapped[float] = mapped_column(Float, default=0.0)
     description: Mapped[str | None] = mapped_column(Text)
-    source: Mapped[str] = mapped_column(String(32))  # generic, fidelity, vanguard, manual
-    source_ref: Mapped[str] = mapped_column(String(64), unique=True)
+    source: Mapped[str] = mapped_column(String)  # generic, fidelity, vanguard, manual
+    source_ref: Mapped[str] = mapped_column(String, unique=True)
     imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -355,7 +371,7 @@ class PositionSnapshot(Base):
 
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
     as_of: Mapped[date] = mapped_column(Date, primary_key=True)
-    symbol: Mapped[str] = mapped_column(String(64), primary_key=True)
+    symbol: Mapped[str] = mapped_column(String, primary_key=True)
     description: Mapped[str | None] = mapped_column(Text)
     quantity: Mapped[float] = mapped_column(Float)
     price: Mapped[float | None] = mapped_column(Float)
@@ -384,7 +400,7 @@ class MarketBreadth(Base):
 
     __tablename__ = "market_breadth"
 
-    universe: Mapped[str] = mapped_column(String(32), primary_key=True)
+    universe: Mapped[str] = mapped_column(String, primary_key=True)
     date: Mapped[date] = mapped_column(Date, primary_key=True)
     count: Mapped[int]  # stocks with a bar today and the previous trading day
     advancers: Mapped[int]
@@ -409,13 +425,13 @@ class StatementItem(Base):
     __tablename__ = "statement_items"
 
     cik: Mapped[int] = mapped_column(ForeignKey("issuers.cik"), primary_key=True)
-    line_item: Mapped[str] = mapped_column(String(32), primary_key=True)
+    line_item: Mapped[str] = mapped_column(String, primary_key=True)
     period_start: Mapped[date] = mapped_column(Date, primary_key=True)
     period_end: Mapped[date] = mapped_column(Date, primary_key=True)
-    period_type: Mapped[str] = mapped_column(String(16))
+    period_type: Mapped[str] = mapped_column(String)
     fiscal_year: Mapped[int | None]
-    fiscal_period: Mapped[str | None] = mapped_column(String(8))
-    unit: Mapped[str] = mapped_column(String(64))
+    fiscal_period: Mapped[str | None] = mapped_column(String)
+    unit: Mapped[str] = mapped_column(String)
     value: Mapped[float]
     filed: Mapped[date | None] = mapped_column(Date)
     # When the figure was first public (later filings repeat it as a comparative).
@@ -437,7 +453,7 @@ class CompanyMetrics(Base):
     period_end: Mapped[date] = mapped_column(Date)  # latest financials used
     # The financials' reporting currency; amounts are converted to US dollars at the day's
     # rate (valuation needs a rate: without one, market-cap metrics are left empty).
-    currency: Mapped[str | None] = mapped_column(String(3))
+    currency: Mapped[str | None] = mapped_column(String)
     market_cap: Mapped[float | None] = mapped_column(Float)
     enterprise_value: Mapped[float | None] = mapped_column(Float)
     revenue_ttm: Mapped[float | None] = mapped_column(Float)
@@ -478,24 +494,24 @@ class InsiderTransaction(Base):
 
     __tablename__ = "insider_transactions"
 
-    key: Mapped[str] = mapped_column(String(32), primary_key=True)
-    accession: Mapped[str] = mapped_column(String(32), index=True)
-    form_type: Mapped[str | None] = mapped_column(String(8))
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    accession: Mapped[str] = mapped_column(String, index=True)
+    form_type: Mapped[str | None] = mapped_column(String)
     filing_date: Mapped[date | None] = mapped_column(Date, index=True)
     issuer_cik: Mapped[int] = mapped_column(index=True)
-    issuer_symbol: Mapped[str | None] = mapped_column(String(32))
+    issuer_symbol: Mapped[str | None] = mapped_column(String)
     owner_cik: Mapped[int | None]
-    owner_name: Mapped[str | None] = mapped_column(String(256))
-    relationship: Mapped[str | None] = mapped_column(String(64))
-    owner_title: Mapped[str | None] = mapped_column(String(256))
-    security_title: Mapped[str | None] = mapped_column(String(256))
+    owner_name: Mapped[str | None] = mapped_column(String)
+    relationship: Mapped[str | None] = mapped_column(String)
+    owner_title: Mapped[str | None] = mapped_column(String)
+    security_title: Mapped[str | None] = mapped_column(String)
     trans_date: Mapped[date] = mapped_column(Date, index=True)
-    trans_code: Mapped[str | None] = mapped_column(String(4))
-    acquired_disposed: Mapped[str | None] = mapped_column(String(2))
+    trans_code: Mapped[str | None] = mapped_column(String)
+    acquired_disposed: Mapped[str | None] = mapped_column(String)
     shares: Mapped[float | None] = mapped_column(Float)
     price: Mapped[float | None] = mapped_column(Float)
     shares_after: Mapped[float | None] = mapped_column(Float)
-    direct_indirect: Mapped[str | None] = mapped_column(String(2))
+    direct_indirect: Mapped[str | None] = mapped_column(String)
     plan_10b5_1: Mapped[bool] = mapped_column(default=False)
 
 
@@ -505,7 +521,7 @@ class InstitutionalFiler(Base):
     __tablename__ = "institutional_filers"
 
     cik: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
-    name: Mapped[str | None] = mapped_column(String(256), index=True)
+    name: Mapped[str | None] = mapped_column(String, index=True)
 
 
 class InstitutionalPosition(Base):
@@ -516,14 +532,14 @@ class InstitutionalPosition(Base):
 
     filer_cik: Mapped[int] = mapped_column(ForeignKey("institutional_filers.cik"), primary_key=True)
     period: Mapped[date] = mapped_column(Date, primary_key=True)
-    cusip: Mapped[str] = mapped_column(String(9), primary_key=True, index=True)
-    put_call: Mapped[str] = mapped_column(String(4), primary_key=True)  # "" for shares
-    issuer_name: Mapped[str | None] = mapped_column(String(256))
-    title: Mapped[str | None] = mapped_column(String(64))
+    cusip: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    put_call: Mapped[str] = mapped_column(String, primary_key=True)  # "" for shares
+    issuer_name: Mapped[str | None] = mapped_column(String)
+    title: Mapped[str | None] = mapped_column(String)
     shares: Mapped[float | None] = mapped_column(Float)  # or principal amount, see share_type
-    share_type: Mapped[str | None] = mapped_column(String(4))  # SH or PRN
+    share_type: Mapped[str | None] = mapped_column(String)  # SH or PRN
     value: Mapped[float | None] = mapped_column(Float)  # US dollars
-    accession: Mapped[str] = mapped_column(String(32))
+    accession: Mapped[str] = mapped_column(String)
     filed: Mapped[date | None] = mapped_column(Date)
 
 
@@ -532,11 +548,11 @@ class CusipMapping(Base):
 
     __tablename__ = "cusip_mappings"
 
-    cusip: Mapped[str] = mapped_column(String(9), primary_key=True)
-    figi: Mapped[str | None] = mapped_column(String(12))
-    composite_figi: Mapped[str | None] = mapped_column(String(12))
-    ticker: Mapped[str | None] = mapped_column(String(32))
-    security_type: Mapped[str | None] = mapped_column(String(64))
+    cusip: Mapped[str] = mapped_column(String, primary_key=True)
+    figi: Mapped[str | None] = mapped_column(String)
+    composite_figi: Mapped[str | None] = mapped_column(String)
+    ticker: Mapped[str | None] = mapped_column(String)
+    security_type: Mapped[str | None] = mapped_column(String)
     security_id: Mapped[int | None] = mapped_column(ForeignKey("securities.id"))
 
 
@@ -546,10 +562,10 @@ class CongressReport(Base):
 
     __tablename__ = "congress_reports"
 
-    doc_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    chamber: Mapped[str] = mapped_column(String(8))  # house or senate
-    name: Mapped[str | None] = mapped_column(String(128), index=True)
-    state: Mapped[str | None] = mapped_column(String(8))  # House state and district
+    doc_id: Mapped[str] = mapped_column(String, primary_key=True)
+    chamber: Mapped[str] = mapped_column(String)  # house or senate
+    name: Mapped[str | None] = mapped_column(String, index=True)
+    state: Mapped[str | None] = mapped_column(String)  # House state and district
     filed: Mapped[date | None] = mapped_column(Date, index=True)
     year: Mapped[int | None]
     electronic: Mapped[bool] = mapped_column(default=True)
@@ -561,17 +577,17 @@ class LegislatorTerm(Base):
 
     __tablename__ = "legislator_terms"
 
-    bioguide: Mapped[str] = mapped_column(String(8), primary_key=True)
+    bioguide: Mapped[str] = mapped_column(String, primary_key=True)
     start: Mapped[date] = mapped_column(Date, primary_key=True)
     end: Mapped[date] = mapped_column(Date)
-    chamber: Mapped[str] = mapped_column(String(8))  # house or senate
-    state: Mapped[str] = mapped_column(String(2))
+    chamber: Mapped[str] = mapped_column(String)  # house or senate
+    state: Mapped[str] = mapped_column(String)
     district: Mapped[int | None]  # House; 0 for at-large
-    party: Mapped[str | None] = mapped_column(String(32))
-    first: Mapped[str | None] = mapped_column(String(64))
-    last: Mapped[str | None] = mapped_column(String(64))
-    nickname: Mapped[str | None] = mapped_column(String(64))
-    full_name: Mapped[str | None] = mapped_column(String(128))
+    party: Mapped[str | None] = mapped_column(String)
+    first: Mapped[str | None] = mapped_column(String)
+    last: Mapped[str | None] = mapped_column(String)
+    nickname: Mapped[str | None] = mapped_column(String)
+    full_name: Mapped[str | None] = mapped_column(String)
 
 
 class Committee(Base):
@@ -579,10 +595,10 @@ class Committee(Base):
 
     __tablename__ = "committees"
 
-    id: Mapped[str] = mapped_column(String(8), primary_key=True)  # thomas id, e.g. SSAS
-    name: Mapped[str] = mapped_column(String(256))
-    chamber: Mapped[str | None] = mapped_column(String(8))
-    parent: Mapped[str | None] = mapped_column(String(8))
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # thomas id, e.g. SSAS
+    name: Mapped[str] = mapped_column(String)
+    chamber: Mapped[str | None] = mapped_column(String)
+    parent: Mapped[str | None] = mapped_column(String)
     jurisdiction: Mapped[str | None] = mapped_column(Text)
 
 
@@ -591,11 +607,11 @@ class CommitteeMembership(Base):
 
     __tablename__ = "committee_memberships"
 
-    committee: Mapped[str] = mapped_column(String(8), primary_key=True)
-    bioguide: Mapped[str] = mapped_column(String(8), primary_key=True, index=True)
-    title: Mapped[str | None] = mapped_column(String(64))
+    committee: Mapped[str] = mapped_column(String, primary_key=True)
+    bioguide: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    title: Mapped[str | None] = mapped_column(String)
     rank: Mapped[int | None]
-    side: Mapped[str | None] = mapped_column(String(16))  # majority or minority
+    side: Mapped[str | None] = mapped_column(String)  # majority or minority
 
 
 class CongressReportMember(Base):
@@ -604,11 +620,11 @@ class CongressReportMember(Base):
 
     __tablename__ = "congress_report_members"
 
-    doc_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    bioguide: Mapped[str] = mapped_column(String(8), index=True)
-    party: Mapped[str | None] = mapped_column(String(32))
-    state: Mapped[str | None] = mapped_column(String(2))
-    method: Mapped[str] = mapped_column(String(8))  # district or name
+    doc_id: Mapped[str] = mapped_column(String, primary_key=True)
+    bioguide: Mapped[str] = mapped_column(String, index=True)
+    party: Mapped[str | None] = mapped_column(String)
+    state: Mapped[str | None] = mapped_column(String)
+    method: Mapped[str] = mapped_column(String)  # district or name
 
 
 class LobbyingReport(Base):
@@ -619,14 +635,14 @@ class LobbyingReport(Base):
 
     __tablename__ = "lobbying_reports"
 
-    filing_uuid: Mapped[str] = mapped_column(String(36), primary_key=True)
+    filing_uuid: Mapped[str] = mapped_column(String, primary_key=True)
     year: Mapped[int] = mapped_column(index=True)
     quarter: Mapped[int]
-    filing_type: Mapped[str] = mapped_column(String(4))
+    filing_type: Mapped[str] = mapped_column(String)
     registrant_id: Mapped[int | None]
-    registrant: Mapped[str | None] = mapped_column(String(256))
+    registrant: Mapped[str | None] = mapped_column(String)
     client_id: Mapped[int | None] = mapped_column(index=True)
-    client: Mapped[str | None] = mapped_column(String(256), index=True)
+    client: Mapped[str | None] = mapped_column(String, index=True)
     client_description: Mapped[str | None] = mapped_column(Text)
     amount: Mapped[float | None] = mapped_column(Float)
     posted: Mapped[date | None] = mapped_column(Date)
@@ -637,8 +653,8 @@ class LobbyingIssue(Base):
 
     __tablename__ = "lobbying_issues"
 
-    filing_uuid: Mapped[str] = mapped_column(String(36), primary_key=True)
-    code: Mapped[str] = mapped_column(String(3), primary_key=True, index=True)
+    filing_uuid: Mapped[str] = mapped_column(String, primary_key=True)
+    code: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     description: Mapped[str | None] = mapped_column(Text)
     entities: Mapped[str | None] = mapped_column(Text)  # government bodies lobbied
 
@@ -648,20 +664,20 @@ class Bill(Base):
 
     __tablename__ = "bills"
 
-    id: Mapped[str] = mapped_column(String(24), primary_key=True)  # 118-hr-1234
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # 118-hr-1234
     congress: Mapped[int] = mapped_column(index=True)
-    type: Mapped[str] = mapped_column(String(8))
+    type: Mapped[str] = mapped_column(String)
     number: Mapped[int]
     introduced: Mapped[date | None] = mapped_column(Date, index=True)
     title: Mapped[str | None] = mapped_column(Text)
-    policy_area: Mapped[str | None] = mapped_column(String(64), index=True)
-    sponsor: Mapped[str | None] = mapped_column(String(8), index=True)  # bioguide id
-    sponsor_party: Mapped[str | None] = mapped_column(String(4))
+    policy_area: Mapped[str | None] = mapped_column(String, index=True)
+    sponsor: Mapped[str | None] = mapped_column(String, index=True)  # bioguide id
+    sponsor_party: Mapped[str | None] = mapped_column(String)
     cosponsors: Mapped[int | None]
     committees: Mapped[str | None] = mapped_column(Text)  # system codes, comma-separated
     latest_action: Mapped[date | None] = mapped_column(Date)
     latest_action_text: Mapped[str | None] = mapped_column(Text)
-    law: Mapped[str | None] = mapped_column(String(16))  # public law number (118-31), if enacted
+    law: Mapped[str | None] = mapped_column(String)  # public law number (118-31), if enacted
     enacted: Mapped[date | None] = mapped_column(Date)
 
 
@@ -670,8 +686,8 @@ class BillSubject(Base):
 
     __tablename__ = "bill_subjects"
 
-    bill_id: Mapped[str] = mapped_column(String(24), primary_key=True)
-    subject: Mapped[str] = mapped_column(String(128), primary_key=True, index=True)
+    bill_id: Mapped[str] = mapped_column(String, primary_key=True)
+    subject: Mapped[str] = mapped_column(String, primary_key=True, index=True)
 
 
 class PresidentialDocument(Base):
@@ -680,24 +696,25 @@ class PresidentialDocument(Base):
 
     __tablename__ = "presidential_documents"
 
-    document_number: Mapped[str] = mapped_column(String(16), primary_key=True)
-    kind: Mapped[str] = mapped_column(String(24), index=True)
-    number: Mapped[str | None] = mapped_column(String(16))  # EO / proclamation number
+    document_number: Mapped[str] = mapped_column(String, primary_key=True)
+    kind: Mapped[str] = mapped_column(String, index=True)
+    number: Mapped[str | None] = mapped_column(String)  # EO / proclamation number
     title: Mapped[str | None] = mapped_column(Text)
-    president: Mapped[str | None] = mapped_column(String(64))
+    president: Mapped[str | None] = mapped_column(String)
     signed: Mapped[date | None] = mapped_column(Date, index=True)
     published: Mapped[date | None] = mapped_column(Date)
     disposition: Mapped[str | None] = mapped_column(Text)  # amends / revokes / see also
 
 
 class PresidentialText(Base):
-    """A presidential document's full text, indexed for search in presidential_text_fts
-    (triggers in migration 0034)."""
+    """A presidential document's full text, with a full-text search vector."""
 
     __tablename__ = "presidential_texts"
+    __table_args__ = (Index("ix_presidential_texts_search", "search", postgresql_using="gin"),)
 
-    document_number: Mapped[str] = mapped_column(String(16), primary_key=True)
+    document_number: Mapped[str] = mapped_column(String, primary_key=True)
     text: Mapped[str] = mapped_column(Text)
+    search: Mapped[str] = _search_vector("text")
 
 
 class CongressTrade(Base):
@@ -706,15 +723,15 @@ class CongressTrade(Base):
 
     __tablename__ = "congress_trades"
 
-    key: Mapped[str] = mapped_column(String(32), primary_key=True)
-    doc_id: Mapped[str] = mapped_column(String(64), index=True)
-    chamber: Mapped[str] = mapped_column(String(8))
-    owner: Mapped[str | None] = mapped_column(String(16))  # self, spouse, joint, child
-    ticker: Mapped[str | None] = mapped_column(String(16), index=True)
-    asset_name: Mapped[str | None] = mapped_column(String(256))
-    asset_type: Mapped[str | None] = mapped_column(String(64))
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    doc_id: Mapped[str] = mapped_column(String, index=True)
+    chamber: Mapped[str] = mapped_column(String)
+    owner: Mapped[str | None] = mapped_column(String)  # self, spouse, joint, child
+    ticker: Mapped[str | None] = mapped_column(String, index=True)
+    asset_name: Mapped[str | None] = mapped_column(String)
+    asset_type: Mapped[str | None] = mapped_column(String)
     # purchase, sale, sale_partial or exchange
-    trans_type: Mapped[str | None] = mapped_column(String(16))
+    trans_type: Mapped[str | None] = mapped_column(String)
     trans_date: Mapped[date] = mapped_column(Date, index=True)
     notified: Mapped[date | None] = mapped_column(Date)
     amount_min: Mapped[float | None] = mapped_column(Float)
@@ -727,11 +744,11 @@ class CotPosition(Base):
 
     __tablename__ = "cot_positions"
 
-    report: Mapped[str] = mapped_column(String(16), primary_key=True)
-    market_code: Mapped[str] = mapped_column(String(8), primary_key=True)
+    report: Mapped[str] = mapped_column(String, primary_key=True)
+    market_code: Mapped[str] = mapped_column(String, primary_key=True)
     report_date: Mapped[date] = mapped_column(Date, primary_key=True)
-    group: Mapped[str] = mapped_column(String(16), primary_key=True)
-    market_name: Mapped[str | None] = mapped_column(String(128))
+    group: Mapped[str] = mapped_column(String, primary_key=True)
+    market_name: Mapped[str | None] = mapped_column(String)
     open_interest: Mapped[float | None] = mapped_column(Float)
     long: Mapped[float | None] = mapped_column(Float)
     short: Mapped[float | None] = mapped_column(Float)
@@ -740,18 +757,19 @@ class CotPosition(Base):
 
 class FilingText(Base):
     """A narrative section of a filing as plain text (filing_text.py): 10-K/10-Q risk
-    factors and MD&A, 8-K earnings press releases. Indexed for full-text search in the
-    SQLite virtual table filing_text_fts (kept in sync by triggers; see migration 0030)."""
+    factors and MD&A, 8-K earnings press releases, with a full-text search vector."""
 
     __tablename__ = "filing_texts"
+    __table_args__ = (Index("ix_filing_texts_search", "search", postgresql_using="gin"),)
 
-    accession: Mapped[str] = mapped_column(String(32), primary_key=True)
-    section: Mapped[str] = mapped_column(String(16), primary_key=True)  # mdna, EX-99.1...
+    accession: Mapped[str] = mapped_column(String, primary_key=True)
+    section: Mapped[str] = mapped_column(String, primary_key=True)  # mdna, EX-99.1...
     cik: Mapped[int] = mapped_column(index=True)
-    form: Mapped[str] = mapped_column(String(16))
+    form: Mapped[str] = mapped_column(String)
     filed: Mapped[date] = mapped_column(Date, index=True)
     period: Mapped[date | None] = mapped_column(Date)
     text: Mapped[str] = mapped_column(Text)
+    search: Mapped[str] = _search_vector("text")
 
 
 class FundHolding(Base):
@@ -760,19 +778,19 @@ class FundHolding(Base):
 
     __tablename__ = "fund_holdings"
 
-    fund: Mapped[str] = mapped_column(String(16), primary_key=True)  # the fund's ticker
+    fund: Mapped[str] = mapped_column(String, primary_key=True)  # the fund's ticker
     period: Mapped[date] = mapped_column(Date, primary_key=True)
-    identifier: Mapped[str] = mapped_column(String(128), primary_key=True)
-    series_id: Mapped[str] = mapped_column(String(16))
-    accession: Mapped[str] = mapped_column(String(32))
+    identifier: Mapped[str] = mapped_column(String, primary_key=True)
+    series_id: Mapped[str] = mapped_column(String)
+    accession: Mapped[str] = mapped_column(String)
     filed: Mapped[date] = mapped_column(Date)
-    cusip: Mapped[str | None] = mapped_column(String(9), index=True)
-    isin: Mapped[str | None] = mapped_column(String(12))
-    name: Mapped[str | None] = mapped_column(String(256))
+    cusip: Mapped[str | None] = mapped_column(String, index=True)
+    isin: Mapped[str | None] = mapped_column(String)
+    name: Mapped[str | None] = mapped_column(String)
     shares: Mapped[float | None] = mapped_column(Float)
     value_usd: Mapped[float | None] = mapped_column(Float)
     weight: Mapped[float | None] = mapped_column(Float)  # percent of net assets
-    asset_category: Mapped[str | None] = mapped_column(String(8))
+    asset_category: Mapped[str | None] = mapped_column(String)
 
 
 class ShortInterest(Base):
@@ -785,7 +803,7 @@ class ShortInterest(Base):
     short_position: Mapped[float] = mapped_column(Float)
     average_daily_volume: Mapped[float | None] = mapped_column(Float)
     days_to_cover: Mapped[float | None] = mapped_column(Float)
-    market: Mapped[str | None] = mapped_column(String(8))
+    market: Mapped[str | None] = mapped_column(String)
 
 
 class FederalObligation(Base):
@@ -795,8 +813,8 @@ class FederalObligation(Base):
     __tablename__ = "federal_obligations"
 
     month: Mapped[date] = mapped_column(Date, primary_key=True)  # first day of the month
-    naics: Mapped[str] = mapped_column(String(6), primary_key=True)
-    name: Mapped[str | None] = mapped_column(String(256))
+    naics: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str | None] = mapped_column(String)
     amount: Mapped[float] = mapped_column(Float)
 
 
@@ -807,10 +825,10 @@ class CorporateEvent(Base):
 
     __tablename__ = "corporate_events"
 
-    accession: Mapped[str] = mapped_column(String(32), primary_key=True)
-    item: Mapped[str] = mapped_column(String(8), primary_key=True)  # "" for non-8-K forms
+    accession: Mapped[str] = mapped_column(String, primary_key=True)
+    item: Mapped[str] = mapped_column(String, primary_key=True)  # "" for non-8-K forms
     cik: Mapped[int] = mapped_column(index=True)
-    form: Mapped[str] = mapped_column(String(24), index=True)
+    form: Mapped[str] = mapped_column(String, index=True)
     filed: Mapped[date] = mapped_column(Date, index=True)
     accepted: Mapped[datetime | None] = mapped_column(DateTime)
     report_date: Mapped[date | None] = mapped_column(Date)
@@ -827,7 +845,7 @@ class ForwardOutcome(Base):
     security_id: Mapped[int] = mapped_column(ForeignKey("securities.id"), primary_key=True)
     as_of: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
     cik: Mapped[int] = mapped_column(index=True)
-    sector: Mapped[str | None] = mapped_column(String(16))
+    sector: Mapped[str | None] = mapped_column(String)
     ret_1m: Mapped[float | None] = mapped_column(Float)
     ret_3m: Mapped[float | None] = mapped_column(Float)
     ret_6m: Mapped[float | None] = mapped_column(Float)

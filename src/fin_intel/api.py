@@ -875,7 +875,7 @@ def filing_search(
     limit: int = Query(20, le=200),
 ) -> list[filing_text.Hit]:
     """Full-text search over 10-K/10-Q risk factors and MD&A and earnings press releases
-    (SQLite FTS5 syntax: words, "phrases", OR, NEAR)."""
+    (web-search syntax: words, "phrases", OR, -exclude)."""
     ciks = None
     if ticker:
         security = ingest.get_security(session, ticker)
@@ -909,7 +909,7 @@ def presidential_search(
     limit: int = Query(20, le=200),
 ) -> list[presidential.Hit]:
     """Full-text search over executive orders, proclamations (tariffs), memoranda,
-    determinations and notices since 1994 (FTS5 syntax)."""
+    determinations and notices since 1994 (web-search syntax)."""
     return presidential.search(session, q, kind, since, limit)
 
 

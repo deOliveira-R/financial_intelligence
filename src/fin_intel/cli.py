@@ -1,6 +1,5 @@
 import logging
 import sys
-import time
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -8,7 +7,6 @@ from typing import Annotated, Any
 
 import typer
 from sqlalchemy import func, select
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from fin_intel import derive, ingest
@@ -38,23 +36,6 @@ def main(verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False) -> N
     init_db()
 
 
-LOCK_RETRIES, LOCK_PAUSE = 3, 30.0
-
-
-def _retry_locked(session: Session, fn: Callable[[Session, str], Any], item: str) -> Any:
-    """fn(session, item), retried when SQLite's write lock stays taken past its timeout (a
-    long write in another job). Items are idempotent, so a retry redoes the item cleanly."""
-    for attempt in range(LOCK_RETRIES + 1):
-        try:
-            return fn(session, item)
-        except OperationalError as exc:
-            if "database is locked" not in str(exc) or attempt == LOCK_RETRIES:
-                raise
-            session.rollback()
-            typer.secho(f"  {item}: database locked; retrying in {LOCK_PAUSE:.0f}s", err=True)
-            time.sleep(LOCK_PAUSE)
-
-
 def _run(job: str, items: list[str], fn: Callable[[Session, str], Any]) -> None:
     """Run fn per item, recording the run in sync_runs. A quota error stops the batch.
 
@@ -71,7 +52,7 @@ def _run(job: str, items: list[str], fn: Callable[[Session, str], Any]) -> None:
         try:
             for i, item in enumerate(items):
                 try:
-                    typer.echo(f"{job} {item}: {_retry_locked(session, fn, item)} rows")
+                    typer.echo(f"{job} {item}: {fn(session, item)} rows")
                     run.items_ok += 1
                 except QuotaExceededError as exc:
                     failed.append(item)
@@ -640,7 +621,7 @@ def search_filings(
     since: Annotated[str | None, typer.Option(help="Filed on or after (YYYY-MM-DD)")] = None,
     limit: int = 20,
 ) -> None:
-    """Full-text search over stored filing text, e.g. '"export controls" NEAR china'."""
+    """Full-text search over stored filing text, e.g. '"export controls" china -russia'."""
     from fin_intel import filing_text
 
     with session_factory()() as session:

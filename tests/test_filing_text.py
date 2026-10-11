@@ -82,7 +82,7 @@ def test_sync_search_and_rebuild(session, raw_store):
 
     hits = filing_text.search(session, '"export controls" china')
     assert [(h.form, h.section) for h in hits] == [("10-K", "risk_factors")]
-    assert "[Export controls] on advanced chips to [China]" in hits[0].snippet
+    assert "[Export] [controls] on advanced chips to [China]" in hits[0].snippet
     assert filing_text.search(session, "quarterly revenue", ciks=[2]) == []
     assert filing_text.search(session, "quarterly revenue", ciks=[1])[0].section == "EX-99.1"
 

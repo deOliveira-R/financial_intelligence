@@ -22,6 +22,8 @@ high-attention track with its own signals.
 
 ```sh
 uv sync                                   # uv-managed Python 3.14 + .venv (never the system Python)
+docker run -d --name fi-pg --restart unless-stopped -p 5433:5432 \
+  -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=fin_intel_test postgres:16   # test database, once
 uv run pytest -q                          # ~250 tests, ~10 s; must pass before every commit
 uv run ruff check . && uv run ruff format .
 uv run fin-intel --help                   # every CLI command (syncs, rebuilds, research)
@@ -52,9 +54,10 @@ cli.py, api.py          typer CLI; read-only FastAPI
   carry whatever the loader needs). A new dataset must be registered in `LOADERS` and in
   the right `rebuild.TARGETS` entry; anything writing facts goes in `FACT_DATASETS`
   (`rebuild fundamentals` wipes all facts). See the checklist in docs/architecture.md.
-- **Fetch, then load.** SQLite has one write lock and several long syncs run at once.
-  Fetch everything first, then write; commit per item (per company, per day). Never hold
-  a write transaction across a network call or across a whole table.
+- **Fetch, then load.** Never hold a write transaction across a network call: fetch
+  everything an item needs first (the raw store commits each response on its own), then
+  write, committing per item (per company, per day) so long syncs make durable progress
+  and don't hold row locks for hours.
 - **Point in time.** Never let a backtest see data before it was public: use
   `first_filed`, ALFRED vintages, release dates; prices and FX as of the day.
 - **Reported vs derived.** Never edit provider values after load. Inferences live in
@@ -69,10 +72,11 @@ cli.py, api.py          typer CLI; read-only FastAPI
 - Branch per feature; commit only with a green `pytest`; fast-forward `main` once validated
   (tests plus a live check), then deploy. Commit messages end with the attribution lines
   the session provides.
-- Tests build fixtures in code (`tests/conftest.py`), mock HTTP with `respx`, and use
-  in-memory SQLite with `StaticPool`. The raw store commits on its own connection, so
-  commit after direct loader calls in tests. New providers get their limits relaxed in
-  `conftest.py`.
+- Tests build fixtures in code (`tests/conftest.py`), mock HTTP with `respx`, and run on
+  a PostgreSQL test database (`FI_TEST_DATABASE_URL`, default the Docker one above): the
+  schema is built from the migrations once per run and every table is truncated after
+  each test. The raw store commits on its own connection, so commit after direct loader
+  calls in tests. New providers get their limits relaxed in `conftest.py`.
 - Match the surrounding style: docstrings explain *why*, comments are sparse, line length 100.
 - Keys live in `.env` (`FI_*`, see `.env.example`). They're for free services and are
   low-stakes; handle them without friction, but never commit `.env`.
@@ -103,9 +107,10 @@ cli.py, api.py          typer CLI; read-only FastAPI
   mis-scaled.
 - Foreign filers often add a USD convenience translation; statements keep the reporting
   currency, and metrics convert at FRED rates (no rate → no valuation).
-- Text search uses FTS5 virtual tables (`filing_text_fts`, `presidential_text_fts`) created
-  in migrations 0030 and 0034 with triggers; `db.include_name` keeps autogenerate and the
-  drift test from seeing them.
+- PostgreSQL only (since 2026-10): integers are BIGINT (`Base.type_annotation_map`), strings
+  unbounded, text search uses generated `tsvector` columns with GIN indexes
+  (`websearch_to_tsquery` syntax). Migrations restart from a 0001 baseline; the SQLite-era
+  ones are in git history. Rebuilds reset id sequences so ids reproduce.
 - `dict(session.execute(...))` breaks (Result has `.keys()`); use `.all()` first.
 - Massive's free plan: 5 calls/minute and 2 years of history. DART: ~20k requests/day.
 - Stooq, Naver and yfinance are deliberately not used (bot check / unofficial).

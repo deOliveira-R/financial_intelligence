@@ -1,6 +1,6 @@
 # Deploying on Oracle Cloud (Always Free)
 
-One small Arm VM runs everything: the API as a service, the scheduled syncs as systemd timers, and nightly backups to object storage. SQLite and the raw store stay on the VM's disk, as they do locally.
+One small Arm VM runs everything: the API as a service, the scheduled syncs as systemd timers, PostgreSQL, and nightly backups to object storage. The database lives on an attached block volume (`/data`); the raw store on the VM's disk.
 
 | Unit | When | What |
 |---|---|---|
@@ -33,7 +33,7 @@ ssh ubuntu@<vm-public-ip>
 curl -fsSL https://raw.githubusercontent.com/deOliveira-R/financial_intelligence/main/deploy/install.sh | sudo bash
 ```
 
-This installs git, sqlite3 and rclone, creates the `finintel` user, installs uv (which brings its own Python 3.14), clones the repo to `/home/finintel/financial_intelligence`, syncs dependencies, and installs the systemd units. Re-run it to deploy updates.
+This installs git, rclone and PostgreSQL, creates the `finintel` user and its database (`fin_intel`, local socket, peer authentication), installs uv (which brings its own Python 3.14), clones the repo to `/home/finintel/financial_intelligence`, syncs dependencies, and installs the systemd units. Re-run it to deploy updates.
 
 ## 4. Configure
 
@@ -57,18 +57,28 @@ FI_MARKET_OTC=true
 FI_BACKUP_REMOTE=r2:fin-intel-backups   # see step 7
 ```
 
-## 5. Copy the data instead of re-fetching it
+## 5. PostgreSQL on a block volume
 
-The local database and raw store took hours of rate-limited syncing (and Tiingo's monthly symbol quota), so copy them:
+The database is tens of GB, so it lives on a block volume (the free tier includes 200 GB of
+block storage; the boot volume takes 100). Create one in the OCI console (Block Storage >
+Block Volumes, same availability domain), attach it to the instance (paravirtualized), then:
 
 ```sh
-# on your machine: fold the WAL into the main file first
-sqlite3 data/fin_intel.db "PRAGMA wal_checkpoint(TRUNCATE);"
-rsync -avz --progress data/ ubuntu@<vm-public-ip>:/tmp/fin-intel-data/
-# on the VM
-sudo rsync -a /tmp/fin-intel-data/ /home/finintel/financial_intelligence/data/
-sudo chown -R finintel:finintel /home/finintel/financial_intelligence/data && sudo rm -rf /tmp/fin-intel-data
+sudo mkfs.ext4 -L fidata /dev/sdb && sudo mkdir -p /data
+echo "UUID=$(sudo blkid -s UUID -o value /dev/sdb) /data ext4 defaults,noatime,_netdev,nofail 0 2" | sudo tee -a /etc/fstab
+sudo mount /data
+sudo systemctl stop postgresql
+sudo rsync -a /var/lib/postgresql/16 /data/postgresql/ && sudo chown -R postgres:postgres /data/postgresql
+sudo sed -i "s|^data_directory = .*|data_directory = '/data/postgresql/16/main'|" /etc/postgresql/16/main/postgresql.conf
+printf '%s\n' 'shared_buffers = 2GB' 'effective_cache_size = 7GB' 'work_mem = 64MB' \
+  'maintenance_work_mem = 1GB' 'max_wal_size = 8GB' 'checkpoint_timeout = 15min' \
+  'random_page_cost = 1.1' 'effective_io_concurrency = 100' |
+  sudo tee /etc/postgresql/16/main/conf.d/fin-intel.conf
+sudo systemctl start postgresql
 ```
+
+The app connects with the default `FI_DATABASE_URL=postgresql+psycopg:///fin_intel`.
+Load the data by restoring a backup (below) or by syncing from scratch.
 
 Then start everything:
 
@@ -105,10 +115,10 @@ sudo systemctl start fin-intel-backup && journalctl -u fin-intel-backup -n 20
 ```
 
 Nearly every table can be rebuilt from the raw provider responses. Once all fundamentals are loaded the database is tens of GB, so `backup.sh` doesn't snapshot it every night. Instead, nightly it uploads:
-- `essential/`: the tables that can't be rebuilt, as SQL inserts. That's the raw response index (which body file is which response), accounts, portfolio transactions and broker snapshots. A few hundred KB, kept 30 days.
+- `essential/`: the tables that can't be rebuilt (a data-only `pg_dump`). That's the raw response index (which body file is which response), accounts, portfolio transactions and broker snapshots. A few hundred KB, kept 30 days.
 - `raw/`: the response bodies. They're content-addressed, so only new files upload.
 
-Set `FI_BACKUP_DB_SNAPSHOT=1` to also upload a full compressed database snapshot (faster restore, much larger).
+Set `FI_BACKUP_DB_SNAPSHOT=1` to also upload a full `pg_dump` (faster restore, much larger).
 
 Every upload is verified by checksum.
 
@@ -119,7 +129,7 @@ sudo -u finintel bash -c 'cd ~/financial_intelligence &&
   rclone copy oci:fin-intel-backups/raw data/raw &&
   rclone copy oci:fin-intel-backups/essential /tmp/essential &&
   .venv/bin/fin-intel migrate &&
-  gunzip -c $(ls /tmp/essential/*.sql.gz | tail -1) | sqlite3 data/fin_intel.db &&
+  pg_restore --dbname fin_intel --data-only $(ls /tmp/essential/*.dump | tail -1) &&
   .venv/bin/fin-intel rebuild all'
 ```
 

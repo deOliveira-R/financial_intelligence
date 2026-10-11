@@ -105,34 +105,27 @@ def search(
     since: date | None = None,
     limit: int = 20,
 ) -> list[Hit]:
-    """Full-text search (FTS5 syntax), best matches first, with snippets."""
-    where, params = ["presidential_text_fts MATCH :q"], {"q": query, "n": limit}
+    """Full-text search (web-search syntax), best matches first, with snippets."""
+    where, params = ["t.search @@ q.query"], {"q": query, "n": limit}
     if kind:
         where.append("d.kind = :kind")
         params["kind"] = kind
     if since:
         where.append("d.signed >= :since")
-        params["since"] = since.isoformat()
+        params["since"] = since
     rows = session.execute(
         text(
-            "SELECT d.document_number, d.kind, d.number, d.title, d.president, d.signed, "
-            "snippet(presidential_text_fts, 0, '[', ']', ' … ', 24) "
-            "FROM presidential_text_fts "
-            "JOIN presidential_texts t ON t.rowid = presidential_text_fts.rowid "
-            "JOIN presidential_documents d ON d.document_number = t.document_number "
-            f"WHERE {' AND '.join(where)} ORDER BY rank LIMIT :n"
+            "WITH q AS (SELECT websearch_to_tsquery('english', :q) AS query), "
+            "top AS (SELECT d.document_number, d.kind, d.number, d.title, d.president, "
+            "d.signed, t.text, ts_rank_cd(t.search, q.query) AS rank "
+            "FROM presidential_texts t JOIN presidential_documents d "
+            "ON d.document_number = t.document_number, q "
+            f"WHERE {' AND '.join(where)} ORDER BY rank DESC LIMIT :n) "
+            "SELECT top.document_number, top.kind, top.number, top.title, top.president, "
+            "top.signed, ts_headline('english', top.text, q.query, "
+            "'StartSel=[, StopSel=], MaxWords=40, MinWords=15, MaxFragments=2, "
+            "FragmentDelimiter= … ') FROM top, q ORDER BY top.rank DESC"
         ),
         params,
     ).all()
-    return [
-        Hit(
-            n,
-            k,
-            num,
-            title,
-            pres,
-            s if isinstance(s, date) or s is None else date.fromisoformat(s),
-            snip,
-        )
-        for n, k, num, title, pres, s, snip in rows
-    ]
+    return [Hit(*row) for row in rows]

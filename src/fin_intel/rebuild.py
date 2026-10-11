@@ -7,7 +7,7 @@ responses, in the order they were fetched, through the same loaders live syncs u
 from collections import Counter
 from datetime import datetime
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
 from fin_intel import breadth, metrics
@@ -223,6 +223,24 @@ TARGETS = {
 }
 
 
+def _restart_ids(session: Session, tables: list) -> None:
+    """Number a wiped table's rows from where its surviving rows end (1 when empty), as a
+    fresh load would: ids are referenced (facts by filing, portfolios by security), so a
+    rebuild must reproduce them."""
+    for table in tables:
+        key = list(table.__table__.primary_key)
+        if len(key) != 1 or key[0].type.python_type is not int:
+            continue
+        name, column = table.__tablename__, key[0].name
+        # pg_get_serial_sequence is NULL for keys without a sequence: setval then does nothing.
+        session.execute(
+            text(
+                f"SELECT setval(pg_get_serial_sequence('{name}', '{column}'), "
+                f"COALESCE((SELECT MAX({column}) FROM {name}), 0) + 1, false)"
+            )
+        )
+
+
 def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
     datasets, tables = TARGETS[target]
     # Read the raw index before writing anything (bodies load lazily, one at a time).
@@ -237,6 +255,7 @@ def rebuild(session: Session, store: RawStore, target: str) -> Counter[str]:
         session.execute(update(PortfolioTransaction).values(security_id=None))
     for table in tables:
         session.execute(delete(table))
+    _restart_ids(session, tables)
 
     # Reference datasets first (in fetch order), so market data fetched before a security
     # was discovered still finds it: the result is independent of the order syncs ran in.

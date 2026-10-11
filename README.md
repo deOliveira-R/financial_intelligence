@@ -49,8 +49,8 @@ bookkeeping  sync_runs (one per CLI command), sync_state (last outcome per item)
 - **Market breadth** (`breadth.py`). Daily internals for NYSE/Nasdaq/NYSE American common stocks: advancers/decliners, the A/D line, up/down volume, new 52-week highs and lows, and the share of stocks above their 50- and 200-day averages. It's split-adjusted, includes delisted stocks, and is recomputed nightly (~20s).
 - **Order independence.** Market-wide feeds are keyed by symbol, so rows for unknown symbols are skipped at load time. When a reference sync discovers new securities, their stored Massive bars and actions are loaded from raw (no network). Rebuilds replay reference data first. Either way the result doesn't depend on the order syncs ran in, and a full rebuild reproduces the live database exactly.
 - **Rate limits and quotas** hold across processes: limiters are seeded from recorded calls, and Tiingo's 500-symbols-per-month cap is checked before calling. `QuotaExceededError` (including Tiingo's HTTP-200 plain-text messages) stops a batch and records the skipped items in `sync_runs`.
-- **Fetch, then load.** The raw store commits each response in its own transaction, so it survives a failed load. Syncs therefore fetch everything an item needs before writing, so they never hold SQLite's write lock during a fetch. SQLite runs in WAL mode so the API can read during syncs.
-- **Database:** SQLite by default. Set `FI_DATABASE_URL` to use PostgreSQL. The schema is managed by Alembic migrations in `src/fin_intel/migrations`, applied automatically on every CLI run.
+- **Fetch, then load.** The raw store commits each response in its own transaction, so it survives a failed load. Syncs therefore fetch everything an item needs before writing, and never hold a transaction open across a network call.
+- **Database:** PostgreSQL (`FI_DATABASE_URL`, default `postgresql+psycopg:///fin_intel` over the local socket). The schema is managed by Alembic migrations in `src/fin_intel/migrations/` and applied by every CLI command.
 
 ## Provider priority
 

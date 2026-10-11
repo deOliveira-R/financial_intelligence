@@ -1,9 +1,12 @@
+import os
+
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.exc import OperationalError
 
+from fin_intel import models  # noqa: F401  (registers tables)
 from fin_intel.config import Settings, get_settings
-from fin_intel.db import init_db, session_factory
+from fin_intel.db import Base, init_db, session_factory
 from fin_intel.providers import base
 from fin_intel.raw import RawStore
 
@@ -62,13 +65,40 @@ def settings(monkeypatch):
     get_settings.cache_clear()
 
 
-@pytest.fixture
-def engine():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
+# A throwaway PostgreSQL (see CLAUDE.md: `docker run ... postgres:16` on port 5433).
+TEST_DATABASE_URL = os.environ.get(
+    "FI_TEST_DATABASE_URL", "postgresql+psycopg://postgres@localhost:5433/fin_intel_test"
+)
+
+
+@pytest.fixture(scope="session")
+def schema_engine():
+    """The test database, rebuilt from the migrations once per test run."""
+    engine = create_engine(TEST_DATABASE_URL)
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql("DROP SCHEMA public CASCADE; CREATE SCHEMA public")
+    except OperationalError as exc:
+        pytest.exit(f"no test database at {TEST_DATABASE_URL}: {exc}", returncode=2)
     init_db(engine)
-    return engine
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def engine(schema_engine):
+    yield schema_engine
+    # Close what a test left open (its transactions would block TRUNCATE), then empty
+    # every table for the next test.
+    with schema_engine.begin() as conn:
+        conn.exec_driver_sql(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            "WHERE datname = current_database() AND pid <> pg_backend_pid()"
+        )
+    schema_engine.dispose()
+    tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
+    with schema_engine.begin() as conn:
+        conn.exec_driver_sql(f"TRUNCATE {tables} RESTART IDENTITY CASCADE")
 
 
 @pytest.fixture

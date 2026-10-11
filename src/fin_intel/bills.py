@@ -17,7 +17,7 @@ import zipfile
 from datetime import date
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.orm import Session
 
 from fin_intel.db import upsert
@@ -132,11 +132,11 @@ def resolve(ident: str) -> str:
 def monthly(session: Session, area: str, enacted: bool = False) -> list[tuple[date, int]]:
     """(first of month, bills introduced — or enacted — that month) for a policy area."""
     column = Bill.enacted if enacted else Bill.introduced
-    month = func.strftime("%Y-%m-01", column)
+    month = cast(func.date_trunc("month", column), Date)
     rows = session.execute(
         select(month, func.count())
         .where(func.lower(Bill.policy_area) == resolve(area).lower(), column.is_not(None))
         .group_by(month)
         .order_by(month)
     )
-    return [(date.fromisoformat(m), n) for m, n in rows]
+    return [(m, n) for m, n in rows]

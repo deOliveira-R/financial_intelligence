@@ -6,8 +6,8 @@ earnings press releases, as plain text.
 - 8-K with Item 2.02 (results of operations): the press release and other EX-99 exhibits.
 
 Sections are found by their headings; the table of contents repeats every heading, so the
-longest span between a section's heading and the next one wins. Text is searchable with
-SQLite's full-text index (`filing_text_fts`).
+longest span between a section's heading and the next one wins. Text is searchable through
+PostgreSQL full-text search (`filing_texts.search`).
 """
 
 import html
@@ -190,27 +190,29 @@ def search(
     since: date | None = None,
     limit: int = 20,
 ) -> list[Hit]:
-    """Full-text search (SQLite FTS5 syntax: words, "exact phrases", OR, NEAR), best
+    """Full-text search (web-search syntax: words, "exact phrases", OR, -exclude), best
     matches first, with a snippet around the match."""
-    where, params = ["filing_text_fts MATCH :q"], {"q": query, "n": limit}
+    where, params = ["f.search @@ q.query"], {"q": query, "n": limit}
     if ciks:
-        where.append(f"f.cik IN ({','.join(str(int(c)) for c in ciks)})")
+        where.append("f.cik = ANY(:ciks)")
+        params["ciks"] = [int(c) for c in ciks]
     if since:
         where.append("f.filed >= :since")
-        params["since"] = since.isoformat()
+        params["since"] = since
     rows = session.execute(
         text(
-            "SELECT f.accession, f.section, f.cik, f.form, f.filed, "
-            "snippet(filing_text_fts, 0, '[', ']', ' … ', 24) "
-            "FROM filing_text_fts JOIN filing_texts f ON f.rowid = filing_text_fts.rowid "
-            f"WHERE {' AND '.join(where)} ORDER BY rank LIMIT :n"
+            "WITH q AS (SELECT websearch_to_tsquery('english', :q) AS query), "
+            "top AS (SELECT f.accession, f.section, f.cik, f.form, f.filed, f.text, "
+            "ts_rank_cd(f.search, q.query) AS rank FROM filing_texts f, q "
+            f"WHERE {' AND '.join(where)} ORDER BY rank DESC LIMIT :n) "
+            "SELECT top.accession, top.section, top.cik, top.form, top.filed, "
+            "ts_headline('english', top.text, q.query, "
+            "'StartSel=[, StopSel=], MaxWords=40, MinWords=15, MaxFragments=2, "
+            "FragmentDelimiter= … ') FROM top, q ORDER BY top.rank DESC"
         ),
         params,
     ).all()
-    return [
-        Hit(a, s, c, f, d if isinstance(d, date) else date.fromisoformat(d), snip)
-        for a, s, c, f, d, snip in rows
-    ]
+    return [Hit(a, s, c, f, d, snip) for a, s, c, f, d, snip in rows]
 
 
 def get(session: Session, accession: str, name: str | None = None) -> list[FilingText]:
