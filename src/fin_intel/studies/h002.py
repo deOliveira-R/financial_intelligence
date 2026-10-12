@@ -102,10 +102,12 @@ def analyze(
     name: str = "",
     period: str = "",
     reps: int = 500,
+    skip: tuple[date, date] | None = None,
 ) -> Result:
     """`months` are month ends; `predictor` and `ip_known` are values as known then,
     `ip_final` what industrial production turned out to be. Statistics use months inside
-    `window` (forecast fits may use earlier months)."""
+    `window` (forecast fits may use earlier months); forecasts made inside `skip` aren't
+    scored."""
     grow = log_growth(predictor)
     signal = grow if transform == "growth" else acceleration(grow)
     ip_yoy_final = log_growth(ip_final)
@@ -133,6 +135,8 @@ def analyze(
     actual, base_f, model_f = [], [], []
     for t in inside:
         if target[t] is None or ip_yoy_known[t] is None or signal[t] is None:
+            continue
+        if skip and skip[0] <= months[t] <= skip[1]:
             continue
         # Fit only on months whose outcome was known by month t.
         history = [
