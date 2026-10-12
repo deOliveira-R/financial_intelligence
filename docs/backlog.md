@@ -160,6 +160,15 @@ walk-forward out-of-sample splits, and storing runs for comparison.
 - **Peer-relative valuation:** SIC codes are loaded (`sectors.py` groups them by SIC
   division); next is comparing each company with its industry's median multiples.
 
+- **Distress signals, second hypothesis (after H001):** Altman Z'' and cash runway from the
+  latest *annual* statements (H001 used the latest balance sheet, usually a 10-Q's, so
+  they were mostly missing; errata in H001), going-concern language in 10-K text,
+  short-interest jumps, payment defaults. Needs a fresh pre-registration; H001's holdout
+  is spent, so validation is the remaining clean test until new quarters accrue.
+- **Population-wide distress list:** the daily scoring already ranks every filer; storing
+  the top 2% of the whole population (not only watched companies) would feed screens
+  (exclude flagged names) and a short-side watchlist for the speculation track.
+
 ## Big players (phase D)
 
 - **Paper congressional reports:** about 12% of House PTRs (DocID 8/9) and some Senate

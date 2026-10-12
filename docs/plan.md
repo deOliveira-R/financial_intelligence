@@ -136,11 +136,13 @@ holdout spent); H002 copper doesn't lead (acceleration a candidate); H003 the bo
 credit gap warn, the reversal comes too late, a public offset defuses it.
 
 Next, agreed with the user (2026-10-12), in order:
-- [ ] **H001 as a live exception alert:** score the frozen model (studies/h001.py
-  FROZEN, logit refit on the design quarters) for watchlist and holdings companies in
-  sync-daily; alert only when a company enters the top 2% (flag means "read the
-  filings", not "sell"); show the triggering signals; catalog-style output and an API/MCP
-  surface.
+- [x] **H001 as a live exception alert** (2026-10-12, distress.py): the frozen logit
+  scores every eligible filer daily in sync-daily (after refreshing watched companies'
+  events); watched companies in the population's top 2% are flagged, entries marked NEW,
+  with their signals. `fin-intel distress [--all|--score]`, API `/distress`, MCP
+  `distress_alerts`, table distress_scores. Building it found Z'' mostly missing in H001
+  (10-Q balance sheets): the benchmark was corrected (H001 errata; edge 7.3 against 4.9,
+  not twice); fixed signals go into a new hypothesis.
 - [ ] **H003 narrower claims on the time holdout (2015 onward):** (a) long panel: high
   debt, negative impulse, no public offset more than doubles the one-year crisis rate;
   (b) both panels: high debt, positive impulse and a credit gap above 10 points raise

@@ -1,8 +1,10 @@
 # H001: public distress signals precede blowups
 
 Status: **holdout run once (2026-10-12): the frozen alert holds at 7.3x lift with ~10
-months' warning and beats Altman Z'' clearly; below the registered bar (partial
-support).** Track: investing (exception alerts).
+months' warning; below the registered bar (partial support). Its edge over a correctly
+computed Altman Z'' is smaller than first reported (7.3 against 4.9, intervals touching;
+see Errata).** Live as an exception alert on the watchlist and holdings (distress.py).
+Track: investing (exception alerts).
 
 ## Claim
 
@@ -195,3 +197,35 @@ flagged company in nine fails within a year.
 **Next:** run it as a live exception alert on holdings and watchlists; new signals
 (going-concern language from 10-K text, short-interest jumps, payment defaults) go into a
 new pre-registered hypothesis, since this holdout is spent.
+
+## Errata after the holdout (2026-10-12)
+
+Building the live alert showed Altman Z'' missing for most companies. `annual_snapshots`
+keys figures by period end and the alert takes the latest one, which in three quarters out
+of four is a 10-Q balance sheet without annual operating income (or annual cash flow), so
+Z'' and the cash-runway test came out empty. Z'' was present in only 10-17% of rows.
+
+- **The frozen model is unchanged**: the defect is part of what was tested (its weak-Z''
+  and short-runway signals fire only in the quarter after each 10-K), so its three results
+  (8.0, 7.2, 7.3) stand for the model as implemented, and the live alert uses exactly it.
+- **The benchmark was handicapped**, so the comparison is corrected: Z'' from the latest
+  annual statements (`z_annual`, present in 48-61% of rows; the rest lack a tagged input),
+  top 2% of rows. Run as its own entry in the trial log (`H001_BENCHMARK`, frozen before its
+  single holdout run; studies/h001_benchmark.py):
+
+| Lift at 2% (95%), recall | Design | Validation | Holdout |
+|---|---|---|---|
+| Frozen alert | 8.0 (6.7-9.7), 16% | 7.2 (4.1-10.7), 16% | **7.3 (5.8-8.9), 21%** |
+| Altman Z'' as tested (handicapped) | 3.5, 7% | 5.6, 11% | 3.0, 6% |
+| **Altman Z'' from annual statements** | 3.1 (1.8-4.3), 6% | 7.3 (3.4-12.0), 15% | **4.9 (3.1-6.6), 10%** |
+| Weak Z'' (annual, < 1.1) as a signal | 2.9, flags 14% | 2.8, flags 21% | 2.8, flags 24% |
+
+In the holdout the frozen alert flagged 2.9% of rows (ties) against the benchmark's 2.0%,
+which flatters its recall; its precision (11.4% against 7.6%) and lift are the fairer
+comparison. **Corrected reading:** the combined alert beats the textbook model in design
+and the holdout on point estimates (by about half in the holdout), ties it in validation,
+and the holdout intervals touch: better than Altman Z'' alone, not "more than twice".
+The verdict, partial support, is unchanged.
+
+The correct Z'' and runway signals, with going-concern language and short-interest jumps,
+belong to a new pre-registered hypothesis (the holdout here is spent).

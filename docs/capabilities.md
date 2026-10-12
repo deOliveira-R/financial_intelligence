@@ -17,6 +17,12 @@ only on exceptions), the speculation track high-attention with its own signals.
 - API: `/portfolio/accounts`, `/positions`, `/lots`, `/realized?year=`, `/harvest`,
   `/context/{ticker}`, `/replacements/{ticker}`.
 - Not yet: Fidelity transaction history and Vanguard 401(k) imports (waiting for exports).
+- **Distress alerts** on the watchlist and holdings (`fin-intel distress`, `--all`,
+  `--score`; API `/distress`; run daily in sync-daily): H001's validated model
+  (late filings, restatements, exchange notices, debt acceleration, weak Z'', short
+  runway). A company entering the top 2% of all SEC filers is marked NEW; a flag means
+  "read the filings now" (about one in nine failed within a year in the holdout, ten
+  months ahead), not "sell". docs/research/H001-distress-alerts.md.
 
 ## 2. Undervalued companies
 
@@ -174,7 +180,7 @@ only on exceptions), the speculation track high-attention with its own signals.
 
 - `fin-intel mcp`: the same research functions as MCP tools for agents (list_themes,
   company_dossier, theme_dossier, timeline, supply_chain, search_filings, filing_text,
-  timeseries, data_catalog), read-only, errors explained. Connect over SSH (deploy/README.md).
+  timeseries, data_catalog, distress_alerts), read-only, errors explained. Connect over SSH (deploy/README.md).
 
 ## Data operations
 
