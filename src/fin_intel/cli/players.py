@@ -246,7 +246,8 @@ def sync_news(
     query: Annotated[list[str] | None, typer.Option(help="Only these queries (news.py)")] = None,
 ) -> None:
     """Load daily worldwide news attention (GDELT, 65 languages, since 2017) for the thesis
-    queries in news.py: one request every 10 seconds, past years once per query text."""
+    queries in news.py: one request every 30 seconds (GDELT throttles), past years once per
+    query text."""
     from fin_intel import news
     from fin_intel.providers import GdeltProvider
 
