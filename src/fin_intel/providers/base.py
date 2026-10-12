@@ -68,7 +68,7 @@ class Provider:
         key: str | None = None,
     ) -> Any:
         """GET a JSON resource (recorded in the raw store)."""
-        resp = self._request(url, params, dataset=dataset, key=key)
+        resp = self._unredirected(self._request(url, params, dataset=dataset, key=key))
         try:
             # Lenient: FRED's series notes carry raw control characters (tabs, newlines)
             # inside strings, which strict JSON rejects.
@@ -86,7 +86,15 @@ class Provider:
         key: str | None = None,
     ) -> bytes:
         """GET a non-JSON resource (zip, HTML, text), recorded in the raw store."""
-        return self._request(url, params, dataset=dataset, key=key).content
+        return self._unredirected(self._request(url, params, dataset=dataset, key=key)).content
+
+    def _unredirected(self, resp: httpx.Response) -> httpx.Response:
+        """A redirect the client didn't follow has no body: an error, not an empty answer."""
+        if resp.is_redirect:
+            raise ProviderError(
+                f"{self.name}: unfollowed redirect to {resp.headers.get('location')}"
+            )
+        return resp
 
     def post_json(self, url: str, body: Any, *, dataset: str, key: str | None = None) -> Any:
         """POST a JSON body and return the JSON response. The body is recorded with the

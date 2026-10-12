@@ -89,7 +89,9 @@ def test_macrohistory_panel(session, raw_store):
     from fin_intel import macrohistory
     from fin_intel.providers.macrohistory import JST_URL, MacrohistoryProvider
 
-    respx.get(JST_URL).respond(
+    host = "https://files.example/JSTdatasetR6.xlsx"
+    respx.get(JST_URL).respond(status_code=302, headers={"location": host})
+    respx.get(host).respond(
         content=jst_workbook(
             [
                 [2007, "USA", "USA", 111, 14450.0, 12000.0, 1, "BASE"],
@@ -103,3 +105,17 @@ def test_macrohistory_panel(session, raw_store):
     data = macrohistory.panel(session, ["gdp", "crisisJST"])
     assert data[("USA", 2007)] == {"gdp": 14450.0, "crisisJST": 1.0}
     assert data[("JPN", 2008)] == {"gdp": 500000.0, "crisisJST": 0.0}
+
+
+@respx.mock
+def test_unfollowed_redirects_are_errors(raw_store):
+    import pytest
+
+    from fin_intel.providers import BisProvider
+    from fin_intel.providers.errors import ProviderError
+
+    respx.get(url__regex=r"https://stats.bis.org/.*").respond(
+        status_code=302, headers={"location": "https://elsewhere.example/file"}
+    )
+    with pytest.raises(ProviderError, match="redirect"):
+        BisProvider(raw_store=raw_store).fetch_dataset("WS_TC", "2.0")
