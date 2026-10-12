@@ -132,8 +132,10 @@ Status 2026-10-12: survivorship-free population loaded (18k filers, dead or aliv
 sources UCDP, GDELT (`sync-news`, slow: GDELT throttles), BIS, Macrohistory, OECD panel;
 study harness (`research.py`, `fin-intel study H00N --period design|validation|holdout`,
 `--freeze`). Results: H001 distress alert 7.3x lift in the holdout (partial support,
-holdout spent); H002 copper doesn't lead (acceleration a candidate); H003 the boom and
-credit gap warn, the reversal comes too late, a public offset defuses it.
+holdout spent; live as distress alerts; edge over a correct Altman Z'' 7.3 vs 4.9);
+H002 copper doesn't lead, H004 its acceleration rejected on unseen months; H003 the boom
+and credit gap warn of banking crises (not testable after 2015: no crises; failed for
+equities), the reversal comes too late, a public offset defuses it.
 
 Next, agreed with the user (2026-10-12), in order:
 - [x] **H001 as a live exception alert** (2026-10-12, distress.py): the frozen logit
@@ -148,8 +150,10 @@ Next, agreed with the user (2026-10-12), in order:
   out-of-country check, where the boom plus a wide credit gap triples three-year crisis
   rates); the equity part was rejected (0.79 after 2015, many "booms" being 2020's GDP
   collapse widening the gap).
-- [ ] **H004: copper acceleration at 3 months** (H002 follow-up), fresh
-  pre-registration before running, ideally with China's steel output added.
+- [x] **H004: copper acceleration at 3 months** (2026-10-12): pre-registered, one
+  variant, run on months H002 never saw: rejected (validation out-of-sample R² -0.03,
+  -0.004 without the pandemic; holdout -0.18; no sector signal). China's steel output
+  isn't on FRED: backlog.
 Later: trackers for theses 2, 4, 6-8 once GDELT's load completes; new distress signals
 (going concern, short-interest jumps) as a new hypothesis.
 

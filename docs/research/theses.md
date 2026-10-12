@@ -50,6 +50,10 @@ when the danger is real, how big, how soon, and what the ways out are.
 - **Tests:** the lead-lag structure above; whether either predicts the return of cyclical
   against defensive sectors (equal-weight sector portfolios, Ken French industry data
   back to 1926) beyond what industrial production itself already says.
+- **Where it stands (2026-10-12):** iron is the present (US steel output peaks at lag 0,
+  H002); copper doesn't lead US industrial production in growth (H002) or acceleration
+  (H004, rejected on unseen months), nor cyclicals against defensives. Open: whether
+  copper anticipates *China* (needs Chinese activity data, backlog).
 
 ## 2. Sovereign bonds, trust in the currency, and the trap (mode B, parts A)
 
@@ -127,6 +131,13 @@ when the danger is real, how big, how soon, and what the ways out are.
   false-alarm rates and lead times. Implementing his full model (Minsky) is a later
   option: it's a stylized simulation, not a forecaster; the conditions above are what's
   testable.
+
+- **Where it stands (2026-10-12, H003):** the reversal comes too late to warn (credit
+  contracts as the crisis unfolds), but Keen's channel shows where expected: before 2015,
+  high debt with a reversal and no public offset doubles the one-year crisis rate (2.3x),
+  and with an offset it doesn't. The usable warning is the boom: high debt still growing
+  with a credit gap above 10 points triples three-year banking-crisis rates in both
+  panels. No crises after 2008 to test it on time; for equities it failed after 2015.
 
 ## 4. The AI investment boom unwinds by over-stretch (mode B)
 

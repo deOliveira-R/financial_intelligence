@@ -102,5 +102,6 @@ Bonferroni |t| ≥ 3.08):
 - Iron ore's 2010-2017 sample is too short; the large lag with a negative out-of-sample
   R² is overfitting.
 
-Validation isn't run on a design that failed its criterion. Next: pre-register copper
-acceleration at 3 months on its own, with China's steel output once loaded.
+Validation isn't run on a design that failed its criterion. Copper acceleration at 3
+months was pre-registered on its own as H004 and **rejected** on unseen months
+(validation out-of-sample R² -0.03, holdout -0.18).

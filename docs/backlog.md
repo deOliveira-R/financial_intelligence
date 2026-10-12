@@ -91,6 +91,12 @@ itself before any subscription. Status and order:
   (relistings like WW, unadjusted reverse splits). Remaining: one-day bad ticks (MCHB's
   41,000), and relisted companies merged onto the old security (split them by FIGI).
 
+- **China's activity data:** crude steel output (National Bureau of Statistics monthly,
+  worldsteel's monthly releases) and other Chinese industrial series aren't on FRED; a
+  source module would let thesis 1 test whether copper's expectation content is about
+  China rather than the US (H004 rejected it for US industrial production). Check each
+  site's terms and automation stance first (no bot-check circumvention).
+
 ## Trading strategy prototypes (phase B data)
 
 Each needs a walk-forward backtest on point-in-time data with transaction costs.
