@@ -126,8 +126,9 @@ MACRO_SERIES: dict[str, tuple[str, str]] = {
 }
 
 # The cross-country panel for the credit-cycle research (credit.py, H003): OECD share
-# prices (monthly) and OECD recession indicators (1 in recession; monthly, through 2022)
-# for the BIS economies FRED covers. ISO alpha-2 -> alpha-3.
+# prices (monthly), consumer prices (to deflate them) and recession indicators (1 in
+# recession; monthly, through 2022) for the BIS economies FRED covers. ISO alpha-2 ->
+# alpha-3.
 PANEL_COUNTRIES = {
     "AU": "AUS", "AT": "AUT", "BE": "BEL", "BR": "BRA", "CA": "CAN", "CH": "CHE", "CL": "CHL",
     "CN": "CHN", "CZ": "CZE", "DE": "DEU", "DK": "DNK", "ES": "ESP", "FI": "FIN", "FR": "FRA",
@@ -137,6 +138,7 @@ PANEL_COUNTRIES = {
     "ZA": "ZAF",
 }  # fmt: skip
 NO_RECESSION_SERIES = {"NL"}  # FRED has no OECD recession indicator for the Netherlands
+QUARTERLY_CPI = {"AU", "NZ"}  # these publish consumer prices quarterly
 
 
 def share_price_series(country: str) -> str:
@@ -147,8 +149,14 @@ def recession_series(country: str) -> str:
     return f"{PANEL_COUNTRIES[country]}RECM"
 
 
+def cpi_series(country: str) -> str:
+    frequency = "Q" if country in QUARTERLY_CPI else "M"
+    return f"{PANEL_COUNTRIES[country]}CPIALL{frequency}INMEI"
+
+
 def panel_series() -> list[str]:
     out = [share_price_series(c) for c in PANEL_COUNTRIES]
+    out += [cpi_series(c) for c in PANEL_COUNTRIES]
     out += [recession_series(c) for c in PANEL_COUNTRIES if c not in NO_RECESSION_SERIES]
     return out
 

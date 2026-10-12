@@ -555,11 +555,21 @@ def study(
     with session_factory()() as session:
         results = module.run(session, period, log=log)
         tried = research.trials(session, module.HYPOTHESIS)
+    import json
+    from dataclasses import asdict, is_dataclass
+
+    def fmt(value: object) -> object:
+        if isinstance(value, float):
+            return round(value, 3)
+        if isinstance(value, dict):
+            return {k: fmt(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [fmt(v) for v in value]
+        return value
+
     for r in results:
-        cells = []
-        for k, v in vars(r).items():
-            cells.append(f"{k}={v:.3f}" if isinstance(v, float) else f"{k}={v}")
-        typer.echo("  ".join(cells))
+        record = asdict(r) if is_dataclass(r) else r
+        typer.echo(json.dumps(fmt(record), default=str))
     typer.echo(
         f"{tried} variants tried so far; |t| needed after Bonferroni: "
         f"{research.bonferroni_t(tried):.2f}"
