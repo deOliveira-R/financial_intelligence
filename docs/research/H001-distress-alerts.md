@@ -1,7 +1,7 @@
 # H001: public distress signals precede blowups
 
-Status: **design run 2026-10-12 (corrected outcome): between support and rejection;
-validation running.** Track: investing (exception alerts).
+Status: **validated out of sample at ~7x lift with a year's warning; below the
+registered bar; holdout not run.** Track: investing (exception alerts).
 
 ## Claim
 
@@ -147,3 +147,22 @@ companies (SIC 6770, as currently classified: SPACs that merged carry their oper
 company's code) are excluded.** Design and validation are rerun; because validation has
 been examined, it no longer counts as an untouched test: **the holdout is the decisive
 one.**
+
+**Without blank checks, 2026-10-12** (insider threshold 0.5% of float; the logit fitted on
+design only):
+
+| Alert at 2% | Design 2013-2020 | Validation 2021-03 to 2022-06 (seen once before) |
+|---|---|---|
+| Base rate | 0.9% (1,037 of 117,000) | 0.7% (151 of 21,316) |
+| Logit of all signals | lift 8.0 (6.7-9.7), recall 16.5%, precision 7.1% | lift **7.2** (4.1-10.7), recall 15.9%, precision 5.1% |
+| Altman Z'' alone | 3.5 (2.8-4.3), recall 7% | 5.6 (3.2-8.2), recall 11% |
+| Median warning | 285 days | 362 days |
+
+Single signals in validation: restatement 5.2, late filing 5.0, short runway 3.3,
+exchange notice 3.0, auditor change 3.0, weak Z'' 2.6; insider selling 0.36.
+
+**Reading:** the combined alert keeps its strength out of sample (about 7 times the
+base rate, a year ahead) but its edge over Altman Z'' alone isn't distinguishable in
+validation, and it stays below the registered bar (lift 15, recall 30%). As an exception
+alert for a low-attention portfolio: a flag means "read the filings now" (one in twenty
+flagged companies fails within a year, against one in 140), not "sell".
