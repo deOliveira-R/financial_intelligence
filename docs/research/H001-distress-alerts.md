@@ -1,7 +1,8 @@
 # H001: public distress signals precede blowups
 
-Status: **validated out of sample at ~7x lift with a year's warning; below the
-registered bar; holdout not run.** Track: investing (exception alerts).
+Status: **holdout run once (2026-10-12): the frozen alert holds at 7.3x lift with ~10
+months' warning and beats Altman Z'' clearly; below the registered bar (partial
+support).** Track: investing (exception alerts).
 
 ## Claim
 
@@ -166,3 +167,31 @@ base rate, a year ahead) but its edge over Altman Z'' alone isn't distinguishabl
 validation, and it stays below the registered bar (lift 15, recall 30%). As an exception
 alert for a low-attention portfolio: a flag means "read the filings now" (one in twenty
 flagged companies fails within a year, against one in 140), not "sell".
+
+## Holdout (run once, 2026-10-12)
+
+Frozen with the user: all signals in a logit fitted on the design quarters, insider
+threshold 0.5% of float. Quarters 2022-09 to 2025-09, outcomes through 2026-09: 46,102
+company-quarters, 4,531 companies, a 1.6% base rate (the high-rate years saw more
+failures).
+
+| Alert | Flagged | Lift (95%) | Recall | Precision |
+|---|---|---|---|---|
+| **Frozen logit, top 2%** (ties lift it to 2.9%) | 2.9% | **7.3** (5.8-8.9) | **21%** | 11.4% |
+| Altman Z'' alone, top 2% | 2.0% | 3.0 (2.2-3.8) | 6% | 4.7% |
+| Count of signals (natural cut) | 3.0% | 6.5 (5.2-7.9) | 19% | 10.2% |
+
+Single signals: debt acceleration 5.9, exchange notice 4.8 (recall 47%), late filing 4.7,
+restatement 3.9, impairment 2.7, auditor change 2.6, short runway 2.4, weak Z'' 2.0;
+insider selling 0.56. Median warning from the first alert: 314 days.
+
+**Verdict:** across three periods (8.0 design, 7.2 validation, 7.3 holdout) the alert is
+stable at about seven times the base rate with roughly ten months' warning, and in the
+holdout it beats the textbook model (Altman Z'') by more than twice with non-overlapping
+intervals. It misses the registered bar (lift 15, recall 30%): **partial support.** Fit
+for use as an exception alert ("read the filings now"), not a sell rule: about one
+flagged company in nine fails within a year.
+
+**Next:** run it as a live exception alert on holdings and watchlists; new signals
+(going-concern language from 10-K text, short-interest jumps, payment defaults) go into a
+new pre-registered hypothesis, since this holdout is spent.
