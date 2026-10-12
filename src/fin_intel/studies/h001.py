@@ -95,6 +95,10 @@ class Row:
     float_usd: float
     signals: dict[str, bool] = field(default_factory=dict)
     z: float | None = None
+    # Z'' from the latest *annual* statements. `z` (what the frozen model used) takes the
+    # latest balance sheet, usually a 10-Q's, which has no annual income: it is missing in
+    # most quarters. Found after the holdout; kept as tested (h001_benchmark.py).
+    z_annual: float | None = None
     net_selling: float = 0.0  # share of float
     blowup: bool = False
     blowup_on: date | None = None
@@ -280,6 +284,7 @@ def build_rows(
             continue
         failed = blowups(events.get(cik, []), periodic.get(cik, []))
         snapshots = annual_snapshots(statements.get(cik, []))
+        full_years = [(d, f) for d, f in snapshots if "operating_income" in f]
         sells = sorted(selling.get(cik, []))
         sell_days = [d for d, _ in sells]
         sell_cum = np.concatenate([[0.0], np.cumsum([v for _, v in sells])]) if sells else None
@@ -302,6 +307,8 @@ def build_rows(
                 row.signals["short_runway"] = bool(short_runway(snap))
             else:
                 row.signals["weak_z"] = row.signals["short_runway"] = False
+            year = _latest(full_years, q)
+            row.z_annual = altman_z2(year) if year else None
             if sell_cum is not None:
                 lo, hi = bisect_right(sell_days, q - YEAR), bisect_right(sell_days, q)
                 row.net_selling = float(sell_cum[hi] - sell_cum[lo]) / float_usd

@@ -141,3 +141,25 @@ def test_rows_from_the_database(session):
 
     result = h001.evaluate(rows, 0.01)
     assert result["blowups"] == 4 and result["signals"]["late_filing"]["recall"] == 0.75
+    from fin_intel.studies import h001_benchmark
+
+    bench = h001_benchmark.evaluate(rows)
+    assert bench["z_coverage_annual"] == 1.0 and bench["blowups"] == 4
+
+
+def test_z_from_annual_statements_only():
+    """Quarterly balance sheets lack annual income: the as-tested Z'' goes missing, the
+    annual one keeps the last full year."""
+    year = ("total_assets", "total_liabilities", "current_assets", "current_liabilities",
+            "retained_earnings", "equity")  # fmt: skip
+    items = [(n, date(2014, 12, 31), date(2014, 12, 31), "instant", 10.0, date(2015, 3, 1))
+             for n in year]  # fmt: skip
+    items.append(
+        ("operating_income", date(2014, 1, 1), date(2014, 12, 31), "annual", 1.0, date(2015, 3, 1))
+    )
+    items += [(n, date(2015, 3, 31), date(2015, 3, 31), "instant", 10.0, date(2015, 5, 1))
+              for n in year]  # fmt: skip
+    snaps = h001.annual_snapshots(items)
+    assert h001.altman_z2(h001._latest(snaps, date(2015, 6, 30))) is None  # the 10-Q's
+    full = [(d, f) for d, f in snaps if "operating_income" in f]
+    assert h001.altman_z2(h001._latest(full, date(2015, 6, 30))) is not None
