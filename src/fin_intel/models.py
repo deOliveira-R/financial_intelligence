@@ -851,6 +851,53 @@ class ConflictEvent(Base):
     updated: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class UcdpEvent(Base):
+    """A UCDP georeferenced event of organized violence (conflict.py): state-based (1),
+    non-state (2) or one-sided violence against civilians (3), with best, low and high
+    fatality estimates. `dataset` is "ged" (the yearly, final release) or "candidate"
+    (monthly releases of the current year, replaced when the yearly release covers them)."""
+
+    __tablename__ = "ucdp_events"
+
+    dataset: Mapped[str] = mapped_column(String, primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    relid: Mapped[str | None] = mapped_column(String)
+    year: Mapped[int] = mapped_column(index=True)
+    type_of_violence: Mapped[int]
+    conflict_name: Mapped[str | None] = mapped_column(String)
+    dyad_name: Mapped[str | None] = mapped_column(String)
+    side_a: Mapped[str | None] = mapped_column(String)
+    side_b: Mapped[str | None] = mapped_column(String)
+    country: Mapped[str] = mapped_column(String, index=True)
+    country_id: Mapped[int | None]
+    region: Mapped[str | None] = mapped_column(String)
+    adm_1: Mapped[str | None] = mapped_column(String)
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    date_start: Mapped[date] = mapped_column(Date, index=True)
+    date_end: Mapped[date] = mapped_column(Date)
+    deaths_a: Mapped[int] = mapped_column(default=0)
+    deaths_b: Mapped[int] = mapped_column(default=0)
+    deaths_civilians: Mapped[int] = mapped_column(default=0)
+    deaths_unknown: Mapped[int] = mapped_column(default=0)
+    best: Mapped[int] = mapped_column(default=0)
+    low: Mapped[int] = mapped_column(default=0)
+    high: Mapped[int] = mapped_column(default=0)
+    source_headline: Mapped[str | None] = mapped_column(String)
+
+
+class NewsVolume(Base):
+    """Daily count of worldwide online news articles matching one of news.py's queries
+    (GDELT), with the day's total of monitored articles to normalize by."""
+
+    __tablename__ = "news_volume"
+
+    query: Mapped[str] = mapped_column(String, primary_key=True)
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    articles: Mapped[int]
+    total: Mapped[int | None]
+
+
 class XbrlFiling(Base):
     """A filing with XBRL financial data, from EDGAR's quarterly xbrl.idx (population.py):
     every company that filed one since 2009, alive or dead, which is the research

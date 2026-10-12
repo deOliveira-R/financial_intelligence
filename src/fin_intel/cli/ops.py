@@ -51,6 +51,7 @@ from fin_intel.cli.players import (
     sync_insiders,
     sync_legislators,
     sync_lobbying,
+    sync_news,
     sync_presidential,
     sync_short_interest,
 )
@@ -122,7 +123,8 @@ def sync_weekly() -> None:
         ("lobbying reports (Senate LDA)", sync_lobbying),
         ("bills in Congress (GovInfo)", sync_bills),
         ("presidential documents (Federal Register)", sync_presidential),
-        ("conflict events (ACLED)", sync_conflict),
+        ("conflict events (UCDP; ACLED with a Research account)", sync_conflict),
+        ("news attention to the theses (GDELT)", sync_news),
         ("forward outcomes", derive_outcomes_cmd),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))

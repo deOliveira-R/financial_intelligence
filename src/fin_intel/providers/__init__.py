@@ -20,6 +20,7 @@ from fin_intel.providers.fed import FedProvider
 from fin_intel.providers.federalregister import FederalRegisterProvider
 from fin_intel.providers.finra import FinraProvider
 from fin_intel.providers.fred import FredProvider
+from fin_intel.providers.gdelt import GdeltProvider
 from fin_intel.providers.gleif import GleifProvider
 from fin_intel.providers.govinfo import GovinfoProvider
 from fin_intel.providers.lda import LdaProvider
@@ -30,6 +31,7 @@ from fin_intel.providers.openfigi import OpenFigiProvider
 from fin_intel.providers.sec import SecProvider
 from fin_intel.providers.tiingo import TiingoProvider
 from fin_intel.providers.twse import TwseProvider
+from fin_intel.providers.ucdp import UcdpProvider
 from fin_intel.providers.usaspending import UsaspendingProvider
 
 __all__ = [
@@ -47,6 +49,7 @@ __all__ = [
     "FederalRegisterProvider",
     "FinraProvider",
     "FredProvider",
+    "GdeltProvider",
     "GleifProvider",
     "GovinfoProvider",
     "HouseProvider",
@@ -64,5 +67,6 @@ __all__ = [
     "SenateProvider",
     "TiingoProvider",
     "TwseProvider",
+    "UcdpProvider",
     "UsaspendingProvider",
 ]

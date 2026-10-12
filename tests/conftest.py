@@ -35,6 +35,7 @@ def settings(monkeypatch):
         FederalRegisterProvider,
         FedProvider,
         FinraProvider,
+        GdeltProvider,
         GovinfoProvider,
         HouseProvider,
         LdaProvider,
@@ -42,6 +43,7 @@ def settings(monkeypatch):
         MassiveProvider,
         MofProvider,
         SenateProvider,
+        UcdpProvider,
         UsaspendingProvider,
     )
     from fin_intel.providers.ratelimit import MINUTE, Limit
@@ -65,6 +67,8 @@ def settings(monkeypatch):
         BeaProvider,
         CensusProvider,
         AcledProvider,
+        GdeltProvider,
+        UcdpProvider,
     ):
         monkeypatch.setattr(provider, "limits", (Limit(10_000, MINUTE),))
     yield

@@ -54,6 +54,7 @@ from fin_intel.models import (
     LegislatorTerm,
     LobbyingIssue,
     LobbyingReport,
+    NewsVolume,
     PortfolioTransaction,
     PresidentialDocument,
     PresidentialText,
@@ -61,6 +62,7 @@ from fin_intel.models import (
     ShortInterest,
     StatementItem,
     TickerHistory,
+    UcdpEvent,
     XbrlFiling,
 )
 from fin_intel.raw import RawStore
@@ -93,7 +95,8 @@ TABLES: dict[str, list] = {
     "cot": [CotPosition],
     "events": [CorporateEvent],
     "population": [XbrlFiling],
-    "conflict": [ConflictEvent],
+    "conflict": [ConflictEvent, UcdpEvent],
+    "news": [NewsVolume],
     "economic": [
         EconomicVintage,
         EconomicObservation,

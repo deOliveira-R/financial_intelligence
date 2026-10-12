@@ -217,13 +217,16 @@ def sync_lobbying(
 
 @app.command("sync-conflict", rich_help_panel="Big players and policy")
 def sync_conflict() -> None:
-    """Load conflict and protest events worldwide (ACLED) month by month since 2018; the
-    last months are re-read as ACLED revises them. Needs FI_ACLED_EMAIL and
-    FI_ACLED_PASSWORD (the user's acleddata.com account); skipped without them."""
+    """Load conflict events worldwide: UCDP organized violence (yearly dataset since 1989,
+    monthly releases for the current year), and ACLED (also protests; month by month since
+    2018, recent months re-read) when FI_ACLED_EMAIL and FI_ACLED_PASSWORD are set for a
+    Research-tier account."""
     from fin_intel import conflict
     from fin_intel.config import get_settings
-    from fin_intel.providers import AcledProvider
+    from fin_intel.providers import AcledProvider, UcdpProvider
 
+    ucdp = UcdpProvider(raw_store=default_store())
+    run_items("sync-ucdp", ["all"], lambda s, _: conflict.sync_ucdp(s, ucdp, date.today()))
     if not get_settings().acled_password:
         typer.echo("ACLED account not configured (FI_ACLED_EMAIL, FI_ACLED_PASSWORD); skipping")
         return
@@ -236,6 +239,26 @@ def sync_conflict() -> None:
             [f"{m:%Y-%m}" for m in months],
             lambda s, k: conflict.sync_month(s, acled, date.fromisoformat(f"{k}-01")),
         )
+
+
+@app.command("sync-news", rich_help_panel="Big players and policy")
+def sync_news(
+    query: Annotated[list[str] | None, typer.Option(help="Only these queries (news.py)")] = None,
+) -> None:
+    """Load daily worldwide news attention (GDELT, 65 languages, since 2017) for the thesis
+    queries in news.py: one request every 10 seconds, past years once per query text."""
+    from fin_intel import news
+    from fin_intel.providers import GdeltProvider
+
+    gdelt = GdeltProvider(raw_store=default_store())
+    names = query or list(news.QUERIES)
+    unknown = set(names) - set(news.QUERIES)
+    if unknown:
+        raise typer.BadParameter(f"unknown queries {sorted(unknown)}")
+    with session_factory()() as session:
+        news.drop_unknown(session)
+        session.commit()
+    run_items("sync-news", names, lambda s, n: news.sync_query(s, gdelt, n, date.today()))
 
 
 @app.command("sync-bills", rich_help_panel="Big players and policy")

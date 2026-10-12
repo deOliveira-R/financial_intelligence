@@ -66,6 +66,8 @@ EXPECTED: dict[tuple[str, str], int] = {
     ("lda", "filings"): WEEKLY,
     ("govinfo", "billstatus"): WEEKLY,
     ("federalregister", "presidential_list"): WEEKLY,
+    ("ucdp", "events"): MONTHLY,
+    ("gdelt", "doc_timeline"): WEEKLY,
     # checked monthly (yearly releases)
     ("bea", "supply_use"): MONTHLY,
     ("census", "concordance"): MONTHLY,
@@ -80,13 +82,13 @@ PUBLIC, PERSONAL, CHECK = "public", "personal use", "check terms"
 # GLEIF's LEI data is CC0.
 PUBLIC_PROVIDERS = (
     "sec bea census cftc eia fed govinfo federalregister usaspending house senate lda "
-    "legislators edinet dart twse mof boj gleif"
+    "legislators edinet dart twse mof boj gleif ucdp"
 ).split()
 TERMS: dict[str, str] = {
     **dict.fromkeys(PUBLIC_PROVIDERS, PUBLIC),
     "massive": PERSONAL,
     "tiingo": PERSONAL,
-    **dict.fromkeys(("fred", "cboe", "finra", "openfigi", "esef", "acled"), CHECK),
+    **dict.fromkeys(("fred", "cboe", "finra", "openfigi", "esef", "acled", "gdelt"), CHECK),
 }
 
 
