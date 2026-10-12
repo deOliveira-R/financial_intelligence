@@ -99,8 +99,9 @@ when the danger is real, how big, how soon, and what the ways out are.
   abruptly; crises follow high private debt to GDP plus a falling credit impulse.
   Employment follows with a lag; unemployment rising from its low (the Sahm rule) marks
   recessions in real time.
-- **Data:** BIS credit to the private non-financial sector and debt service ratios (free,
-  quarterly, about 40 countries for decades): a panel with dozens of crises, which gives
+- **Data (loaded: `credit.py`, series `bis:<country>:<name>`):** BIS credit by borrowing
+  sector, the credit and government impulses, credit-to-GDP gaps and debt service ratios
+  (free, quarterly, about 45 economies for decades): a panel with dozens of crises, which gives
   statistical power the US alone can't. US detail from the Fed's Financial Accounts (Z.1,
   on FRED), bank credit (H.8, weekly), unemployment and claims.
 - **The question (the user's framing, 2026-10-12):** not whether Keen is universally right,

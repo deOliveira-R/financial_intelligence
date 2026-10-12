@@ -24,6 +24,29 @@ from fin_intel.raw import default_store
 
 
 @app.command(rich_help_panel="Macro and markets")
+def sync_bis(
+    force: Annotated[bool, typer.Option(help="Refetch even if synced this month")] = False,
+) -> None:
+    """Load BIS credit statistics for ~45 economies: credit by borrowing sector, debt
+    service ratios, credit-to-GDP gaps (credit.py; whole datasets, ~33 MB). BIS publishes
+    quarterly, so a sync within the last 25 days is enough."""
+    from datetime import UTC, datetime
+
+    from fin_intel import credit, pipeline
+    from fin_intel.providers import BisProvider
+
+    with session_factory()() as session:
+        recent = pipeline.synced_since(
+            session, "bis", "dataset", datetime.now(UTC) - timedelta(days=25)
+        )
+    if recent and not force:
+        typer.echo("BIS synced within 25 days; skipping (--force to refetch)")
+        return
+    bis = BisProvider(raw_store=default_store())
+    run_items("sync-bis", ["all"], lambda s, _: credit.sync_bis(s, bis))
+
+
+@app.command(rich_help_panel="Macro and markets")
 def sync_economic(
     series: Annotated[
         list[str] | None, typer.Argument(help="FRED ids; default: macro pack")

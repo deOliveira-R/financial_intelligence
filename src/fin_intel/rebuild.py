@@ -16,6 +16,8 @@ from fin_intel.market import deactivate_unseen_massive
 from fin_intel.models import (
     Bill,
     BillSubject,
+    BisObservation,
+    BisSeries,
     Committee,
     CommitteeMembership,
     CompanyMetrics,
@@ -97,6 +99,7 @@ TABLES: dict[str, list] = {
     "population": [XbrlFiling],
     "conflict": [ConflictEvent, UcdpEvent],
     "news": [NewsVolume],
+    "credit": [BisObservation, BisSeries],
     "economic": [
         EconomicVintage,
         EconomicObservation,

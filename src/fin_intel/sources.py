@@ -7,6 +7,7 @@ from fin_intel import (  # noqa: F401
     congress_members,
     contracts,
     cot,
+    credit,
     crosslist,
     dart,
     edgar,

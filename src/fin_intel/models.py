@@ -898,6 +898,28 @@ class NewsVolume(Base):
     total: Mapped[int | None]
 
 
+class BisSeries(Base):
+    """A BIS statistical series (credit.py): `key` is its dimension values joined by dots
+    in the dataset's order (WS_TC Q.US.P.A.M.770.A = US credit to the private
+    non-financial sector from all lenders, market value, % of GDP, adjusted for breaks)."""
+
+    __tablename__ = "bis_series"
+
+    flow: Mapped[str] = mapped_column(String, primary_key=True)
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    country: Mapped[str] = mapped_column(String, index=True)
+    title: Mapped[str | None] = mapped_column(String)
+
+
+class BisObservation(Base):
+    __tablename__ = "bis_observations"
+
+    flow: Mapped[str] = mapped_column(String, primary_key=True)
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    period: Mapped[date] = mapped_column(Date, primary_key=True)  # last day of the period
+    value: Mapped[float] = mapped_column(Float)
+
+
 class XbrlFiling(Base):
     """A filing with XBRL financial data, from EDGAR's quarterly xbrl.idx (population.py):
     every company that filed one since 2009, alive or dead, which is the research

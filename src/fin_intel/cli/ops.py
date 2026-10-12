@@ -26,6 +26,7 @@ from fin_intel.cli.filings import (
     sync_twse,
 )
 from fin_intel.cli.macro import (
+    sync_bis,
     sync_calendar,
     sync_cboe,
     sync_contracts,
@@ -117,6 +118,7 @@ def sync_weekly() -> None:
         ("JGB history (MoF, monthly file)", lambda: sync_japan(history=True)),
         ("federal contract obligations (USAspending)", sync_contracts),
         ("input-output tables and concordances (BEA, Census; monthly)", sync_industries),
+        ("credit by sector, ~45 economies (BIS; monthly)", sync_bis),
         ("short interest (FINRA)", sync_short_interest),
         ("index ETF holdings (N-PORT)", sync_funds),
         ("members of Congress and committees", sync_legislators),

@@ -27,6 +27,7 @@ def settings(monkeypatch):
     from fin_intel.providers import (
         AcledProvider,
         BeaProvider,
+        BisProvider,
         BojProvider,
         CboeProvider,
         CensusProvider,
@@ -69,6 +70,7 @@ def settings(monkeypatch):
         AcledProvider,
         GdeltProvider,
         UcdpProvider,
+        BisProvider,
     ):
         monkeypatch.setattr(provider, "limits", (Limit(10_000, MINUTE),))
     yield

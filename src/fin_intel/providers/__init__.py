@@ -1,6 +1,7 @@
 from fin_intel.providers.acled import AcledProvider
 from fin_intel.providers.base import Provider
 from fin_intel.providers.bea import BeaProvider
+from fin_intel.providers.bis import BisProvider
 from fin_intel.providers.boj import BojProvider
 from fin_intel.providers.cboe import CboeProvider
 from fin_intel.providers.census import CensusProvider
@@ -37,6 +38,7 @@ from fin_intel.providers.usaspending import UsaspendingProvider
 __all__ = [
     "AcledProvider",
     "BeaProvider",
+    "BisProvider",
     "BojProvider",
     "CboeProvider",
     "CensusProvider",

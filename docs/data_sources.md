@@ -51,6 +51,7 @@ feed replaces the patchwork (and makes a commercial product possible).
 | BEA input-output accounts (static zip) | Use tables, supply-use framework: detail (402 industries, close to 6-digit NAICS) for 2007, 2012, 2017; summary (71) for 1997-2023; BEA-to-NAICS concordance. Feeds the supply-chain graph | Free, no key; one ~20 MB zip, revised each September | `providers/bea.py`, `industries.py`, `graph.py`, `sync-industries` | Public |
 | Census Bureau NAICS concordances | 1987 SIC → 2002 → 2007 → 2012 → 2017 NAICS (four spreadsheets): puts companies (SEC SIC codes) on BEA industries | Free, no key | `providers/census.py`, `industries.py`, `sync-industries` | Public |
 | CFTC Public Reporting (Socrata) | Commitments of Traders: legacy, disaggregated, financial futures, 26 markets since 2006 | Free, no key | `providers/cftc.py`, `cot.py`, `sync-cot` | Public |
+| BIS statistics (SDMX API) | Credit by borrowing sector (households, corporations, government; % of GDP and domestic currency) for ~45 economies, some since the 1940s; debt service ratios; credit-to-GDP gaps | Free, no account; whole datasets as CSV (~33 MB), refreshed monthly | `providers/bis.py`, `credit.py`, `sync-bis`; series `bis:US:credit_impulse` | Free with attribution (BIS terms) |
 
 ### Ownership, politics, identifiers
 
