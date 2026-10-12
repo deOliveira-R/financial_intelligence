@@ -82,3 +82,9 @@ whether alerts identify future blowups, not whether shorting them pays.
 - **8-K 3.01 is also filed by takeover targets** (the exchange notice when a merger
   closes), so it will raise false alarms on companies that are acquired; it stays a
   signal as registered, and the design reports its precision separately.
+- **Periods tightened so no outcome reaches the holdout:** design quarters 2012-03 to
+  2020-12; validation quarters 2021-03 to 2022-06 (their 12-month outcomes end by
+  2023-06); holdout quarters from 2022-09. As registered, validation quarters through
+  2023-06 would have examined blowups up to 2024-06, inside the holdout.
+- **Foreign filers mostly drop out:** 20-F filers rarely tag their public float, so the
+  $75 million float rule keeps essentially US domestic filers.
