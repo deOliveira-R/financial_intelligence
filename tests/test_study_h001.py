@@ -16,6 +16,15 @@ def test_blowups_exclude_takeovers():
     bought = h001.blowups([("DEFM14A", "", date(2018, 3, 1)), ("25-NSE", "", date(2018, 9, 1))])
     assert bought == []  # a merger proxy in the year before: a takeover
     assert h001.blowups([("25-NSE", "", date(2019, 9, 1))]) == [date(2019, 9, 1)]
+    # Delisting one class of securities while still reporting isn't a failure; stopping is.
+    still_reporting = [date(2019, 11, 1), date(2020, 3, 1)]
+    assert h001.blowups([("25-NSE", "", date(2019, 9, 1))], still_reporting) == []
+    stopped = [date(2019, 5, 1), date(2019, 10, 15)]  # a straggling 10-Q within the grace
+    assert h001.blowups([("25-NSE", "", date(2019, 9, 1))], stopped) == [date(2019, 9, 1)]
+    assert (
+        h001.blowups([("425", "", date(2019, 6, 1)), ("15-12B", "", date(2019, 9, 1))], stopped)
+        == []
+    )
 
 
 def test_financial_signals():

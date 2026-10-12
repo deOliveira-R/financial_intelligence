@@ -88,3 +88,18 @@ whether alerts identify future blowups, not whether shorting them pays.
   2023-06 would have examined blowups up to 2024-06, inside the holdout.
 - **Foreign filers mostly drop out:** 20-F filers rarely tag their public float, so the
   $75 million float rule keeps essentially US domestic filers.
+
+**2026-10-12, after the first design run (validation and holdout not examined):** the
+hand review of blowups the design called for found the outcome badly misclassified. The
+first run counted 3,345 companies as failing in 2013-2021 (a 2.5% quarterly base rate);
+in a random sample of 40, most were healthy companies (Ford, Archer-Daniels-Midland,
+Hexcel, Allegion, Globe Life) filing a delisting or deregistration for *one class* of
+securities (preferred shares, notes, a secondary listing) while they kept reporting, and
+SPAC completions. Two corrections:
+- an exit form counts only if the company files no periodic report more than 120 days
+  after it (it actually stopped existing as a reporting company);
+- takeover evidence also includes Form 425 (business combination communications, filed
+  under the target), preliminary merger proxies, merger information statements and
+  going-private filings (SC 13E3), now stored as events.
+The first run's numbers are kept in the trial log as a run on the faulty outcome; they
+aren't evidence for or against the claim.

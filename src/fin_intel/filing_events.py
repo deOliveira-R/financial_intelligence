@@ -59,6 +59,10 @@ FORMS = {
     "SC TO-T": "Third-party tender offer",
     "SC 14D9": "Target's response to a tender offer",
     "DEFM14A": "Merger proxy",
+    "PREM14A": "Preliminary merger proxy",
+    "DEFM14C": "Merger information statement",
+    "425": "Business combination communication",
+    "SC 13E3": "Going-private transaction",
     "S-1": "IPO or offering registration",
     "F-1": "IPO or offering registration (foreign filer)",
 }

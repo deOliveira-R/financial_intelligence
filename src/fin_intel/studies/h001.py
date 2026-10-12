@@ -46,7 +46,11 @@ EVENT_SIGNALS = {
 FINANCIAL_SIGNALS = ("weak_z", "short_runway")
 INSIDER_THRESHOLDS = (0.005, 0.01, 0.02)  # net sales over 12 months, share of float
 EXITS = ("15-12B", "15-12G", "15-15D", "25-NSE")
-TAKEOVER_FORMS = ("DEFM14A", "SC 14D9", "SC TO-T")
+TAKEOVER_FORMS = ("DEFM14A", "PREM14A", "DEFM14C", "425", "SC 13E3", "SC 14D9", "SC TO-T")
+# Exit forms often cover one class of securities (preferred shares, notes, a secondary
+# listing) while the company keeps reporting: an exit counts only if the company files no
+# periodic report after it (a straggling report within this grace period is allowed).
+STOPPED_GRACE = timedelta(days=120)
 TAKEOVER_ITEMS = ("2.01", "5.01")
 Z_DISTRESS = 1.1
 ALERT_RATE = 0.02
@@ -78,10 +82,12 @@ class Row:
 # --- outcomes ---
 
 
-def blowups(events: list[tuple[str, str, date]]) -> list[date]:
+def blowups(events: list[tuple[str, str, date]], reports: list[date] | None = None) -> list[date]:
     """Dates a company failed: a bankruptcy 8-K, or an exit form (deregistration,
-    delisting) without takeover evidence in the year before. `events` are (form, item,
-    filed) for one company."""
+    delisting) after which it stopped filing periodic reports, without takeover evidence in
+    the year before. `events` are (form, item, filed) for one company; `reports` the dates
+    of its periodic reports (None: don't check, every exit form counts)."""
+    last_report = max(reports) if reports else None
     takeovers = sorted(
         filed
         for form, item, filed in events
@@ -92,6 +98,8 @@ def blowups(events: list[tuple[str, str, date]]) -> list[date]:
         if form.startswith("8-K") and item == "1.03":
             out.append(filed)
         elif form in EXITS:
+            if reports is not None and last_report and last_report > filed + STOPPED_GRACE:
+                continue  # it kept reporting: one class of securities, not the company
             recent = [t for t in takeovers if filed - YEAR <= t <= filed]
             if not recent:
                 out.append(filed)
@@ -190,12 +198,15 @@ def _latest(history: list[tuple[date, Any]], day: date) -> Any:
 def build_rows(session: Session, first: date, last: date) -> list[Row]:
     ciks = population.members(session)
     annual = defaultdict(list)
-    for cik, filed in session.execute(
-        select(XbrlFiling.cik, XbrlFiling.filed).where(
-            func.replace(XbrlFiling.form, "/A", "").in_(ANNUAL_FORMS)
+    periodic = defaultdict(list)
+    for cik, form, filed in session.execute(
+        select(XbrlFiling.cik, XbrlFiling.form, XbrlFiling.filed).where(
+            func.replace(XbrlFiling.form, "/A", "").in_(population.PERIODIC_FORMS)
         )
     ):
-        annual[cik].append(filed)
+        periodic[cik].append(filed)
+        if form.removesuffix("/A") in ANNUAL_FORMS:
+            annual[cik].append(filed)
     floats = _float_history(session, ciks)
     events: dict[int, list[tuple[str, str, date]]] = defaultdict(list)
     wanted_items = ("1.03", "2.01", "5.01", "4.01", "4.02", "2.04", "3.01", "2.06")
@@ -239,7 +250,7 @@ def build_rows(session: Session, first: date, last: date) -> list[Row]:
         floats_c = floats.get(cik, [])
         if not reports or not floats_c:
             continue
-        failed = blowups(events.get(cik, []))
+        failed = blowups(events.get(cik, []), periodic.get(cik, []))
         snapshots = annual_snapshots(statements.get(cik, []))
         sells = sorted(selling.get(cik, []))
         sell_days = [d for d, _ in sells]
