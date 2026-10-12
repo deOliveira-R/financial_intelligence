@@ -52,6 +52,8 @@ feed replaces the patchwork (and makes a commercial product possible).
 | Census Bureau NAICS concordances | 1987 SIC → 2002 → 2007 → 2012 → 2017 NAICS (four spreadsheets): puts companies (SEC SIC codes) on BEA industries | Free, no key | `providers/census.py`, `industries.py`, `sync-industries` | Public |
 | CFTC Public Reporting (Socrata) | Commitments of Traders: legacy, disaggregated, financial futures, 26 markets since 2006 | Free, no key | `providers/cftc.py`, `cot.py`, `sync-cot` | Public |
 | BIS statistics (SDMX API) | Credit by borrowing sector (households, corporations, government; % of GDP and domestic currency) for ~45 economies, some since the 1940s; debt service ratios; credit-to-GDP gaps | Free, no account; whole datasets as CSV (~33 MB), refreshed monthly | `providers/bis.py`, `credit.py`, `sync-bis`; series `bis:US:credit_impulse` | Free with attribution (BIS terms) |
+| Jordà-Schularick-Taylor Macrohistory Database (macrohistory.net) | 18 advanced economies yearly since 1870: credit to households and businesses, GDP, prices, rates, public debt, systemic banking crises, equity, housing and bond returns | Free download (R6 xlsx), monthly check | `providers/macrohistory.py`, `macrohistory.py`, `sync-panel` | CC BY-NC-SA 4.0: personal research only |
+| FRED: OECD panel | Share prices (`SPASTT01{CC}M661N`, monthly) and recession indicators (`{ISO3}RECM`, through 2022) for ~36 economies | As FRED | `macro.panel_series()`, `sync-panel` | Public (OECD) |
 
 ### Ownership, politics, identifiers
 

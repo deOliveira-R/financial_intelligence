@@ -125,6 +125,33 @@ MACRO_SERIES: dict[str, tuple[str, str]] = {
     "M2SL": ("liquidity", "M2 money supply"),
 }
 
+# The cross-country panel for the credit-cycle research (credit.py, H003): OECD share
+# prices (monthly) and OECD recession indicators (1 in recession; monthly, through 2022)
+# for the BIS economies FRED covers. ISO alpha-2 -> alpha-3.
+PANEL_COUNTRIES = {
+    "AU": "AUS", "AT": "AUT", "BE": "BEL", "BR": "BRA", "CA": "CAN", "CH": "CHE", "CL": "CHL",
+    "CN": "CHN", "CZ": "CZE", "DE": "DEU", "DK": "DNK", "ES": "ESP", "FI": "FIN", "FR": "FRA",
+    "GB": "GBR", "GR": "GRC", "HU": "HUN", "ID": "IDN", "IE": "IRL", "IL": "ISR", "IN": "IND",
+    "IT": "ITA", "JP": "JPN", "KR": "KOR", "LU": "LUX", "MX": "MEX", "NL": "NLD", "NO": "NOR",
+    "NZ": "NZL", "PL": "POL", "PT": "PRT", "RU": "RUS", "SE": "SWE", "TR": "TUR", "US": "USA",
+    "ZA": "ZAF",
+}  # fmt: skip
+NO_RECESSION_SERIES = {"NL"}  # FRED has no OECD recession indicator for the Netherlands
+
+
+def share_price_series(country: str) -> str:
+    return f"SPASTT01{country}M661N"
+
+
+def recession_series(country: str) -> str:
+    return f"{PANEL_COUNTRIES[country]}RECM"
+
+
+def panel_series() -> list[str]:
+    out = [share_price_series(c) for c in PANEL_COUNTRIES]
+    out += [recession_series(c) for c in PANEL_COUNTRIES if c not in NO_RECESSION_SERIES]
+    return out
+
 
 # --- loading and syncs ---
 

@@ -21,6 +21,7 @@ from fin_intel import (  # noqa: F401
     japan,
     lobbying,
     macro,
+    macrohistory,
     market,
     news,
     population,

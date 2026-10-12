@@ -47,6 +47,7 @@ def settings(monkeypatch):
         UcdpProvider,
         UsaspendingProvider,
     )
+    from fin_intel.providers.macrohistory import MacrohistoryProvider
     from fin_intel.providers.ratelimit import MINUTE, Limit
 
     for provider in (
@@ -71,6 +72,7 @@ def settings(monkeypatch):
         GdeltProvider,
         UcdpProvider,
         BisProvider,
+        MacrohistoryProvider,
     ):
         monkeypatch.setattr(provider, "limits", (Limit(10_000, MINUTE),))
     yield

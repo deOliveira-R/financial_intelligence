@@ -46,6 +46,31 @@ def sync_bis(
     run_items("sync-bis", ["all"], lambda s, _: credit.sync_bis(s, bis))
 
 
+@app.command("sync-panel", rich_help_panel="Macro and markets")
+def sync_panel(
+    force: Annotated[bool, typer.Option(help="Refetch even if synced this month")] = False,
+) -> None:
+    """Load the cross-country research panel: OECD share prices and recession indicators
+    for ~36 economies (FRED) and the Jordà-Schularick-Taylor Macrohistory Database (18
+    economies since 1870). Monthly is enough: a sync within 25 days is skipped."""
+    from datetime import UTC, datetime
+
+    from fin_intel import macrohistory, pipeline
+    from fin_intel.providers.macrohistory import MacrohistoryProvider
+
+    with session_factory()() as session:
+        recent = pipeline.synced_since(
+            session, "macrohistory", "jst", datetime.now(UTC) - timedelta(days=25)
+        )
+    if recent and not force:
+        typer.echo("research panel synced within 25 days; skipping (--force to refetch)")
+        return
+    jst = MacrohistoryProvider(raw_store=default_store())
+    run_items("sync-jst", ["R6"], lambda s, _: macrohistory.sync_jst(s, jst))
+    fred = FredProvider(raw_store=default_store())
+    run_items("sync-economic", macro.panel_series(), lambda s, i: macro.sync_economic(s, fred, i))
+
+
 @app.command(rich_help_panel="Macro and markets")
 def sync_economic(
     series: Annotated[

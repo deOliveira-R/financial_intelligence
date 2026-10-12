@@ -1,6 +1,7 @@
 # H003: when private credit reversals cause crises (Keen's conditions)
 
-Status: **pre-registered, not run** (2026-10-12). Track: macro (theses.md, thesis 3). The
+Status: **pre-registered, not run** (2026-10-12; amended the same day before any
+results, see Amendments). Track: macro (theses.md, thesis 3). The
 user's framing: not whether Steve Keen is universally right, but when his mechanism holds,
 when it doesn't, and what gets an economy out.
 
@@ -72,3 +73,21 @@ replaces the private one should cushion the shock (sectoral balances).
 - **Conditional support** (the likely and most useful result): it holds under specific
   conditions (household debt, floating-rate economies, no public offset): those
   conditions are the finding.
+
+## Amendments (before any results)
+
+**2026-10-12, data:**
+- Banking crisis dates come from the **Jordà-Schularick-Taylor Macrohistory Database**
+  (`crisisJST`, 18 advanced economies) instead of Laeven and Valencia: the IMF site refuses
+  automated downloads (HTTP 403, bot protection, which we don't circumvent). Banking
+  crises are therefore tested on 18 economies; recessions and drawdowns on the wider BIS
+  panel.
+- Recessions are the **OECD recession indicators** (FRED `{ISO3}RECM`, monthly, peak to
+  trough, through 2022-09) rather than two quarters of falling real GDP: OECD real GDP on
+  FRED is missing for most countries. A recession "starts" in the first month the
+  indicator turns to 1. The time holdout (2015 onward) therefore ends in 2022.
+- **Added: a long-history panel.** The Macrohistory Database also has yearly private
+  credit (`tloans`), nominal GDP and equity returns since 1870, with about 90 crisis
+  onsets. Test 1 and test 2 are also run there (country-year, credit impulse from yearly
+  loans), as an independent second panel; leave-one-country-out applies the same way.
+  Success requires the claim to hold in both panels or the difference to be explained.

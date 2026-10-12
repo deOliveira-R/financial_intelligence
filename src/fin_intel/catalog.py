@@ -88,6 +88,7 @@ PUBLIC_PROVIDERS = (
 TERMS: dict[str, str] = {
     **dict.fromkeys(PUBLIC_PROVIDERS, PUBLIC),
     "massive": PERSONAL,
+    "macrohistory": PERSONAL,  # CC BY-NC-SA
     "tiingo": PERSONAL,
     **dict.fromkeys(("fred", "cboe", "finra", "openfigi", "esef", "acled", "gdelt"), CHECK),
 }

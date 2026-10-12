@@ -920,6 +920,19 @@ class BisObservation(Base):
     value: Mapped[float] = mapped_column(Float)
 
 
+class PanelObservation(Base):
+    """A country-year value from a historical macro panel (macrohistory.py: the
+    Jordà-Schularick-Taylor database): credit, GDP, crises, asset returns since 1870."""
+
+    __tablename__ = "panel_observations"
+
+    source: Mapped[str] = mapped_column(String, primary_key=True)  # jst
+    country: Mapped[str] = mapped_column(String, primary_key=True)  # ISO 3166 alpha-3
+    variable: Mapped[str] = mapped_column(String, primary_key=True)
+    year: Mapped[int] = mapped_column(primary_key=True)
+    value: Mapped[float] = mapped_column(Float)
+
+
 class ResearchRun(Base):
     """One evaluation of a hypothesis variant (research.py): every run is kept, so a result
     is judged against how many variants were tried, and the holdout's single use shows."""

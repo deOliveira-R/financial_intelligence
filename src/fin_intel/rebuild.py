@@ -57,6 +57,7 @@ from fin_intel.models import (
     LobbyingIssue,
     LobbyingReport,
     NewsVolume,
+    PanelObservation,
     PortfolioTransaction,
     PresidentialDocument,
     PresidentialText,
@@ -99,7 +100,7 @@ TABLES: dict[str, list] = {
     "population": [XbrlFiling],
     "conflict": [ConflictEvent, UcdpEvent],
     "news": [NewsVolume],
-    "credit": [BisObservation, BisSeries],
+    "credit": [BisObservation, BisSeries, PanelObservation],
     "economic": [
         EconomicVintage,
         EconomicObservation,

@@ -67,3 +67,39 @@ def test_credit_impulse_and_point_in_time(session, raw_store):
     credit.load(session, "WS_TC", "\n".join([TC_HEAD, tc_row("770", "2020-Q1", 99)]).encode())
     session.commit()
     assert credit.history(session, "US", "private_credit_gdp") == [(date(2020, 3, 31), 99.0)]
+
+
+def jst_workbook(rows):
+    import io
+
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["year", "country", "iso", "ifs", "gdp", "tloans", "crisisJST", "peg_type"])
+    for r in rows:
+        ws.append(r)
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+@respx.mock
+def test_macrohistory_panel(session, raw_store):
+    from fin_intel import macrohistory
+    from fin_intel.providers.macrohistory import JST_URL, MacrohistoryProvider
+
+    respx.get(JST_URL).respond(
+        content=jst_workbook(
+            [
+                [2007, "USA", "USA", 111, 14450.0, 12000.0, 1, "BASE"],
+                [2008, "USA", "USA", 111, 14700.0, 12500.0, 0, "BASE"],
+                [2008, "Japan", "JPN", 158, 500000.0, None, 0, "BASE"],
+            ]
+        )
+    )
+    rows = macrohistory.sync_jst(session, MacrohistoryProvider(raw_store=raw_store))
+    assert rows == 8  # numeric values only: text and blanks are skipped
+    data = macrohistory.panel(session, ["gdp", "crisisJST"])
+    assert data[("USA", 2007)] == {"gdp": 14450.0, "crisisJST": 1.0}
+    assert data[("JPN", 2008)] == {"gdp": 500000.0, "crisisJST": 0.0}

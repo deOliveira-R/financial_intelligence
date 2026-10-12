@@ -35,6 +35,7 @@ from fin_intel.cli.macro import (
     sync_eia,
     sync_industries,
     sync_japan,
+    sync_panel,
 )
 from fin_intel.cli.market import (
     sync_actions,
@@ -119,6 +120,7 @@ def sync_weekly() -> None:
         ("federal contract obligations (USAspending)", sync_contracts),
         ("input-output tables and concordances (BEA, Census; monthly)", sync_industries),
         ("credit by sector, ~45 economies (BIS; monthly)", sync_bis),
+        ("cross-country research panel (OECD, Macrohistory; monthly)", sync_panel),
         ("short interest (FINRA)", sync_short_interest),
         ("index ETF holdings (N-PORT)", sync_funds),
         ("members of Congress and committees", sync_legislators),
