@@ -57,6 +57,9 @@ Z_DISTRESS = 1.1
 # returns the cash, and in 2021 hundreds restated for warrant accounting at once.
 BLANK_CHECK_SIC = 6770
 ALERT_RATE = 0.02
+# The design chosen for the holdout (2026-10-12, with the user): best logit lift at a 2%
+# alert rate on the design period.
+FROZEN = {"insider_threshold": 0.005}
 
 
 def quarter_ends(first: date, last: date) -> list[date]:
@@ -382,14 +385,19 @@ def evaluate(rows: list[Row], threshold: float, model=None) -> dict[str, Any]:
 
 
 def run(session: Session, period: str, log: bool = True) -> list[dict[str, Any]]:
-    if period not in ("design", "validation"):
-        raise ValueError("H001 runs design or validation here; the holdout needs a frozen variant")
+    """Design and validation evaluate every variant; the holdout evaluates the frozen one,
+    once (research.log refuses a second run or an unfrozen variant)."""
+    if period not in research.PERIODS:
+        raise ValueError(f"period is one of {research.PERIODS}")
+    if period == "holdout" and not research.holdout_allowed(session, HYPOTHESIS, FROZEN):
+        raise research.HoldoutError("freeze the variant first (study H001 --freeze), once")
     first, last = PERIODS[period]
     research.check_period(period, last + YEAR - timedelta(days=1))
     rows = build_rows(session, first, last)
     design_rows = rows if period == "design" else build_rows(session, *PERIODS["design"])
+    thresholds = [FROZEN["insider_threshold"]] if period == "holdout" else INSIDER_THRESHOLDS
     results = []
-    for threshold in INSIDER_THRESHOLDS:
+    for threshold in thresholds:
         model = fit_logit(design_rows, signal_names(threshold), threshold)
         result = {
             "period": period,

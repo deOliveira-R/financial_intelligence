@@ -539,8 +539,11 @@ def dossier_cmd(
 @app.command("study", rich_help_panel="Research")
 def study(
     hypothesis: Annotated[str, typer.Argument(help="A pre-registered hypothesis (H002...)")],
-    period: Annotated[str, typer.Option(help="design or validation")] = "design",
+    period: Annotated[str, typer.Option(help="design, validation, or holdout (once)")] = "design",
     log: Annotated[bool, typer.Option(help="Record each variant in the trial log")] = True,
+    freeze: Annotated[
+        str | None, typer.Option(help="Freeze the module's FROZEN variant for the holdout: why")
+    ] = None,
 ) -> None:
     """Run a pre-registered study (docs/research/) on its design or validation period;
     every variant run is logged, and the holdout stays closed until a variant is frozen."""
@@ -552,6 +555,11 @@ def study(
         module = importlib.import_module(f"fin_intel.studies.{hypothesis.lower()}")
     except ModuleNotFoundError:
         raise typer.BadParameter(f"no study module for {hypothesis}") from None
+    if freeze:
+        with session_factory()() as session:
+            research.freeze(session, module.HYPOTHESIS, module.FROZEN, freeze)
+        typer.echo(f"{module.HYPOTHESIS}: froze {module.FROZEN} for the holdout")
+        return
     with session_factory()() as session:
         results = module.run(session, period, log=log)
         tried = research.trials(session, module.HYPOTHESIS)
