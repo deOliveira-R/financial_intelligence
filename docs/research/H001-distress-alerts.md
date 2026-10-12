@@ -1,6 +1,7 @@
 # H001: public distress signals precede blowups
 
-Status: **pre-registered, not run** (2026-10-12). Track: investing (exception alerts).
+Status: **pre-registered, not run** (2026-10-12; amended the same day before any results,
+see Amendments). Track: investing (exception alerts).
 
 ## Claim
 
@@ -66,3 +67,18 @@ whether alerts identify future blowups, not whether shorting them pays.
   starts 2012.
 - Events come from each member's submissions history; members whose filings stopped
   before 2009 aren't in the population, which doesn't matter from 2012 on.
+
+## Amendments (before any results)
+
+**2026-10-12:**
+- **Altman's Z'' instead of Z.** The original Z needs the market value of equity, and the
+  companies that died have no stored prices. The price-free version (Altman 1995, Z'' =
+  6.56 working capital/assets + 3.26 retained earnings/assets + 6.72 EBIT/assets + 1.05
+  book equity/liabilities) is used for the signal and the baseline, with its distress
+  zone below 1.1.
+- **Insider selling threshold** is chosen on the design period among three values
+  (net open-market sales by officers and directors over 12 months above 0.5%, 1% or 2% of
+  public float); the choice counts as three variants in the trial log.
+- **8-K 3.01 is also filed by takeover targets** (the exchange notice when a merger
+  closes), so it will raise false alarms on companies that are acquired; it stays a
+  signal as registered, and the design reports its precision separately.
