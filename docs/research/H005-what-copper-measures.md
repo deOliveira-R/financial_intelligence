@@ -1,6 +1,9 @@
 # H005: what copper measures (China's credit, the world's industry, the bond market)
 
-Status: **pre-registered 2026-10-12, not run.** Track: macro (theses.md, theses 1 and 2).
+Status: **run 2026-10-12 (design, validation, holdout once): none of the three claims
+supported as registered.** Copper is a coincident price of the industrial cycle (the US's
+included); the timing signals found are small and don't survive from one period to the
+next. Track: macro (theses.md, theses 1 and 2).
 From the user, after H004: copper is widely and successfully used to read the economy and
 markets, so if it doesn't anticipate US industrial production, what does it represent?
 
@@ -125,3 +128,47 @@ Each claim is judged separately on validation (and the holdout where testable):
   of "the world beyond the US".
 - Supply shocks (mine strikes, closures) move copper without demand: noise against every
   claim.
+
+## Results (2026-10-12)
+
+Each forecast test: out-of-sample R² against its baseline, Clark-West p (bar: 0.007).
+Design and validation ran on every test, then the holdout once.
+
+| Test | Design | Validation | Holdout (from 2023-07) |
+|---|---|---|---|
+| a1 China's impulse leads copper (peak lead, 95% interval) | 2 quarters (0-6), fails | **6 quarters (4-6), passes** | 13 quarters, not testable |
+| a2 the impulse as known forecasts copper (2 quarters) | R² -0.03, p 0.96 | R² +0.005, p 0.30 | 11 forecasts, not testable |
+| b1 copper's correlation: China's industry minus the US's | 0.58 vs 0.59: -0.01 (-0.22 to 0.37) | **0.17 vs 0.46: -0.29 (-0.51 to -0.04)** | not testable |
+| b2 copper nowcasts US industrial production | R² -0.007, p 0.67 | **R² +0.04, p 0.002** (0.05, p < 0.001 without the pandemic) | R² -0.11, p 0.96 |
+| b3 copper nowcasts OECD industrial production | **R² +0.15, p < 0.001** | R² +0.12, p 0.009 (-0.003, p 0.06 without the pandemic) | R² -0.60, p 0.50 |
+| c1 the yield closes the copper/gold gap (expected slope < 0) | R² +0.05, p 0.016, slope < 0 | R² +0.01, p 0.03, slope < 0 | R² -0.11, p 0.51 |
+| c2 copper/gold closes the gap (expected slope > 0) | R² -0.04, p 0.81 | R² -0.006, p 0.26 | R² +0.03, p 0.24, slope < 0 |
+
+**Verdicts by the registered rules:**
+- **(a) "leads but too late to use", weakly.** In 2013-2022 China's credit impulse ran
+  *against* copper at the same time (correlation -0.51) and with it 4-6 quarters later
+  (+0.32, at the edge of the leads tested); in 1990-2012 the peak was 2 quarters with an
+  interval reaching 0. A lead that moves between periods, and that data published 170
+  days late can't exploit (a2 fails in both).
+- **(b) not supported.** Copper did *not* move more with China's industry than the US's:
+  equally before 2013, and the US's clearly more after. The nowcasts help in one period
+  each (OECD in design, US in validation) and neither holds in the holdout.
+- **(c) not supported.** The yield tends to close the gap with copper/gold (the right
+  sign in design and validation, p 0.016 and 0.03) but the gain is small (R² 0.01-0.05),
+  below the bar, and gone in the holdout. Copper/gold doesn't follow the yield.
+
+**Reading (dispassionately):** what holds across periods is that copper's year-on-year
+growth moves *with* industrial activity, about 0.5-0.6 correlation with US industrial
+production growth, the same as with China's before 2013. That is the real content of
+"Dr. Copper": a market price that shows the industrial cycle as it happens, every day,
+with no publication lag or revision. It doesn't reliably say what comes next, and its
+apparent leads (H002's acceleration, the OECD nowcast, the copper/gold gap) appear in one
+period and fade in the next. Practitioners' success stories are consistent with this: a
+coincident, timely price looks prescient against data published weeks later, and
+episodes where it led are remembered (selection).
+
+**Not tested here, and open:** daily copper (from 2011 only, through CPER) against daily
+markets; speculators' positioning in copper (CFTC, already loaded) as the "traders
+positioning" part of the user's mechanism; copper as a confirmation filter (agreement of
+copper, yields and credit) rather than a predictor alone. Each would be a new
+pre-registration.

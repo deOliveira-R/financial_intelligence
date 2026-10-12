@@ -154,6 +154,10 @@ Next, agreed with the user (2026-10-12), in order:
   variant, run on months H002 never saw: rejected (validation out-of-sample R² -0.03,
   -0.004 without the pandemic; holdout -0.18; no sector signal). China's steel output
   isn't on FRED: backlog.
+- [x] **H005: what copper measures** (2026-10-12, the user's follow-up): World Bank Pink
+  Sheet loaded (metals since 1960); seven pre-registered tests (China's credit, whose
+  activity, nowcasts, copper/gold against the 10-year yield): none of the three claims
+  supported; copper is a coincident, timely price of the industrial cycle.
 Later: trackers for theses 2, 4, 6-8 once GDELT's load completes; new distress signals
 (going concern, short-interest jumps) as a new hypothesis.
 

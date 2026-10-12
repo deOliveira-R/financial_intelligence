@@ -52,8 +52,12 @@ when the danger is real, how big, how soon, and what the ways out are.
   back to 1926) beyond what industrial production itself already says.
 - **Where it stands (2026-10-12):** iron is the present (US steel output peaks at lag 0,
   H002); copper doesn't lead US industrial production in growth (H002) or acceleration
-  (H004, rejected on unseen months), nor cyclicals against defensives. Open: whether
-  copper anticipates *China* (needs Chinese activity data, backlog).
+  (H004, rejected on unseen months), nor cyclicals against defensives. H005 (what copper
+  measures): it doesn't move more with China's industry than the US's, China's credit
+  leads it only loosely and too late to use, and the copper/gold gap to the 10-year yield
+  closes slightly through the yield but not usefully. Copper is the industrial cycle,
+  priced daily and unrevised: a coincident read, not a forecast. Open: copper
+  positioning (CFTC) and copper as a confirmation filter.
 
 ## 2. Sovereign bonds, trust in the currency, and the trap (mode B, parts A)
 
