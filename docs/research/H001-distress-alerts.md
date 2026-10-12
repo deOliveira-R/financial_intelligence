@@ -1,7 +1,7 @@
 # H001: public distress signals precede blowups
 
-Status: **pre-registered, not run** (2026-10-12; amended the same day before any results,
-see Amendments). Track: investing (exception alerts).
+Status: **design run 2026-10-12 (corrected outcome): between support and rejection;
+validation running.** Track: investing (exception alerts).
 
 ## Claim
 
@@ -103,3 +103,36 @@ SPAC completions. Two corrections:
   going-private filings (SC 13E3), now stored as events.
 The first run's numbers are kept in the trial log as a run on the faulty outcome; they
 aren't evidence for or against the claim.
+
+## Results
+
+**Design, corrected outcome, 2026-10-12** (quarters 2013-2020; 117,305 company-quarters,
+5,600 companies, 1,055 followed by a blowup within a year: 0.9% base rate; 290 failing
+companies, 197 through bankruptcy, 93 stopped reporting). A hand check of 40 found about
+four misclassified (a subsidiary's bankruptcy, a SPAC merger, a buyout, a company going
+dark): errors that dilute signals rather than flatter them.
+
+| Alert | Flagged | Lift (95%) | Recall | Precision |
+|---|---|---|---|---|
+| Logit of all signals, top 2% (fitted on these quarters) | 2.0% | **8.0** (6.5-9.4) | 16% | 7.2% |
+| Altman Z'' alone, top 2% | 2.0% | 3.6 (2.9-4.2) | 7% | 3.2% |
+| Count of signals (natural cut) | 6.5% | 3.8 (3.4-4.4) | 25% | 3.5% |
+| Late filing | 4.9% | 4.9 (4.1-5.8) | 24% | 4.4% |
+| Restatement (8-K 4.02) | 1.5% | 4.8 (3.3-6.5) | 7% | 4.3% |
+| Exchange deficiency notice (8-K 3.01) | 6.8% | 4.6 (4.1-5.1) | 31% | 4.1% |
+| Debt acceleration (8-K 2.04) | 1.2% | 3.2 (1.8-4.7) | 4% | 2.8% |
+| Weak Altman Z'' | 3.1% | 3.0 (2.5-3.5) | 9% | 2.7% |
+| Cash runway under a year | 2.3% | 2.8 (2.2-3.5) | 6% | 2.5% |
+| Auditor change (8-K 4.01) | 4.5% | 2.0 (1.4-2.7) | 9% | 1.8% |
+| Impairment (8-K 2.06) | 2.1% | 1.7 (0.9-2.6) | 4% | 1.6% |
+| Insider net selling > 0.5% of float | 22.5% | **0.27** (0.17-0.37) | 6% | 0.2% |
+
+- The combined alert more than doubles Altman Z'' at the same alert rate and warns a
+  median 285 days ahead; it misses the registered bar (lift 15, recall 30%) and clears
+  the rejection line (lift 5): in between, with the logit flattered by being fitted on
+  these quarters. Validation decides.
+- Insider selling marks *healthy* companies (insiders sell more where shares have risen);
+  its absence isn't a distress signal by itself, but heavy selling is reassurance.
+- Insider threshold chosen by the registered rule (best logit lift at 2%): 0.5% of float.
+
+The first run on the faulty outcome (2.5% base rate) is in the trial log and excluded.
