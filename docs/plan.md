@@ -143,11 +143,11 @@ Next, agreed with the user (2026-10-12), in order:
   `distress_alerts`, table distress_scores. Building it found Z'' mostly missing in H001
   (10-Q balance sheets): the benchmark was corrected (H001 errata; edge 7.3 against 4.9,
   not twice); fixed signals go into a new hypothesis.
-- [ ] **H003 narrower claims on the time holdout (2015 onward):** (a) long panel: high
-  debt, negative impulse, no public offset more than doubles the one-year crisis rate;
-  (b) both panels: high debt, positive impulse and a credit gap above 10 points raise
-  three-year crisis and drawdown rates by half or more. Pre-registered in H003's file;
-  implement as frozen variants and run the holdout once.
+- [x] **H003 narrower claims on the time holdout** (2026-10-12): no crises after 2008 in
+  the data, so the crisis claims aren't testable on time (they rest on 1870-2014 and the
+  out-of-country check, where the boom plus a wide credit gap triples three-year crisis
+  rates); the equity part was rejected (0.79 after 2015, many "booms" being 2020's GDP
+  collapse widening the gap).
 - [ ] **H004: copper acceleration at 3 months** (H002 follow-up), fresh
   pre-registration before running, ideally with China's steel output added.
 Later: trackers for theses 2, 4, 6-8 once GDELT's load completes; new distress signals

@@ -1,7 +1,10 @@
 # H003: when private credit reversals cause crises (Keen's conditions)
 
-Status: **design run 2026-10-12: rejected as registered; the warning is the boom, not
-the reversal.** Conditional result for validation (see Results). Track: macro (theses.md, thesis 3). The
+Status: **rejected as registered (design, 2026-10-12); the warning is the boom, not the
+reversal. Time holdout run once (2026-10-12): the crisis claims can't be tested (no
+crises after 2008 in the data), and the boom didn't precede drawdowns after 2015
+(rejected for equities).** Conditional results stand on the design and the
+out-of-country check. Track: macro (theses.md, thesis 3). The
 user's framing: not whether Steve Keen is universally right, but when his mechanism holds,
 when it doesn't, and what gets an economy out.
 
@@ -175,3 +178,31 @@ The debt level and the flow add out-of-country information for **banking crises 
 three years** (AUC 0.60 to 0.68, precision 0.27 to 0.30 against a 0.13 base rate) and
 little for drawdowns or recessions, where they slightly hurt precision. Predictive power
 is modest throughout (AUCs 0.55-0.68): useful as a regime gauge, not a timer.
+
+**Time holdout, run once, 2026-10-12** (the frozen claims of the amendment; trial log:
+11 variants before it). Ratios over the base rate, 95% intervals from a bootstrap over
+countries; the pre-2015 values are computed the same way, for reference:
+
+| Claim | Panel, outcome | Before 2015 | From 2015 (holdout) | Verdict |
+|---|---|---|---|---|
+| (a) high debt, reversal, no offset | Macrohistory, crisis 1y | 2.30 (1.77-2.88), 31 of 402 | no crises (71 rows) | not testable |
+| (b) boom: high debt, growing, gap > 10 | BIS, crisis 3y | 3.18 (2.53-4.08), 101 of 342 | no crises (180 rows) | not testable |
+| (b) | BIS, real drawdown ≥ 30% in 3y | 1.53 (1.23-1.83), 216 of 539 | **0.79 (0-1.89)**, 6 of 80 (base 9.5%) | **rejected** |
+| (b) | Macrohistory, crisis 3y | 3.10 (1.68-4.86), 20 of 68 | no crises (36 rows) | not testable |
+| (b) | Macrohistory, drawdown 3y | 1.66 (0.85-2.42), 17 of 54 | no boom rows (32 rows, 1 drawdown) | not testable |
+
+**Reading:**
+- Before 2015, the boom condition with the credit gap (new for claim (b)) is the
+  strongest warning found in this study: crises within three years are three times as
+  frequent in both panels, and drawdowns half again as frequent in the BIS panel.
+- After 2015 there was no banking crisis in these 18 economies through 2020, so the
+  crisis claims are neither confirmed nor refuted by time; they rest on 1870-2014 and on
+  the out-of-country check.
+- The equity part failed. The 80 boom quarters after 2015 came from 18 countries, and
+  only Korea (2020-22), Luxembourg and Germany (2021) were followed by a drawdown. Many
+  were **2020-21 quarters whose credit gap widened because GDP collapsed** (France, Japan,
+  Canada, Korea), not because lending boomed, and after 2015 central banks backstopped
+  asset prices heavily. Both are explanations to test, not to retrofit: a gap measure
+  robust to GDP shocks (credit growth against trend income) would be a new hypothesis.
+- **Use:** as a regime gauge for banking stress the boom-plus-gap condition keeps its
+  historical record; as an equity-timing signal it isn't supported.
