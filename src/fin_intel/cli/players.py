@@ -215,6 +215,29 @@ def sync_lobbying(
         )
 
 
+@app.command("sync-conflict", rich_help_panel="Big players and policy")
+def sync_conflict() -> None:
+    """Load conflict and protest events worldwide (ACLED) month by month since 2018; the
+    last months are re-read as ACLED revises them. Needs FI_ACLED_EMAIL and
+    FI_ACLED_PASSWORD (the user's acleddata.com account); skipped without them."""
+    from fin_intel import conflict
+    from fin_intel.config import get_settings
+    from fin_intel.providers import AcledProvider
+
+    if not get_settings().acled_password:
+        typer.echo("ACLED account not configured (FI_ACLED_EMAIL, FI_ACLED_PASSWORD); skipping")
+        return
+    acled = AcledProvider(raw_store=default_store())
+    with session_factory()() as session:
+        months = conflict.wanted(session, date.today())
+    if months:
+        run_items(
+            "sync-conflict",
+            [f"{m:%Y-%m}" for m in months],
+            lambda s, k: conflict.sync_month(s, acled, date.fromisoformat(f"{k}-01")),
+        )
+
+
 @app.command("sync-bills", rich_help_panel="Big players and policy")
 def sync_bills(
     since: Annotated[int, typer.Option(help="First congress (112 = 2011-2012)")] = 112,

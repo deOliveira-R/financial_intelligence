@@ -818,6 +818,39 @@ class FederalObligation(Base):
     amount: Mapped[float] = mapped_column(Float)
 
 
+class ConflictEvent(Base):
+    """An ACLED event (conflict.py): a battle, explosion or remote violence (drone and air
+    strikes, shelling), violence against civilians, a protest or riot, or a strategic
+    development, with its actors, place and reported fatalities. ACLED revises events;
+    `updated` is its last modification."""
+
+    __tablename__ = "conflict_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # event_id_cnty
+    event_date: Mapped[date] = mapped_column(Date, index=True)
+    disorder_type: Mapped[str | None] = mapped_column(String)
+    event_type: Mapped[str] = mapped_column(String, index=True)
+    sub_event_type: Mapped[str | None] = mapped_column(String, index=True)
+    actor1: Mapped[str | None] = mapped_column(String)
+    assoc_actor_1: Mapped[str | None] = mapped_column(String)
+    actor2: Mapped[str | None] = mapped_column(String)
+    assoc_actor_2: Mapped[str | None] = mapped_column(String)
+    interaction: Mapped[str | None] = mapped_column(String)
+    civilian_targeting: Mapped[str | None] = mapped_column(String)
+    country: Mapped[str] = mapped_column(String, index=True)
+    iso: Mapped[int | None]
+    region: Mapped[str | None] = mapped_column(String)
+    admin1: Mapped[str | None] = mapped_column(String)
+    location: Mapped[str | None] = mapped_column(String)
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    fatalities: Mapped[int] = mapped_column(default=0)
+    source: Mapped[str | None] = mapped_column(String)
+    notes: Mapped[str | None] = mapped_column(String)
+    tags: Mapped[str | None] = mapped_column(String)
+    updated: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class XbrlFiling(Base):
     """A filing with XBRL financial data, from EDGAR's quarterly xbrl.idx (population.py):
     every company that filed one since 2009, alive or dead, which is the research

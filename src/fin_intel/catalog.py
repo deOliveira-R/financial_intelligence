@@ -86,7 +86,7 @@ TERMS: dict[str, str] = {
     **dict.fromkeys(PUBLIC_PROVIDERS, PUBLIC),
     "massive": PERSONAL,
     "tiingo": PERSONAL,
-    **dict.fromkeys(("fred", "cboe", "finra", "openfigi", "esef"), CHECK),
+    **dict.fromkeys(("fred", "cboe", "finra", "openfigi", "esef", "acled"), CHECK),
 }
 
 

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     massive_api_key: str | None = None
     openfigi_api_key: str | None = None  # optional: raises OpenFIGI's limits
     lda_api_key: str | None = None  # Senate LDA lobbying API (free); anonymous is very slow
+    acled_email: str | None = None  # ACLED account (acleddata.com), for conflict events
+    acled_password: str | None = None
     congress_api_key: str | None = None  # api.data.gov key for api.congress.gov (optional)
     eia_api_key: str = "DEMO_KEY"  # shared, rate-limited key; a free personal key lifts it
     edinet_api_key: str | None = None  # Japan's EDINET (free registration)

@@ -167,7 +167,8 @@ when the danger is real, how big, how soon, and what the ways out are.
 
 - **Thesis:** drones and counter-drone systems take budget share from conventional
   platforms; drone-native entrants grow faster than primes that don't adapt.
-- **Data:** ACLED (the user registered, 2026-10-12: curated political violence and protest
+- **Data:** ACLED (the user registered, 2026-10-12, but a personal email gets the Open tier
+  without API access; code ready for a Research-tier account: curated political violence and protest
   events worldwide, by type, actor and location, including drone and air strikes) and
   GDELT (multilingual news events).
 - **Indicators:** federal contract obligations for unmanned systems (USAspending by

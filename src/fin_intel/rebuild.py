@@ -21,6 +21,7 @@ from fin_intel.models import (
     CompanyMetrics,
     Concept,
     Concordance,
+    ConflictEvent,
     CongressReport,
     CongressReportMember,
     CongressTrade,
@@ -92,6 +93,7 @@ TABLES: dict[str, list] = {
     "cot": [CotPosition],
     "events": [CorporateEvent],
     "population": [XbrlFiling],
+    "conflict": [ConflictEvent],
     "economic": [
         EconomicVintage,
         EconomicObservation,

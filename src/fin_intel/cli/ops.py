@@ -46,6 +46,7 @@ from fin_intel.cli.market import (
 from fin_intel.cli.players import (
     sync_13f,
     sync_bills,
+    sync_conflict,
     sync_congress,
     sync_insiders,
     sync_legislators,
@@ -121,6 +122,7 @@ def sync_weekly() -> None:
         ("lobbying reports (Senate LDA)", sync_lobbying),
         ("bills in Congress (GovInfo)", sync_bills),
         ("presidential documents (Federal Register)", sync_presidential),
+        ("conflict events (ACLED)", sync_conflict),
         ("forward outcomes", derive_outcomes_cmd),
     ]
     steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))

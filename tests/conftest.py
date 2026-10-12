@@ -25,6 +25,7 @@ def settings(monkeypatch):
     base._limiters.clear()
     # Mocked providers needn't wait out real rate limits (e.g. Massive's 5 calls/minute).
     from fin_intel.providers import (
+        AcledProvider,
         BeaProvider,
         BojProvider,
         CboeProvider,
@@ -63,6 +64,7 @@ def settings(monkeypatch):
         FederalRegisterProvider,
         BeaProvider,
         CensusProvider,
+        AcledProvider,
     ):
         monkeypatch.setattr(provider, "limits", (Limit(10_000, MINUTE),))
     yield
