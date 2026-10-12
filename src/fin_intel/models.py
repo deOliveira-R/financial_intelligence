@@ -1092,3 +1092,19 @@ class GraphEdge(Base):
     buyer_share: Mapped[float | None] = mapped_column(Float)
     supplier_share: Mapped[float | None] = mapped_column(Float)
     note: Mapped[str | None] = mapped_column(Text)
+
+
+class DistressScore(Base):
+    """A watched company's score under H001's frozen distress model on one day (distress.py):
+    derived, recomputed by the daily sync. `flagged` when the score is in the top 2% of the
+    whole research population that day; a company *entering* the top 2% is the alert."""
+
+    __tablename__ = "distress_scores"
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    cik: Mapped[int] = mapped_column(primary_key=True)
+    score: Mapped[float] = mapped_column(Float)
+    cutoff: Mapped[float] = mapped_column(Float)  # the population's top-2% score that day
+    flagged: Mapped[bool]
+    signals: Mapped[str] = mapped_column(Text)  # JSON list of the signals present
+    z: Mapped[float | None] = mapped_column(Float)  # Altman Z''

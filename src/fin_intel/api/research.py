@@ -208,3 +208,14 @@ def theme_dossier(session: SessionDep, name: str, as_of: date | None = None):
         return dossier.theme(session, name, as_of or date.today())
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from None
+
+
+@router.get("/distress")
+def distress_alerts(session: SessionDep) -> list[dict]:
+    """Distress scores of the watchlist and holdings under H001's frozen model (the latest
+    daily scoring): `flagged` when in the top 2% of the research population. A flag means
+    "read the filings now", not "sell": about one flagged company in nine failed within a
+    year in the holdout, ten months ahead (docs/research/H001-distress-alerts.md)."""
+    from fin_intel import distress
+
+    return distress.latest(session)

@@ -57,6 +57,7 @@ from fin_intel.cli.players import (
     sync_presidential,
     sync_short_interest,
 )
+from fin_intel.cli.research import distress_cmd
 from fin_intel.config import get_settings
 from fin_intel.db import session_factory
 from fin_intel.raw import default_store, prune
@@ -66,7 +67,8 @@ from fin_intel.rebuild import TARGETS, rebuild
 @app.command(rich_help_panel="Operations")
 def sync_daily() -> None:
     """Scheduled daily sync: market bars, recent actions, breadth, fundamentals of companies
-    that filed, company metrics, FRED series, watchlist prices.
+    that filed, company metrics, FRED series, watchlist prices, distress alerts on the
+    watchlist and holdings.
 
     Run after the US close (data is end-of-day). Lists come from FI_WATCHLIST and
     FI_FRED_SERIES; OTC bars follow FI_MARKET_OTC.
@@ -88,6 +90,7 @@ def sync_daily() -> None:
         ("Japanese filings (EDINET)", sync_edinet),
         ("Taiwanese prices", sync_tw_prices),
         ("company metrics", derive_metrics_cmd),  # uses every market's new data
+        ("distress alerts on watched companies (H001)", lambda: distress_cmd(score=True)),
     ]
     if settings.watchlist_tickers:
         steps.append(("watchlist prices", lambda: sync_prices(settings.watchlist_tickers)))

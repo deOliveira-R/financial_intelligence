@@ -60,6 +60,21 @@ ALERT_RATE = 0.02
 # The design chosen for the holdout (2026-10-12, with the user): best logit lift at a 2%
 # alert rate on the design period.
 FROZEN = {"insider_threshold": 0.005}
+# The frozen logit's coefficients (fitted on the design quarters, trial log run 82; the
+# holdout ran with these): the live alert (distress.py) scores with them rather than
+# refitting, so it is exactly the model that was tested.
+FROZEN_MODEL = {
+    "const": -5.025121839883949,
+    "late_filing": 1.2896732673070137,
+    "auditor_change": 0.02296538255104867,
+    "restatement": 0.29672792508900536,
+    "debt_acceleration": 0.517413817926013,
+    "delisting_notice": 1.4627677360029046,
+    "impairment": 0.2550033443773906,
+    "weak_z": 0.9025107460635314,
+    "short_runway": 0.4831660638816922,
+    "insider_selling_0.005": -1.3494344162079954,
+}
 
 
 def quarter_ends(first: date, last: date) -> list[date]:
@@ -201,7 +216,11 @@ def _latest(history: list[tuple[date, Any]], day: date) -> Any:
     return history[i - 1][1] if i else None
 
 
-def build_rows(session: Session, first: date, last: date) -> list[Row]:
+def build_rows(
+    session: Session, first: date, last: date, days: list[date] | None = None
+) -> list[Row]:
+    """Rows at each quarter end from `first` to `last`, or on the given `days` instead (the
+    live alert scores today)."""
     from fin_intel.models import Issuer
 
     blank_checks = set(session.scalars(select(Issuer.cik).where(Issuer.sic == BLANK_CHECK_SIC)))
@@ -265,7 +284,7 @@ def build_rows(session: Session, first: date, last: date) -> list[Row]:
         sell_days = [d for d, _ in sells]
         sell_cum = np.concatenate([[0.0], np.cumsum([v for _, v in sells])]) if sells else None
         evs = events.get(cik, [])
-        for q in quarter_ends(first, last):
+        for q in days if days is not None else quarter_ends(first, last):
             if not any(q - timedelta(days=456) < r <= q for r in reports):
                 continue
             if any(f <= q for f in failed):
@@ -302,6 +321,16 @@ def signal_names(threshold: float) -> list[str]:
 
 def flags(row: Row, threshold: float) -> dict[str, bool]:
     return {**row.signals, f"insider_selling_{threshold}": row.net_selling > threshold}
+
+
+def frozen_score(row: Row) -> float:
+    """Probability of a blowup within a year under the frozen model (a ranking more than a
+    calibrated probability: the base rate differs by period)."""
+    flagged = flags(row, FROZEN["insider_threshold"])
+    eta = FROZEN_MODEL["const"] + sum(
+        w for name, w in FROZEN_MODEL.items() if name != "const" and flagged[name]
+    )
+    return 1 / (1 + math.exp(-eta))
 
 
 def measure(rows: list[Row], flagged: list[bool], reps: int = 500) -> dict[str, Any]:

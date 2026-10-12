@@ -582,3 +582,51 @@ def study(
         f"{tried} variants tried so far; |t| needed after Bonferroni: "
         f"{research.bonferroni_t(tried):.2f}"
     )
+
+
+@app.command("distress", rich_help_panel="Research")
+def distress_cmd(
+    score: Annotated[
+        bool, typer.Option(help="Refresh watched companies' events and score them now")
+    ] = False,
+    all_companies: Annotated[
+        bool, typer.Option("--all", help="List every watched company, not only flagged ones")
+    ] = False,
+) -> None:
+    """Distress alerts on the watchlist and holdings: H001's frozen model (lift ~7, ten
+    months' warning in the holdout). A flag means "read the filings now", not "sell"."""
+    from fin_intel import distress
+
+    if score:
+        from fin_intel.cli.filings import sync_events
+
+        with session_factory()() as session:
+            ciks = sorted(distress.watched(session))
+        if ciks:
+            sync_events(cik=ciks)
+        with session_factory()() as session:
+            alerts = distress.sync(session)
+        for a in alerts:
+            mark = "NEW " if a.new else ""
+            typer.echo(
+                f"{mark}{'/'.join(a.tickers)} {a.name or a.cik}: score {a.score:.3f} "
+                f"(top 2% from {a.cutoff:.3f}); {', '.join(a.signals)}"
+            )
+        new = sum(a.new for a in alerts)
+        typer.echo(f"{len(alerts)} watched companies in the top 2% ({new} new)")
+        return
+    with session_factory()() as session:
+        rows = distress.latest(session)
+    for r in rows:
+        if not all_companies and not r.get("flagged"):
+            continue
+        label = f"{'/'.join(r['tickers'])} {r['name'] or r['cik']}"
+        if not r["scored"]:
+            typer.echo(f"{label}: {r['reason']}")
+            continue
+        flag = "FLAGGED " if r["flagged"] else ""
+        z = f", Z'' {r['z']:.2f}" if r["z"] is not None else ""
+        typer.echo(
+            f"{flag}{label}: score {r['score']:.3f} (top 2% from {r['cutoff']:.3f}{z}) "
+            f"on {r['day']}; {', '.join(r['signals']) or 'no signals'}"
+        )

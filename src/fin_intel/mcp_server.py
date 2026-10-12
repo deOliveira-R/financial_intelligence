@@ -220,3 +220,17 @@ def data_catalog(alerts_only: bool = False) -> list[dict[str, Any]]:
     if alerts_only:
         feeds = [f for f in feeds if f["status"] in ("stale", "failing")]
     return _plain(feeds)
+
+
+@tool
+def distress_alerts(flagged_only: bool = True) -> list[dict[str, Any]]:
+    """Distress scores of the user's watchlist and holdings under a validated model (H001:
+    late filings, restatements, exchange notices, debt acceleration, weak Altman Z'', short
+    cash runway; insider selling lowers the score). `flagged` means the top 2% of all SEC
+    filers that day: about one in nine such companies failed within a year in testing, ten
+    months ahead. A reason to read the filings, not a sell signal."""
+    from fin_intel import distress
+
+    with session_factory()() as session:
+        rows = distress.latest(session)
+    return _plain([r for r in rows if r.get("flagged") or not flagged_only])
