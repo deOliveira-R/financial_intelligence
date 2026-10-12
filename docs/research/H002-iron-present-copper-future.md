@@ -1,6 +1,7 @@
 # H002: iron tracks present industrial activity, copper anticipates it
 
-Status: **pre-registered, not run** (2026-10-12; amended before results, see Amendments). Track: macro (theses.md, thesis 1). From
+Status: **design run 2026-10-12: copper-leads claim not supported; iron coincident
+confirmed.** Validation not run (see Results). Track: macro (theses.md, thesis 1). From
 the user: steel goes into everything being built now, so iron should mirror the present;
 copper carries expectations (wiring for what will be built, traders positioning), so it
 should lead.
@@ -78,3 +79,28 @@ values lagged one month at each month end (each series publishes a month's figur
 the next month). Metal prices are effectively unrevised; US steel output is revised
 modestly, the remaining approximation. Industrial production in the baseline stays truly
 point in time (vintages since 1927).
+
+## Results
+
+**Design, 2026-10-12** (copper and steel 1990-2012, iron ore 2010-2017; 24 variants,
+Bonferroni |t| ≥ 3.08):
+
+| Predictor | Transform | Peak lag (95% interval) | Corr at peak | OOS R² 6m | Clark-West p 6m |
+|---|---|---|---|---|---|
+| US steel output | growth | **0** (-1 to 5) | 0.69 | -0.16 | 0.85 |
+| Copper | growth | 1 (-10 to 7) | 0.43 | -0.02 | 0.53 |
+| Copper | acceleration | 7 (-12 to 12) | 0.32 | +0.03 (3m: +0.07) | 0.063 (3m: 0.009) |
+| Steel price | growth | -3 (-6 to 12) | 0.44 | -0.02 | 0.23 |
+| Iron ore (2010-17) | growth | 10 (0 to 12) | 0.76 | -3.2 | 0.99 |
+
+- **Iron is the present:** US steel output peaks at lag 0, as the user expected (partly by
+  construction, being a component of industrial production).
+- **Copper doesn't lead in growth terms** (peak at 1 month, interval spanning zero) and
+  adds nothing at the registered 6-month horizon: the support criterion isn't met.
+- **Copper's acceleration** improves 3-month forecasts (p = 0.009, t ≈ 2.4), below the
+  multiplicity bar: a candidate for a fresh pre-registration, not evidence.
+- Iron ore's 2010-2017 sample is too short; the large lag with a negative out-of-sample
+  R² is overfitting.
+
+Validation isn't run on a design that failed its criterion. Next: pre-register copper
+acceleration at 3 months on its own, with China's steel output once loaded.

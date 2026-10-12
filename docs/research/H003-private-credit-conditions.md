@@ -1,7 +1,7 @@
 # H003: when private credit reversals cause crises (Keen's conditions)
 
-Status: **pre-registered, not run** (2026-10-12; amended the same day before any
-results, see Amendments). Track: macro (theses.md, thesis 3). The
+Status: **design run 2026-10-12: rejected as registered; the warning is the boom, not
+the reversal.** Conditional result for validation (see Results). Track: macro (theses.md, thesis 3). The
 user's framing: not whether Steve Keen is universally right, but when his mechanism holds,
 when it doesn't, and what gets an economy out.
 
@@ -91,3 +91,46 @@ replaces the private one should cushion the shock (sectoral balances).
   onsets. Test 1 and test 2 are also run there (country-year, credit impulse from yearly
   loans), as an independent second panel; leave-one-country-out applies the same way.
   Success requires the claim to hold in both panels or the difference to be explained.
+
+## Results
+
+**Design, 2026-10-12** (quarters and years before 2015). Ratios are outcome rates over
+the base rate, 95% intervals from a bootstrap over countries.
+
+Long-history panel (Macrohistory, 18 economies, yearly since 1870):
+
+| Condition | Crisis within 1 year | Crisis within 3 years | Real drawdown ≥30% within 3 years |
+|---|---|---|---|
+| High debt, negative impulse | **1.91** (1.54-2.36) | 1.32 (1.11-1.62) | 0.68 (0.57-0.78) |
+| … without public offset | **2.35** (1.83-2.92) | 1.50 (1.26-1.82) | 0.72 (0.58-0.87) |
+| … with public offset | 0.65 (0-1.81) | 0.90 (0.46-1.34) | 0.58 (0.34-0.79) |
+| High debt, positive impulse | 1.01 (0.74-1.36) | 1.35 (1.17-1.58) | **1.31** (1.16-1.46) |
+| Low debt, negative impulse | 0.37 (0-0.81) | 0.38 (0.09-0.74) | 0.81 (0.60-1.08) |
+
+Modern quarterly panel (BIS, ~35 economies since the 1990s):
+
+| Condition | Crisis 3y | Drawdown 3y | Recession 1y |
+|---|---|---|---|
+| High debt, negative impulse | 0.65 (0.45-0.91) | 0.76 (0.66-0.86) | 0.90 (0.82-0.98) |
+| High debt, positive impulse | **1.41** (1.21-1.63) | **1.16** (1.09-1.23) | **1.12** (1.07-1.17) |
+
+In the BIS logit with every predictor, the Basel credit gap carries the weight (z 3.4 for
+crises, 4.1 for drawdowns, 4.1 for recessions within 3 years); the impulse adds little.
+
+**Reading:**
+- Keen's channel (credit reversal at high debt) shows in the long panel for crises within
+  a year, and *only without a public offset* (2.35 against 0.65): the user's question
+  about the offset is answered in the direction expected.
+- But as a *warning* the reversal comes too late: credit contracts as a crisis unfolds,
+  and the data arrive about six months after the quarter. In the modern panel the
+  reversal isn't followed by more crises, drawdowns or recessions than usual (they have
+  begun already); the **boom** (high debt still growing, a wide credit gap) is.
+- For equities in both panels, drawdowns follow booms, not reversals.
+- The registered criteria (a doubling at 36 months, value beyond the credit gap) fail:
+  **rejected as registered.**
+
+**For validation (leave one country out, then the time holdout):** two narrower claims,
+pre-registered here before running them: (a) in the long panel, high debt with a
+negative impulse and no public offset more than doubles the one-year crisis rate;
+(b) in both panels, high debt with a positive impulse and a credit gap above 10 points
+raises the three-year crisis and drawdown rates by half or more.
