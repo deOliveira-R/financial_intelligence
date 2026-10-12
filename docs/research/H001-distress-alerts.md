@@ -136,3 +136,14 @@ dark): errors that dilute signals rather than flatter them.
 - Insider threshold chosen by the registered rule (best logit lift at 2%): 0.5% of float.
 
 The first run on the faulty outcome (2.5% base rate) is in the trial log and excluded.
+
+**2026-10-12, after the validation run (validation now seen once):** validation
+(2021-03 to 2022-06) showed a 2.2% base rate and restatements catching 69% of blowups:
+the SPAC wave. In April 2021 hundreds of blank-check companies restated for warrant
+accounting, and in 2022 many liquidated and stopped reporting, which the outcome counts
+as a blowup though a liquidating SPAC returns its trust cash. The first audit had already
+shown 91 blank checks among the "failures" and this wasn't acted on. **Blank-check
+companies (SIC 6770, as currently classified: SPACs that merged carry their operating
+company's code) are excluded.** Design and validation are rerun; because validation has
+been examined, it no longer counts as an untouched test: **the holdout is the decisive
+one.**

@@ -53,6 +53,9 @@ TAKEOVER_FORMS = ("DEFM14A", "PREM14A", "DEFM14C", "425", "SC 13E3", "SC 14D9", 
 STOPPED_GRACE = timedelta(days=120)
 TAKEOVER_ITEMS = ("2.01", "5.01")
 Z_DISTRESS = 1.1
+# Blank-check companies (SPACs) have no business to fail: when one liquidates, its trust
+# returns the cash, and in 2021 hundreds restated for warrant accounting at once.
+BLANK_CHECK_SIC = 6770
 ALERT_RATE = 0.02
 
 
@@ -196,7 +199,10 @@ def _latest(history: list[tuple[date, Any]], day: date) -> Any:
 
 
 def build_rows(session: Session, first: date, last: date) -> list[Row]:
-    ciks = population.members(session)
+    from fin_intel.models import Issuer
+
+    blank_checks = set(session.scalars(select(Issuer.cik).where(Issuer.sic == BLANK_CHECK_SIC)))
+    ciks = population.members(session) - blank_checks
     annual = defaultdict(list)
     periodic = defaultdict(list)
     for cik, form, filed in session.execute(
