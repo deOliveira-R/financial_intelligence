@@ -1,6 +1,6 @@
 # H002: iron tracks present industrial activity, copper anticipates it
 
-Status: **pre-registered, not run** (2026-10-12). Track: macro (theses.md, thesis 1). From
+Status: **pre-registered, not run** (2026-10-12; amended before results, see Amendments). Track: macro (theses.md, thesis 1). From
 the user: steel goes into everything being built now, so iron should mirror the present;
 copper carries expectations (wiring for what will be built, traders positioning), so it
 should lead.
@@ -68,3 +68,13 @@ months) for test 2. No other variants.
 - **Mixed outcomes are informative:** if iron ore leads (China's cycle leading the US),
   or acceleration works where growth doesn't, that's recorded as found, not retrofitted
   into the claim.
+
+## Amendments (before any results)
+
+**2026-10-12:** ALFRED vintages for copper, iron ore, steel output and steel prices begin
+only in 2015, so strictly point-in-time predictors don't exist for the design period
+(the first run returned no values). Predictors are **pseudo-real-time** instead: final
+values lagged one month at each month end (each series publishes a month's figure early
+the next month). Metal prices are effectively unrevised; US steel output is revised
+modestly, the remaining approximation. Industrial production in the baseline stays truly
+point in time (vintages since 1927).

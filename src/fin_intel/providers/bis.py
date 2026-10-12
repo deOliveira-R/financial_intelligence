@@ -12,8 +12,10 @@ class BisProvider(Provider):
     limits = (Limit(20, MINUTE),)
 
     def fetch_dataset(self, flow: str, version: str) -> bytes:
+        """A whole dataset at its latest version (`version` only names the raw key: an
+        explicit version in the path answers 404)."""
         return self.get_bytes(
-            f"/data/dataflow/BIS/{flow}/{version}/~/",
+            f"/data/dataflow/BIS/{flow}/~/",
             {"format": "csv"},
             dataset="dataset",
             key=f"{flow}|{version}",

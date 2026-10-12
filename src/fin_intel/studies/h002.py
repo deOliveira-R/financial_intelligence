@@ -1,10 +1,14 @@
 """H002: iron tracks present industrial activity, copper anticipates it
 (docs/research/H002-iron-present-copper-future.md).
 
-Predictors are point in time (each FRED value as known at each month end, from ALFRED
-vintages through timeseries.py); the target is what happened (final industrial
-production). Two tests per predictor: the lead-lag peak against industrial production's
-year-on-year growth, and whether the predictor improves an out-of-sample forecast of
+Predictors are pseudo-real-time: ALFRED vintages for the metal and steel series begin
+only in 2015, so each predictor is its final value lagged by its publication delay (a
+month's figure comes out early the next month: at a month end, the previous month is
+known). Metal prices are effectively never revised; steel output is, a little.
+Industrial production's own history, a predictor in the baseline, is truly point in time
+(vintages since 1927). The target is what happened (final industrial production). Two
+tests per predictor: the lead-lag peak against industrial production's year-on-year
+growth, and whether the predictor improves an out-of-sample forecast of
 industrial production over its own recent growth.
 """
 
@@ -174,9 +178,10 @@ def month_ends(days: list[date]) -> list[int]:
 def run(session: Session, period: str, log: bool = True) -> list[Result]:
     if period not in ("design", "validation"):
         raise ValueError("H002 runs design or validation here; the holdout needs a frozen variant")
-    specs = [*PREDICTORS.values(), TARGET]
-    days, known = timeseries.build(session, specs, None, research.HOLDOUT_START, pit=True)
-    _, final = timeseries.build(session, [TARGET], None, research.HOLDOUT_START, pit=False)
+    days, known = timeseries.build(session, [TARGET], None, research.HOLDOUT_START, pit=True)
+    _, final = timeseries.build(
+        session, [*PREDICTORS.values(), TARGET], None, research.HOLDOUT_START, pit=False
+    )
     ends = [i for i in month_ends(days) if days[i] < research.HOLDOUT_START]
     months = [days[i] for i in ends]
     research.check_period(period, months[-1])
@@ -186,7 +191,8 @@ def run(session: Session, period: str, log: bool = True) -> list[Result]:
     for name, spec in PREDICTORS.items():
         start, design_end, validation_end = PERIODS[name]
         window = (start, design_end) if period == "design" else (design_end, validation_end)
-        values = [known[spec][i] for i in ends]
+        monthly = [final[spec][i] for i in ends]
+        values = [None, *monthly[:-1]]  # last month's figure, the one published by now
         for transform in ("growth", "acceleration"):
             for horizon in (3, 6, 12):
                 result = analyze(
