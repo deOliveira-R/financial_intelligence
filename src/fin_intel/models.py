@@ -920,6 +920,22 @@ class BisObservation(Base):
     value: Mapped[float] = mapped_column(Float)
 
 
+class ResearchRun(Base):
+    """One evaluation of a hypothesis variant (research.py): every run is kept, so a result
+    is judged against how many variants were tried, and the holdout's single use shows."""
+
+    __tablename__ = "research_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    hypothesis: Mapped[str] = mapped_column(String, index=True)  # H001...
+    variant: Mapped[str] = mapped_column(String)  # canonical JSON of the parameters
+    period: Mapped[str] = mapped_column(String)  # design, validation, holdout
+    frozen: Mapped[bool] = mapped_column(default=False)  # the design chosen for the holdout
+    ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    code_version: Mapped[str | None] = mapped_column(String)
+    metrics: Mapped[str] = mapped_column(Text)  # JSON
+
+
 class XbrlFiling(Base):
     """A filing with XBRL financial data, from EDGAR's quarterly xbrl.idx (population.py):
     every company that filed one since 2009, alive or dead, which is the research
