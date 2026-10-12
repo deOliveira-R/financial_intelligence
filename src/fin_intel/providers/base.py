@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from datetime import UTC, datetime, timedelta
@@ -69,7 +70,9 @@ class Provider:
         """GET a JSON resource (recorded in the raw store)."""
         resp = self._request(url, params, dataset=dataset, key=key)
         try:
-            return resp.json()
+            # Lenient: FRED's series notes carry raw control characters (tabs, newlines)
+            # inside strings, which strict JSON rejects.
+            return json.loads(resp.text, strict=False)
         except ValueError:
             self.check_text_error(resp.text)
             raise ProviderError(f"{self.name}: non-JSON response: {resp.text[:200]}") from None

@@ -61,6 +61,10 @@ MACRO_SERIES: dict[str, tuple[str, str]] = {
     "RSAFS": ("activity", "Retail sales"),
     "HOUST": ("activity", "Housing starts"),
     "UMCSENT": ("activity", "University of Michigan consumer sentiment"),
+    "AMTMNO": ("activity", "Manufacturers' new orders, total"),
+    # Steel: iron is the present, copper the outlook (theses.md, thesis 1)
+    "IPG3311A2S": ("industry", "Industrial production: iron and steel products"),
+    "WPU1017": ("industry", "PPI: steel mill products"),
     # Commodities (IMF primary commodity prices, monthly) and freight. Strategic materials
     # and energy for the deep-history industries; lithium and cobalt aren't on FRED (LIT
     # and the miners' prices stand in).
@@ -83,6 +87,22 @@ MACRO_SERIES: dict[str, tuple[str, str]] = {
     "PAYEMS": ("labor", "Nonfarm payrolls"),
     "UNRATE": ("labor", "Unemployment rate"),
     "ICSA": ("labor", "Initial jobless claims, weekly"),
+    "SAHMREALTIME": ("labor", "Real-time Sahm rule recession indicator"),
+    "LNS14000036": ("labor", "Unemployment rate, ages 20-24"),
+    "JTSJOL": ("labor", "Job openings (JOLTS)"),
+    # Productivity and who gets it (theses 7-8)
+    "OPHNFB": ("productivity", "Output per hour, nonfarm business"),
+    "HOANBS": ("productivity", "Hours worked, nonfarm business"),
+    "PRS85006173": ("productivity", "Labor share, nonfarm business"),
+    # The sovereign (thesis 2): the interest bill, debt, who holds it
+    "A091RC1Q027SBEA": ("sovereign", "Federal interest payments, quarterly"),
+    "FGRECPT": ("sovereign", "Federal current receipts, quarterly"),
+    "GFDEGDQ188S": ("sovereign", "Federal debt, % of GDP"),
+    "TREAST": ("sovereign", "Fed holdings of Treasuries, weekly"),
+    "FDHBFIN": ("sovereign", "Federal debt held by foreign investors, quarterly"),
+    # Private credit (thesis 3)
+    "TOTBKCR": ("credit", "Bank credit, all commercial banks, weekly"),
+    "DRTSCILM": ("credit", "Banks tightening C&I loan standards (SLOOS), quarterly"),
     # Dollar and currencies
     "DTWEXBGS": ("currency", "Broad trade-weighted US dollar index, daily"),
     "DEXUSEU": ("currency", "US dollars per euro, daily"),

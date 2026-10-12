@@ -38,7 +38,7 @@ class RawRecord:
         return gzip.decompress(self.path.read_bytes())
 
     def json(self) -> Any:
-        return json.loads(self.body)
+        return json.loads(self.body, strict=False)  # some providers leave raw tabs in text
 
 
 class RawStore:
