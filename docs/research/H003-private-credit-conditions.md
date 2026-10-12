@@ -92,6 +92,29 @@ replaces the private one should cushion the shock (sectoral balances).
   loans), as an independent second panel; leave-one-country-out applies the same way.
   Success requires the claim to hold in both panels or the difference to be explained.
 
+**2026-10-12, before the time holdout (claims (a) and (b) of Results, frozen):**
+- **Feasibility, from outcome counts only:** the Macrohistory crisis dates end in 2020
+  and record no crisis onset after 2008. The time holdout (2015 onward) therefore has no
+  crises in either panel (the BIS panel borrows these dates): **claim (a) and the crisis
+  half of claim (b) can't be tested on time** and stand on the design and the
+  out-of-country check only. Recessions aren't part of either claim.
+- **What runs, once:** claim (b) for real equity drawdowns of 30% within three years,
+  in both panels, on rows from 2015 whose outcome window is covered (BIS: quarters into
+  2022-23; Macrohistory: years 2015-2016 only, its equity data ending in 2020). The
+  crisis parts and claim (a) are computed too and reported as "no events".
+- **Condition (b):** debt percentile ≥ 2/3 of the country's own history, private impulse
+  ≥ 0, credit gap > 10 points. The base is every row with the outcome, debt percentile,
+  impulse and credit gap known; ratio = rate in the condition over the base rate, 95%
+  interval from 1,000 bootstrap draws over countries.
+- **Macrohistory credit gap** (not computed in the design, which had none for this panel):
+  private loans to GDP minus its one-sided Hodrick-Prescott trend (data up to each year
+  only), λ = 400,000 / 4⁴ = 1,562.5 (the Basel quarterly λ of 400,000 scaled
+  to yearly data, Ravn-Uhlig), with at least 15 years of history. Its design-period value
+  is reported alongside the holdout for reference, not as a test.
+- **Verdict rule:** support where the ratio is ≥ 1.5 with the interval's lower bound
+  above 1, in both panels; "not decided" where the point is ≥ 1.5 but the interval
+  includes 1 (too few rows); rejection where the point is below 1.5.
+
 ## Results
 
 **Design, 2026-10-12** (quarters and years before 2015). Ratios are outcome rates over
