@@ -129,6 +129,10 @@ so that a coherent story doesn't filter what we see.
   (Replicator), bills and presidential documents on unmanned and counter-UAS (we have),
   revenue growth of drone companies against primes (filings), filing-text mentions,
   multilingual conflict and production news (GDELT: free, multilingual, no account).
+- **Frame (the user's):** conflict is the historical norm and peace the exception, so
+  the informative quantity is whether the preconditions for peace are holding or
+  retracting: trade interdependence, alliance commitments, deterrence balance, economic
+  stress, institutional reach. Track their direction, not only conflict counts.
 - **Expression and kill criteria:** a drone basket against the primes; the thesis weakens
   if procurement stays platform-heavy or primes win the drone contracts themselves.
 
