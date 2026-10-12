@@ -24,7 +24,10 @@ Not every thesis can be backtested, and pretending otherwise is how hindsight sn
 
 **Bias guard:** most of these theses lean bearish on the cycle. Each tracker carries its
 disconfirming evidence (what the bull case would look like) and is reviewed against it,
-so that a coherent story doesn't filter what we see.
+so that a coherent story doesn't filter what we see. The user's own words (2026-10-12): if
+everything looked fine they wouldn't be researching it; they hold a bad view of the
+current situation and want to navigate it competently. The research serves navigation:
+when the danger is real, how big, how soon, and what the ways out are.
 
 ## 1. Industrial metals as the industrial pulse (mode A)
 
@@ -38,9 +41,15 @@ so that a coherent story doesn't filter what we see.
   index (FRED), steel PPI, copper (the classic "Dr. Copper", as the comparison), China
   crude steel output (National Bureau of Statistics; World Steel Association), all as
   levels, year-on-year change and its change (acceleration).
-- **Tests:** do they lead industrial production, the ISM-style cycle, and the return of
-  cyclical against defensive sectors (equal-weight sector portfolios, Ken French industry
-  data back to 1926)? Does iron add anything beyond copper?
+- **The user's refinement (2026-10-12): iron is coincident, copper anticipatory.** Steel
+  goes into everything being built now, so iron should track *present* activity; copper
+  prices carry more financial and expectational demand (wiring for what will be built,
+  traders positioning), so copper should *lead*. This is the hypothesis to test: the
+  lead-lag structure of each against industrial production (cross-correlation by lag,
+  and whether one adds forecasting power once the other is known).
+- **Tests:** the lead-lag structure above; whether either predicts the return of cyclical
+  against defensive sectors (equal-weight sector portfolios, Ken French industry data
+  back to 1926) beyond what industrial production itself already says.
 
 ## 2. Sovereign bonds, trust in the currency, and the trap (mode B, parts A)
 
@@ -49,7 +58,24 @@ so that a coherent story doesn't filter what we see.
   borrowing. When debt is high enough, the central bank can't fix both: raising rates
   deepens the fiscal hole, cutting them feeds inflation and weakens the currency (fiscal
   dominance: control is lost because no rate setting works).
+- **Inflation and yield-curve control (the user's addition, 2026-10-12):** a bond pays in
+  the issuer's currency, so what matters is the *real* return. A government that inflates
+  faster than it pays makes its bonds a poor deal against real assets or other
+  currencies, and buyers demand more or leave. Yield-curve control (the central bank
+  capping long yields by buying bonds: US 1942-1951, Japan 2016-2024, Australia
+  2020-2021) and financial repression (real yields held negative so inflation erodes the
+  debt: the US 1945-1980 path) are how governments have escaped the trap, at savers'
+  expense.
+- **The ways out, as outcomes to watch for:** growth outpacing interest (the benign
+  case), financial repression (negative real yields for years), yield-curve control,
+  austerity, restructuring or default, a currency crisis. Each has indicator signatures;
+  knowing which path is being taken matters for positioning (repression favors real
+  assets over bonds; austerity hurts equities first).
 - **Indicators, each with what normal looks like:**
+  - real yields (10-year TIPS, FRED DFII10) and breakeven inflation (FRED T10YIE): real
+    yields negative while inflation runs above target is repression;
+  - central bank holdings of government debt (Fed balance sheet, FRED WALCL and
+    TREAST) against issuance;
   - term premium (the extra yield for lending long; NY Fed ACM, FRED Kim-Wright): rising
     while the Fed cuts is the warning;
   - long yields rising while short rates fall (bear steepening from the long end);
@@ -77,12 +103,29 @@ so that a coherent story doesn't filter what we see.
   quarterly, about 40 countries for decades): a panel with dozens of crises, which gives
   statistical power the US alone can't. US detail from the Fed's Financial Accounts (Z.1,
   on FRED), bank credit (H.8, weekly), unemployment and claims.
+- **The question (the user's framing, 2026-10-12):** not whether Keen is universally right,
+  but *when* his mechanism holds and when it doesn't, and what gets an economy out of the
+  trap. His lasting contribution is attention to private credit: banks create money when
+  they lend (the Bank of England confirmed this in 2014, "Money creation in the modern
+  economy"), not by lending out deposits, so private credit growth is a demand source in
+  its own right and its reversal a demand shock.
+- **Conditions to test:**
+  - level: private debt to GDP and the debt service ratio (high debt makes the flow of
+    new credit matter more);
+  - flow: the credit impulse turning negative;
+  - the offset: government deficits can replace private borrowing (sectoral balances:
+    private deleveraging offset by public borrowing, as in Japan after 1990 and China
+    after 2015, may be why some predicted crashes never came);
+  - the external channel: export surpluses also offset;
+  - the composition: credit for asset purchases (property) versus for production.
+- **Ways out, as outcomes:** a slow deleveraging with growth, inflation eroding debt,
+  restructuring, public debt taking over private (moving the problem to thesis 2), or a
+  debt jubilee (Keen's proposal). The panel shows which happened in each past episode.
 - **Tests:** across countries, do high private debt and a negative credit impulse precede
-  banking crises and equity drawdowns, with what false-alarm rate? Keen's record is mixed
-  after 2008 (Australia, Canada and China carried high private debt for years without the
-  predicted crash), which is exactly what the panel will measure. Implementing his full
-  model (Minsky) is a later option: it's a stylized simulation, not a forecaster; the
-  credit-impulse indicators are what's testable.
+  banking crises and equity drawdowns, and does a large public offset prevent it? With
+  false-alarm rates and lead times. Implementing his full model (Minsky) is a later
+  option: it's a stylized simulation, not a forecaster; the conditions above are what's
+  testable.
 
 ## 4. The AI investment boom unwinds by over-stretch (mode B)
 
@@ -124,6 +167,9 @@ so that a coherent story doesn't filter what we see.
 
 - **Thesis:** drones and counter-drone systems take budget share from conventional
   platforms; drone-native entrants grow faster than primes that don't adapt.
+- **Data:** ACLED (the user registered, 2026-10-12: curated political violence and protest
+  events worldwide, by type, actor and location, including drone and air strikes) and
+  GDELT (multilingual news events).
 - **Indicators:** federal contract obligations for unmanned systems (USAspending by
   keyword and product code: we have contracts by NAICS, add text), defense budget lines
   (Replicator), bills and presidential documents on unmanned and counter-UAS (we have),
