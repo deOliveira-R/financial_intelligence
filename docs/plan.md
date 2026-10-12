@@ -125,7 +125,31 @@ The shared vocabulary every connecting feature uses.
 ## Phase 5: the signal-design session (the user's)
 
 Started 2026-10-11: protocol, data audit and steps in [research.md](research.md);
-pre-registered hypotheses in [research/](research/).
+pre-registered hypotheses and results in [research/](research/); the user's theses in
+[research/theses.md](research/theses.md).
+
+Status 2026-10-12: survivorship-free population loaded (18k filers, dead or alive); new
+sources UCDP, GDELT (`sync-news`, slow: GDELT throttles), BIS, Macrohistory, OECD panel;
+study harness (`research.py`, `fin-intel study H00N --period design|validation|holdout`,
+`--freeze`). Results: H001 distress alert 7.3x lift in the holdout (partial support,
+holdout spent); H002 copper doesn't lead (acceleration a candidate); H003 the boom and
+credit gap warn, the reversal comes too late, a public offset defuses it.
+
+Next, agreed with the user (2026-10-12), in order:
+- [ ] **H001 as a live exception alert:** score the frozen model (studies/h001.py
+  FROZEN, logit refit on the design quarters) for watchlist and holdings companies in
+  sync-daily; alert only when a company enters the top 2% (flag means "read the
+  filings", not "sell"); show the triggering signals; catalog-style output and an API/MCP
+  surface.
+- [ ] **H003 narrower claims on the time holdout (2015 onward):** (a) long panel: high
+  debt, negative impulse, no public offset more than doubles the one-year crisis rate;
+  (b) both panels: high debt, positive impulse and a credit gap above 10 points raise
+  three-year crisis and drawdown rates by half or more. Pre-registered in H003's file;
+  implement as frozen variants and run the holdout once.
+- [ ] **H004: copper acceleration at 3 months** (H002 follow-up), fresh
+  pre-registration before running, ideally with China's steel output added.
+Later: trackers for theses 2, 4, 6-8 once GDELT's load completes; new distress signals
+(going concern, short-interest jumps) as a new hypothesis.
 
 Hypotheses, analysis skills, evals and hill-climbing on the historical data, using the
 timeline, dossiers and graph. LLM skills extract supplier/customer links and policy
