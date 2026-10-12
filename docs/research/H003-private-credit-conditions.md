@@ -134,3 +134,21 @@ pre-registered here before running them: (a) in the long panel, high debt with a
 negative impulse and no public offset more than doubles the one-year crisis rate;
 (b) in both panels, high debt with a positive impulse and a credit gap above 10 points
 raises the three-year crisis and drawdown rates by half or more.
+
+**Validation, leave one country out (BIS panel, quarters before 2015), 2026-10-12:**
+the model adding Keen's quantities (debt percentile, impulse, their interaction,
+government impulse) to the credit gap, each country predicted from the others:
+
+| Outcome | Events | AUC gap only | AUC with Keen's quantities | Precision at 10% alerts (gap / Keen) |
+|---|---|---|---|---|
+| Crisis within 1 year | 64 | 0.61 | 0.64 | 0.085 / 0.085 |
+| Crisis within 3 years | 184 | 0.60 | **0.68** | 0.27 / **0.30** (base 0.13) |
+| Drawdown within 1 year | 244 | 0.56 | 0.58 | 0.17 / 0.13 |
+| Drawdown within 3 years | 658 | 0.58 | 0.59 | 0.47 / 0.40 |
+| Recession within 1 year | 492 | 0.55 | 0.58 | 0.45 / 0.41 |
+| Recession within 3 years | 1,125 | 0.60 | 0.60 | 0.91 / 0.89 |
+
+The debt level and the flow add out-of-country information for **banking crises over
+three years** (AUC 0.60 to 0.68, precision 0.27 to 0.30 against a 0.13 base rate) and
+little for drawdowns or recessions, where they slightly hurt precision. Predictive power
+is modest throughout (AUCs 0.55-0.68): useful as a regime gauge, not a timer.
