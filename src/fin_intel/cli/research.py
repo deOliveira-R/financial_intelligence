@@ -534,3 +534,33 @@ def dossier_cmd(
         except ValueError as exc:
             raise typer.BadParameter(str(exc)) from None
     typer.echo(json.dumps(result, indent=2, default=str))
+
+
+@app.command("study", rich_help_panel="Research")
+def study(
+    hypothesis: Annotated[str, typer.Argument(help="A pre-registered hypothesis (H002...)")],
+    period: Annotated[str, typer.Option(help="design or validation")] = "design",
+    log: Annotated[bool, typer.Option(help="Record each variant in the trial log")] = True,
+) -> None:
+    """Run a pre-registered study (docs/research/) on its design or validation period;
+    every variant run is logged, and the holdout stays closed until a variant is frozen."""
+    import importlib
+
+    from fin_intel import research
+
+    try:
+        module = importlib.import_module(f"fin_intel.studies.{hypothesis.lower()}")
+    except ModuleNotFoundError:
+        raise typer.BadParameter(f"no study module for {hypothesis}") from None
+    with session_factory()() as session:
+        results = module.run(session, period, log=log)
+        tried = research.trials(session, module.HYPOTHESIS)
+    for r in results:
+        cells = []
+        for k, v in vars(r).items():
+            cells.append(f"{k}={v:.3f}" if isinstance(v, float) else f"{k}={v}")
+        typer.echo("  ".join(cells))
+    typer.echo(
+        f"{tried} variants tried so far; |t| needed after Bonferroni: "
+        f"{research.bonferroni_t(tried):.2f}"
+    )
