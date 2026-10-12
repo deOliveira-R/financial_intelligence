@@ -61,3 +61,25 @@ def test_conditional_rates_logit_and_out_of_country_prediction():
     assert out["precision10_model"] > out["base_rate"]
     first = h003.episodes(rows)[0]
     assert set(first) >= {"country", "period", "impulse", "crisis_36"}
+
+
+def test_one_sided_gap_and_the_frozen_claims():
+    trend = [100.0 + i for i in range(20)]
+    gaps = h003.one_sided_gap([None, *trend[:-1], trend[-1] + 30])
+    assert gaps[0] is None and gaps[h003.GAP_MIN_YEARS - 1] is None
+    assert abs(gaps[h003.GAP_MIN_YEARS]) < 1e-6  # a straight line has no gap
+    assert gaps[-1] > 15  # a jump shows, judged on the data up to it
+
+    rows = synthetic_rows()
+    for r in rows:
+        r.outcomes["crisis_12"] = r.outcomes["crisis_36"]
+        r.outcomes["drawdown_36"] = None  # not covered
+    for r in rows[:1800]:
+        r.panel = "jst"
+    for r in rows[1800::2]:
+        r.credit_gap = 12.0  # booms unrelated to crises here
+    out = {(c["claim"], c["panel"], c["outcome"]): c for c in h003.claims(rows)}
+    a = out[("a", "jst", "crisis_12")]
+    assert a["ratio"] > 2 and a["verdict"] == "supported"
+    assert out[("b", "bis", "drawdown_36")]["verdict"] == "no events"
+    assert out[("b", "bis", "crisis_36")]["verdict"] in ("rejected", "not decided")

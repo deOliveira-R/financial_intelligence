@@ -41,6 +41,12 @@ DRAWDOWN = -0.30
 WINDOWS = {12: 12, 36: 36}  # months
 FEATURES_CORE = ("debt_pct", "impulse", "debt_x_impulse", "gov_impulse")
 FEATURES_FULL = (*FEATURES_CORE, "credit_gap", "dsr_dev")
+# The Basel gap's one-sided HP filter, its quarterly lambda scaled to yearly data
+# (Ravn-Uhlig), for the Macrohistory panel; the BIS publishes its own gap.
+YEARLY_LAMBDA = 400_000 / 4**4
+GAP_MIN_YEARS = 15
+# The narrower claims frozen for the time holdout (amendment of 2026-10-12).
+FROZEN = {"claims": "a: jst crisis_12; b: both panels crisis_36 and drawdown_36"}
 
 
 @dataclass
@@ -105,6 +111,25 @@ def trailing_deviation(values: list[float | None], window: int) -> list[float | 
         out.append(
             v - sum(past) / len(past) if v is not None and len(past) >= MIN_HISTORY else None
         )
+    return out
+
+
+def one_sided_gap(values: list[float | None], lam: float = YEARLY_LAMBDA) -> list[float | None]:
+    """Each value minus its Hodrick-Prescott trend fitted on the values up to it only."""
+    from statsmodels.tsa.filters.hp_filter import hpfilter
+
+    out: list[float | None] = []
+    seen: list[float] = []
+    for v in values:
+        if v is None:
+            out.append(None)
+            continue
+        seen.append(v)
+        if len(seen) < GAP_MIN_YEARS:
+            out.append(None)
+            continue
+        _, trend = hpfilter(np.asarray(seen), lamb=lam)
+        out.append(v - float(trend[-1]))
     return out
 
 
@@ -285,6 +310,7 @@ def jst_rows(session: Session) -> list[Row]:
         }
         ratio = {y: loans[y] / gdp[y] * 100 if loans[y] and gdp[y] else None for y in ordered}
         pct = dict(zip(ordered, percentiles([ratio[y] for y in ordered]), strict=True))
+        gap = dict(zip(ordered, one_sided_gap([ratio[y] for y in ordered]), strict=True))
         # A real equity index from yearly capital gains deflated by consumer prices; years
         # without data are skipped, and windows missing a year get no outcome.
         index: list[tuple[date, float]] = []
@@ -309,6 +335,7 @@ def jst_rows(session: Session) -> list[Row]:
                 debt_pct=pct.get(y),
                 impulse=yearly_impulse(loans, gdp, y),
                 gov_impulse=yearly_impulse(public, gdp, y),
+                credit_gap=gap.get(y),
             )
             for label, months in WINDOWS.items():
                 row.outcomes[f"crisis_{label}"] = window_outcome(
@@ -376,6 +403,83 @@ def conditional_rates(rows: list[Row], outcome: str, reps: int = 1000) -> list[R
                 est.high,
             )
         )
+    return out
+
+
+def condition_ratio(
+    rows: list[Row],
+    outcome: str,
+    pick: Callable[[Row], bool],
+    needs: tuple[str, ...] = ("debt_pct", "impulse"),
+    reps: int = 1000,
+) -> dict[str, Any]:
+    """The outcome rate where `pick` holds over the base rate (rows with the outcome and
+    `needs` known), with a bootstrap interval over countries."""
+    usable = [
+        r
+        for r in rows
+        if r.outcomes.get(outcome) is not None and all(r.feature(f) is not None for f in needs)
+    ]
+    chosen = [r for r in usable if pick(r)]
+    events = sum(bool(r.outcomes[outcome]) for r in usable)
+    out: dict[str, Any] = {
+        "outcome": outcome,
+        "n": len(usable),
+        "events": events,
+        "n_condition": len(chosen),
+        "events_condition": sum(bool(r.outcomes[outcome]) for r in chosen),
+        "countries": len({r.country for r in usable}),
+    }
+    if not events or not chosen:
+        return {**out, "ratio": None, "verdict": "no events" if not events else "no rows"}
+
+    def ratio(rs: list[Row]) -> float:
+        inside = [r for r in rs if pick(r)]
+        base = sum(bool(r.outcomes[outcome]) for r in rs) / len(rs) if rs else 0
+        if not inside or not base:
+            return math.nan
+        return sum(bool(r.outcomes[outcome]) for r in inside) / len(inside) / base
+
+    by_country: dict[str, list[Row]] = defaultdict(list)
+    for r in usable:
+        by_country[r.country].append(r)
+    est = research.cluster_bootstrap(by_country, ratio, reps=reps)
+    return {**out, "rate": out["events_condition"] / len(chosen), "base": events / len(usable),
+            "ratio": est.value, "ratio_low": est.low, "ratio_high": est.high}  # fmt: skip
+
+
+def verdict(result: dict[str, Any], bar: float) -> str:
+    if result.get("ratio") is None:
+        return result["verdict"]
+    if result["ratio"] < bar:
+        return "rejected"
+    return "supported" if result["ratio_low"] > 1 else "not decided"
+
+
+def boom(r: Row) -> bool:
+    """Claim (b): high debt still growing, with a wide credit gap."""
+    return r.debt_pct >= HIGH_DEBT and r.impulse >= 0 and r.credit_gap > 10
+
+
+def claims(rows: list[Row]) -> list[dict[str, Any]]:
+    """The two narrower claims frozen for the time holdout: (a) in the long panel, high
+    debt, a negative impulse and no public offset more than double the one-year crisis
+    rate; (b) in both panels, the boom raises three-year crisis and drawdown rates by half
+    or more."""
+    out = []
+    jst = [r for r in rows if r.panel == "jst"]
+    a = condition_ratio(
+        jst, "crisis_12", lambda r: bool(r.signal) and r.offset is False,
+        needs=("debt_pct", "impulse", "gov_impulse"),
+    )  # fmt: skip
+    out.append({"claim": "a", "panel": "jst", **a, "verdict": verdict(a, 2.0)})
+    for panel in ("bis", "jst"):
+        panel_rows = [r for r in rows if r.panel == panel]
+        for outcome in ("crisis_36", "drawdown_36"):
+            b = condition_ratio(
+                panel_rows, outcome, boom, needs=("debt_pct", "impulse", "credit_gap")
+            )
+            out.append({"claim": "b", "panel": panel, **b, "verdict": verdict(b, 1.5)})
     return out
 
 
@@ -492,8 +596,22 @@ def episodes(rows: list[Row]) -> list[dict[str, Any]]:
 
 
 def run(session: Session, period: str, log: bool = True) -> list[dict[str, Any]]:
-    if period not in ("design", "validation"):
-        raise ValueError("H003 runs design or validation here; the holdout needs a frozen variant")
+    """Design and validation on rows before 2015; the holdout (rows from 2015) evaluates
+    the frozen narrower claims once, with their pre-2015 values for reference."""
+    if period not in research.PERIODS:
+        raise ValueError(f"period is one of {research.PERIODS}")
+    if period == "holdout":
+        if not research.holdout_allowed(session, HYPOTHESIS, FROZEN):
+            raise research.HoldoutError("freeze the claims first (study H003 --freeze), once")
+        rows = [*bis_rows(session), *jst_rows(session)]
+        result = {
+            "period": "holdout",
+            "holdout": claims([r for r in rows if r.period >= TIME_HOLDOUT]),
+            "before_2015": claims([r for r in rows if r.period < TIME_HOLDOUT]),
+        }
+        if log:
+            research.log(session, HYPOTHESIS, FROZEN, "holdout", result)
+        return [result]
     rows = [*bis_rows(session), *jst_rows(session)]
     rows = [r for r in rows if r.period < TIME_HOLDOUT]
     results: list[dict[str, Any]] = []
