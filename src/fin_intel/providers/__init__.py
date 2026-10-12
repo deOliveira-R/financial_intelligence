@@ -34,6 +34,7 @@ from fin_intel.providers.tiingo import TiingoProvider
 from fin_intel.providers.twse import TwseProvider
 from fin_intel.providers.ucdp import UcdpProvider
 from fin_intel.providers.usaspending import UsaspendingProvider
+from fin_intel.providers.worldbank import WorldBankProvider
 
 __all__ = [
     "AcledProvider",
@@ -71,4 +72,5 @@ __all__ = [
     "TwseProvider",
     "UcdpProvider",
     "UsaspendingProvider",
+    "WorldBankProvider",
 ]

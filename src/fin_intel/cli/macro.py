@@ -46,6 +46,29 @@ def sync_bis(
     run_items("sync-bis", ["all"], lambda s, _: credit.sync_bis(s, bis))
 
 
+@app.command("sync-commodities", rich_help_panel="Macro and markets")
+def sync_commodities(
+    force: Annotated[bool, typer.Option(help="Refetch even if synced within 25 days")] = False,
+) -> None:
+    """Load the World Bank's monthly commodity prices (Pink Sheet, since 1960: copper, gold,
+    iron ore and other metals, energy, grains). Updated monthly; a sync within 25 days is
+    skipped."""
+    from datetime import UTC, datetime
+
+    from fin_intel import commodities, pipeline
+    from fin_intel.providers import WorldBankProvider
+
+    with session_factory()() as session:
+        recent = pipeline.synced_since(
+            session, "worldbank", "pinksheet", datetime.now(UTC) - timedelta(days=25)
+        )
+    if recent and not force:
+        typer.echo("commodity prices synced within 25 days; skipping (--force to refetch)")
+        return
+    provider = WorldBankProvider(raw_store=default_store())
+    run_items("sync-commodities", ["monthly"], lambda s, _: commodities.sync(s, provider))
+
+
 @app.command("sync-panel", rich_help_panel="Macro and markets")
 def sync_panel(
     force: Annotated[bool, typer.Option(help="Refetch even if synced this month")] = False,

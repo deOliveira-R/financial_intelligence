@@ -62,6 +62,10 @@ MACRO_SERIES: dict[str, tuple[str, str]] = {
     "HOUST": ("activity", "Housing starts"),
     "UMCSENT": ("activity", "University of Michigan consumer sentiment"),
     "AMTMNO": ("activity", "Manufacturers' new orders, total"),
+    # World activity (H005: copper may speak for the world rather than the US)
+    "OECDPRINTO01GYSAM": ("activity", "OECD total industrial production, growth on a year"),
+    "IGREA": ("activity", "Kilian index of global real economic activity (dry-bulk freight)"),
+    "CHNPRINTO01IXPYM": ("activity", "China industrial production, growth on a year (to 2023)"),
     # Steel: iron is the present, copper the outlook (theses.md, thesis 1)
     "IPG3311A2S": ("industry", "Industrial production: iron and steel products"),
     "WPU1017": ("industry", "PPI: steel mill products"),

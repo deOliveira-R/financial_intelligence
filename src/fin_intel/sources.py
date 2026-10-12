@@ -2,6 +2,7 @@
 
 from fin_intel import (  # noqa: F401
     bills,
+    commodities,
     conflict,
     congress,
     congress_members,
