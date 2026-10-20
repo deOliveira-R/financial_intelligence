@@ -12,12 +12,21 @@ and `.env`.
 | `api` | always | API on `127.0.0.1:8000` |
 | `cron` | Mon–Fri 23:30 UTC | `fin-intel sync-daily`: market bars, splits and dividends, breadth, SEC fundamentals (bulk), insiders, congress, FRED, EIA, Korean and Japanese filings, Taiwanese prices, company metrics, watchlist prices |
 | | Sun 06:00 UTC | `fin-intel sync-weekly`: SEC tickers, Massive reference, 13F, CFTC, ADR share counts, SIC codes, corporate events, missing SEC filings, filing text, Taiwanese and European statements, cross-listings, release calendar, contracts, input-output tables, short interest, N-PORT, Congress, lobbying, bills, presidential documents, outcomes, World Bank commodities, `prune-raw` |
+| | hourly | `fin-intel sync-news --stalest 1`: the GDELT query refreshed longest ago (GDELT throttles bursts) |
 | | daily 04:00 UTC | `deploy/backup.sh`: irreplaceable tables (raw index, portfolio) and the raw files present at dump time to an rclone remote, verified |
 
-The schedule is `deploy/crontab`, run by [supercronic](https://github.com/aptible/supercronic)
-(cron for containers: logs to `docker compose logs cron`, never starts a job that is still
-running). A run missed while the server was down isn't replayed; the next one picks up from
-the last success.
+The cron service runs them with [supercronic](https://github.com/aptible/supercronic) (cron
+for containers: logs to `docker compose logs cron`, never starts a job that is still
+running), from a crontab `deploy/cron.sh` writes at start. A run missed while the server was
+down isn't replayed; the next one picks up from the last success.
+
+**Configuration.** As in TrueNAS's app catalog, the image holds only the code, pinned
+(Python, packages, supercronic, uv); everything that differs between machines is a setting
+in `.env`, with defaults in `compose.yaml`: host paths and owners, the API address, the
+schedule (`FI_SCHEDULE_*`, empty turns a job off), memory limits per service, PostgreSQL's
+memory settings and its image (pinned by digest). `.env.example` documents every one. The
+app containers run read-only, as `finintel`'s uid, with every capability dropped and
+`no-new-privileges`; each service has a healthcheck (`docker compose ps`).
 
 ## 2. Create the VM
 
@@ -63,7 +72,7 @@ FI_FRED_SERIES=GDP,CPIAUCSL,DGS10,FEDFUNDS,UNRATE
 FI_MARKET_OTC=true
 FI_BACKUP_REMOTE=r2:fin-intel-backups   # see step 7
 
-# Containers (compose.yaml)
+# Containers (compose.yaml); the rest of the settings and their defaults: .env.example
 FI_PG_PASSWORD=<openssl rand -hex 24>   # the app's database password
 FI_PG_DATA=/data/postgres               # database directory on the host
 PG_UID=999                              # its owner (999: the image's postgres user)
@@ -72,6 +81,9 @@ APP_UID=1002                            # finintel's ids (id finintel): owner of
 APP_GID=1002
 RCLONE_CONFIG_DIR=/home/finintel/.config/rclone
 ```
+
+A changed setting applies with `sudo docker compose up -d` (from the repo directory); a
+code change needs `install.sh`.
 
 ## 5. PostgreSQL on a block volume
 
@@ -87,9 +99,9 @@ sudo install -d -o 999 -g 999 -m 700 /data/postgres
 ```
 
 The `postgres` container creates the database on first start (user `finintel`, database
-`fin_intel`, password `FI_PG_PASSWORD`). Its settings, tuned for the 12 GB VM, are in
-`deploy/postgres/postgresql.conf` and `pg_hba.conf` (password logins from the compose
-network only). Start everything, then load the data by restoring a backup (step 7) or by
+`fin_intel`, password `FI_PG_PASSWORD`). Its memory settings come from `.env` (`PG_*`, defaults for the
+12 GB VM); the rest is in `deploy/postgres/postgresql.conf` and `pg_hba.conf` (password
+logins from the compose network only). Start everything, then load the data by restoring a backup (step 7) or by
 syncing from scratch:
 
 ```sh

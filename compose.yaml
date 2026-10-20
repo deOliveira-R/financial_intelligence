@@ -1,7 +1,7 @@
-# The server's services: PostgreSQL, the API, and the scheduled jobs (supercronic, from
-# deploy/crontab). Data stays on the host: the database in FI_PG_DATA, the raw responses in
-# ./data/raw. Settings come from .env (keys, FI_PG_PASSWORD, and the host paths and user ids
-# below). See deploy/README.md.
+# The server's services: PostgreSQL, the API, and the scheduled jobs. The image holds only
+# the code; everything that differs between machines comes from .env (documented in
+# .env.example), with the defaults below. Data stays on the host: the database in
+# FI_PG_DATA, the raw responses in ./data/raw. See deploy/README.md.
 name: fin-intel
 
 x-app: &app
@@ -9,16 +9,21 @@ x-app: &app
   restart: unless-stopped
   user: "${APP_UID:-1002}:${APP_GID:-1002}"
   env_file: .env
-  environment:
+  environment: &app-env
     FI_DATABASE_URL: postgresql+psycopg://finintel:${FI_PG_PASSWORD:?set FI_PG_PASSWORD in .env}@postgres/fin_intel
     FI_RAW_DIR: data/raw
     # For pg_dump in deploy/backup.sh
     PGHOST: postgres
     PGUSER: finintel
     PGPASSWORD: ${FI_PG_PASSWORD}
-    RCLONE_CONFIG: /config/rclone/rclone.conf
   volumes:
     - ./data/raw:/app/data/raw
+  # Nothing in the image is written at run time: only the raw store and /tmp.
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
   depends_on:
     postgres:
       condition: service_healthy
@@ -29,14 +34,20 @@ x-app: &app
 
 services:
   postgres:
-    image: postgres:16
+    image: ${FI_PG_IMAGE:-postgres:16.15-trixie@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d}
     restart: unless-stopped
     # The data directory's owner on the host (the server's original cluster is owned by the
     # host's postgres user).
     user: "${PG_UID:-999}:${PG_GID:-999}"
+    # Memory settings here so they follow the machine (.env); the rest is in the file.
     command: >-
       postgres -c config_file=/etc/postgresql/postgresql.conf
                -c hba_file=/etc/postgresql/pg_hba.conf
+               -c shared_buffers=${PG_SHARED_BUFFERS:-2GB}
+               -c effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-7GB}
+               -c work_mem=${PG_WORK_MEM:-64MB}
+               -c maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-1GB}
+               -c max_wal_size=${PG_MAX_WAL_SIZE:-8GB}
     environment:
       POSTGRES_USER: finintel
       POSTGRES_PASSWORD: ${FI_PG_PASSWORD}
@@ -47,7 +58,10 @@ services:
       - ${FI_PG_DATA:-./data/postgres}:/var/lib/postgresql/data
       - ./deploy/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./deploy/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
-    shm_size: 1g
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    shm_size: ${PG_SHM_SIZE:-1g}
+    mem_limit: ${PG_MEMORY:-0}
     stop_grace_period: 2m
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "finintel", "-d", "fin_intel"]
@@ -64,13 +78,32 @@ services:
       args:
         CODE_VERSION: ${CODE_VERSION:-}
     command: ["fin-intel", "serve", "--host", "0.0.0.0", "--port", "8000"]
-    # Localhost only: reached through Tailscale serve, as before.
     ports:
-      - "127.0.0.1:8000:8000"
+      - "${FI_API_BIND:-127.0.0.1}:${FI_API_PORT:-8000}:8000"
+    mem_limit: ${FI_API_MEMORY:-1g}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   cron:
     <<: *app
-    command: ["supercronic", "-passthrough-logs", "/app/deploy/crontab"]
+    command: ["/app/deploy/cron.sh"]
+    environment:
+      <<: *app-env
+      RCLONE_CONFIG: /config/rclone/rclone.conf
+      FI_SCHEDULE_DAILY: ${FI_SCHEDULE_DAILY-30 23 * * 1-5}
+      FI_SCHEDULE_WEEKLY: ${FI_SCHEDULE_WEEKLY-0 6 * * 0}
+      FI_SCHEDULE_NEWS: ${FI_SCHEDULE_NEWS-17 * * * *}
+      FI_SCHEDULE_BACKUP: ${FI_SCHEDULE_BACKUP-0 4 * * *}
     volumes:
       - ./data/raw:/app/data/raw
       - ${RCLONE_CONFIG_DIR:-~/.config/rclone}:/config/rclone:ro
+    # Also the limit of one-off jobs (docker compose run cron ...)
+    mem_limit: ${FI_CRON_MEMORY:-6g}
+    healthcheck:
+      test: ["CMD", "pidof", "supercronic"]
+      interval: 60s
+      timeout: 5s
+      retries: 3

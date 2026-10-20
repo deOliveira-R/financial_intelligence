@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 from fin_intel import rebuild, registry
 from fin_intel.models import RawResponse, SyncState
 
-DAILY, WEEKLY, MONTHLY = 4, 9, 35  # days, with room for weekends and holidays
+DAILY, WEEKLY, MONTHLY, QUARTERLY = 4, 9, 35, 100  # days, with room for weekends and holidays
 EXPECTED: dict[tuple[str, str], int] = {
     # sync-daily (Mon-Fri)
     ("massive", "grouped_daily"): DAILY,
@@ -49,7 +49,7 @@ EXPECTED: dict[tuple[str, str], int] = {
     # sync-weekly (Sunday)
     ("sec", "company_tickers"): WEEKLY,
     ("massive", "tickers"): WEEKLY,
-    ("sec", "13f_dataset"): WEEKLY,
+    ("sec", "13f_dataset"): QUARTERLY,  # checked weekly; SEC adds a file each quarter
     ("cftc", "legacy"): WEEKLY,
     ("cftc", "disaggregated"): WEEKLY,
     ("cftc", "tff"): WEEKLY,
@@ -69,7 +69,7 @@ EXPECTED: dict[tuple[str, str], int] = {
     ("ucdp", "events"): MONTHLY,
     ("bis", "dataset"): MONTHLY,
     ("worldbank", "pinksheet"): MONTHLY,
-    ("gdelt", "doc_timeline"): WEEKLY,
+    ("gdelt", "doc_timeline"): WEEKLY,  # one query an hour (FI_SCHEDULE_NEWS)
     # checked monthly (yearly releases)
     ("bea", "supply_use"): MONTHLY,
     ("census", "concordance"): MONTHLY,

@@ -211,3 +211,13 @@ walk-forward out-of-sample splits, and storing runs for comparison.
 - macOS launch agent keeping the SSH tunnel up.
 - Pin the exact Python patch (`.python-version` 3.14.x) so local and server match.
 - Restart the editor's Pyright after the `pyrightconfig.json` change, if warnings persist.
+
+## Containers (2026-10-20)
+
+- PostgreSQL major upgrades: the image is pinned to 16; moving to 17/18 needs pg_upgrade.
+  TrueNAS does it with a one-shot upgrade container before Postgres starts and a data
+  directory per major version (`<data>/<major>/docker`); adopt that when upgrading, rather
+  than a dump and restore of tens of GB.
+- A one-shot permissions service (TrueNAS's pattern) that fixes ownership of `data/raw` and
+  the database directory before the services start; today install.sh creates `data/raw` as
+  `finintel` and the cluster keeps its host owner.

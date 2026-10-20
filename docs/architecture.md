@@ -133,9 +133,12 @@ Rules that hold everywhere:
 - **Containers (`compose.yaml`):** `postgres` (data on the host's block volume), `api`, and
   `cron`, all but Postgres from one image built on the server from the checkout. Data stays
   on the host (`/data`, `data/raw`).
-- **Schedule (supercronic, `deploy/crontab`):** `sync-daily` Mon–Fri 23:30 UTC,
-  `sync-weekly` Sun 06:00 UTC, backup 04:00 UTC. Long backfills run as detached one-off
-  containers (`docker compose run -d --name ... cron fin-intel ...`).
+- **Schedule (supercronic, `deploy/cron.sh`, times from `FI_SCHEDULE_*`):** `sync-daily` Mon–Fri 23:30 UTC,
+  `sync-weekly` Sun 06:00 UTC, backup 04:00 UTC, one GDELT news query hourly. Long backfills
+  run as detached one-off
+  containers (`docker compose run -d --name ... cron fin-intel ...`). Machine-specific
+  settings (paths, ids, memory, schedule, image pins) live in `.env` (`.env.example`), not
+  the image.
 - **Deploy:** `sudo bash deploy/install.sh` pulls `main`, builds the image, migrates, then
   restarts the containers.
 - **Backups:** `deploy/backup.sh` uploads the tables that can't be rebuilt (raw index,

@@ -93,7 +93,7 @@ api/                    read-only FastAPI, routers by area (app.py: key check, s
 ## Server
 
 - `ssh fin-intel` (Oracle Arm VM, Phoenix). Everything runs in containers (`compose.yaml`,
-  project `fin-intel`): `postgres`, `api`, and `cron` (supercronic, `deploy/crontab`). The
+  project `fin-intel`): `postgres`, `api`, and `cron` (supercronic; times from `FI_SCHEDULE_*`, `deploy/cron.sh`). The
   repo checkout `/home/finintel/financial_intelligence` holds the compose file, `.env` and
   `data/raw`; the database is in `/data` on the host. Commands run from that directory:
   `sudo docker compose exec cron fin-intel ...` (psql: `exec postgres psql -U finintel fin_intel`).

@@ -126,3 +126,33 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
         "metrics",
         ("prices", ["AAPL", "MSFT"]),
     ]
+
+
+@respx.mock
+def test_sync_news_stalest_refreshes_the_queries_left_longest(db_file, monkeypatch):
+    from datetime import UTC, date, datetime, timedelta
+
+    from fin_intel import news
+    from fin_intel.models import SyncState
+
+    monkeypatch.setattr(news, "FIRST_YEAR", date.today().year)
+    monkeypatch.setattr(news, "QUERIES", {n: (n, f'"{n}"') for n in ("fresh", "never", "older")})
+    now = datetime.now(UTC)
+    with db_file.begin() as conn:
+        conn.execute(
+            SyncState.__table__.insert(),
+            [
+                {
+                    "provider": "gdelt",
+                    "dataset": "doc_timeline",
+                    "key": k,
+                    "last_attempt": t,
+                    "last_success": t,
+                }
+                for k, t in (("fresh", now - timedelta(days=1)), ("older", now - timedelta(days=5)))
+            ],
+        )
+    route = respx.get("https://api.gdeltproject.org/api/v2/doc/doc").respond(json={})
+    result = CliRunner().invoke(app, ["sync-news", "--stalest", "2"])
+    assert result.exit_code == 0, result.output
+    assert [c.request.url.params["query"] for c in route.calls] == ['"never"', '"older"']

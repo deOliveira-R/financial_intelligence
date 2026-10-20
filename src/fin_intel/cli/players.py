@@ -244,10 +244,14 @@ def sync_conflict() -> None:
 @app.command("sync-news", rich_help_panel="Big players and policy")
 def sync_news(
     query: Annotated[list[str] | None, typer.Option(help="Only these queries (news.py)")] = None,
+    stalest: Annotated[
+        int | None, typer.Option(help="Only the N queries refreshed longest ago (never first)")
+    ] = None,
 ) -> None:
     """Load daily worldwide news attention (GDELT, 65 languages, since 2017) for the thesis
     queries in news.py: one request every 30 seconds (GDELT throttles), past years once per
-    query text."""
+    query text. The schedule runs `--stalest 1` hourly: GDELT throttles bursts, and a batch
+    that stops at the throttle would always leave the same queries behind."""
     from fin_intel import news
     from fin_intel.providers import GdeltProvider
 
@@ -259,6 +263,16 @@ def sync_news(
     with session_factory()() as session:
         news.drop_unknown(session)
         session.commit()
+        if stalest is not None:
+            refreshed = dict(
+                session.execute(
+                    select(SyncState.key, SyncState.last_success).where(
+                        SyncState.provider == "gdelt", SyncState.dataset == "doc_timeline"
+                    )
+                ).all()
+            )
+            floor = datetime.min.replace(tzinfo=UTC)
+            names = sorted(names, key=lambda n: refreshed.get(n) or floor)[:stalest]
     run_items("sync-news", names, lambda s, n: news.sync_query(s, gdelt, n, date.today()))
 
 
