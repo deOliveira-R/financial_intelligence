@@ -46,8 +46,8 @@ def test_gap_closes_through_the_yield():
     ratio = np.cumsum(rng.normal(scale=0.05, size=360))
     yields = np.zeros(360)
     for i in range(1, 360):
-        yields[i] = yields[i - 1] + 0.3 * (2 + 4 * ratio[i - 1] - yields[i - 1]) + rng.normal(
-            scale=0.05
+        yields[i] = (
+            yields[i - 1] + 0.3 * (2 + 4 * ratio[i - 1] - yields[i - 1]) + rng.normal(scale=0.05)
         )
     c1, c2 = h005.gap_origins(dict(zip(ms, ratio, strict=True)), dict(zip(ms, yields, strict=True)))
     window = (date(1990, 1, 1), date(2004, 12, 1))

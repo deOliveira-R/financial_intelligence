@@ -28,6 +28,12 @@ def test_holdout_opens_once_for_a_frozen_variant(session):
     assert research.bonferroni_t(20) > 3
 
 
+def test_trial_log_records_the_image_commit_without_git(session, monkeypatch):
+    monkeypatch.setenv("FI_CODE_VERSION", "abc1234")
+    run = research.log(session, "H999", {"x": 1}, "design", {})
+    assert run.code_version == "abc1234"
+
+
 def test_newey_west_widens_errors_for_overlapping_returns():
     rng = np.random.default_rng(1)
     daily = rng.normal(0, 1, 3000)

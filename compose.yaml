@@ -1,0 +1,75 @@
+# The server's services: PostgreSQL, the API, and the scheduled jobs (supercronic, from
+# deploy/crontab). Data stays on the host: the database in FI_PG_DATA, the raw responses in
+# ./data/raw. Settings come from .env (keys, FI_PG_PASSWORD, and the host paths and user ids
+# below). See deploy/README.md.
+name: fin-intel
+
+x-app: &app
+  image: fin-intel:latest
+  build:
+    context: .
+    args:
+      CODE_VERSION: ${CODE_VERSION:-}
+  restart: unless-stopped
+  user: "${APP_UID:-1002}:${APP_GID:-1002}"
+  env_file: .env
+  environment:
+    FI_DATABASE_URL: postgresql+psycopg://finintel:${FI_PG_PASSWORD:?set FI_PG_PASSWORD in .env}@postgres/fin_intel
+    FI_RAW_DIR: data/raw
+    # For pg_dump in deploy/backup.sh
+    PGHOST: postgres
+    PGUSER: finintel
+    PGPASSWORD: ${FI_PG_PASSWORD}
+    RCLONE_CONFIG: /config/rclone/rclone.conf
+  volumes:
+    - ./data/raw:/app/data/raw
+  depends_on:
+    postgres:
+      condition: service_healthy
+  logging: &logging
+    options:
+      max-size: 20m
+      max-file: "5"
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    # The data directory's owner on the host (the server's original cluster is owned by the
+    # host's postgres user).
+    user: "${PG_UID:-999}:${PG_GID:-999}"
+    command: >-
+      postgres -c config_file=/etc/postgresql/postgresql.conf
+               -c hba_file=/etc/postgresql/pg_hba.conf
+    environment:
+      POSTGRES_USER: finintel
+      POSTGRES_PASSWORD: ${FI_PG_PASSWORD}
+      POSTGRES_DB: fin_intel
+      # As the server's cluster: code-point order, the same under every glibc version
+      POSTGRES_INITDB_ARGS: --locale=C.UTF-8
+    volumes:
+      - ${FI_PG_DATA:-./data/postgres}:/var/lib/postgresql/data
+      - ./deploy/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./deploy/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    shm_size: 1g
+    stop_grace_period: 2m
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "finintel", "-d", "fin_intel"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    logging: *logging
+
+  api:
+    <<: *app
+    command: ["fin-intel", "serve", "--host", "0.0.0.0", "--port", "8000"]
+    # Localhost only: reached through Tailscale serve, as before.
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  cron:
+    <<: *app
+    command: ["supercronic", "-passthrough-logs", "/app/deploy/crontab"]
+    volumes:
+      - ./data/raw:/app/data/raw
+      - ${RCLONE_CONFIG_DIR:-~/.config/rclone}:/config/rclone:ro

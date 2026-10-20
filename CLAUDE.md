@@ -92,17 +92,19 @@ api/                    read-only FastAPI, routers by area (app.py: key check, s
 
 ## Server
 
-- `ssh fin-intel` (Oracle Arm VM, Phoenix). The app runs as user `finintel` in
-  `/home/finintel/financial_intelligence`, which the SSH user can't read directly:
-  `sudo -u finintel bash -c "cd /home/finintel/financial_intelligence && .venv/bin/fin-intel ..."`.
+- `ssh fin-intel` (Oracle Arm VM, Phoenix). Everything runs in containers (`compose.yaml`,
+  project `fin-intel`): `postgres`, `api`, and `cron` (supercronic, `deploy/crontab`). The
+  repo checkout `/home/finintel/financial_intelligence` holds the compose file, `.env` and
+  `data/raw`; the database is in `/data` on the host. Commands run from that directory:
+  `sudo docker compose exec cron fin-intel ...` (psql: `exec postgres psql -U finintel fin_intel`).
 - Deploy: `ssh fin-intel 'sudo bash /home/finintel/financial_intelligence/deploy/install.sh'`
-  (pull `main`, sync deps, migrate, restart the API).
-- Long jobs: `sudo systemd-run --unit=NAME --uid=finintel --gid=finintel
-  -p WorkingDirectory=/home/finintel/financial_intelligence <absolute path> ...`, then
-  `journalctl -u NAME`. Wait with `while systemctl is-active -q NAME; do sleep 60; done`:
-  the timer units are one-shot and show `activating` while running, `systemd-run` units
-  `active`.
-- Timers: `sync-daily` Mon–Fri 23:30 UTC, `sync-weekly` Sun 06:00 UTC, backup 04:00 UTC.
+  (pull `main`, build the image, migrate, restart the containers).
+- Long jobs: `sudo docker compose run -d --name NAME cron fin-intel ...`, then
+  `docker logs NAME`; wait with `docker wait NAME`, then `docker rm NAME`.
+- Schedule (UTC): `sync-daily` Mon–Fri 23:30, `sync-weekly` Sun 06:00, backup 04:00; output
+  in `docker compose logs cron`.
+- The image has no `.git`: the research trial log takes the commit from `FI_CODE_VERSION`
+  (set at build by `install.sh`). Build it through `install.sh` so the log stays traceable.
 - The developer's laptop runs ProtonVPN: some sources rate-limit or fail locally (EIA
   DEMO_KEY, GLEIF, some downloads). Test those from the server.
 

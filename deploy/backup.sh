@@ -18,7 +18,7 @@ REMOTE="${FI_BACKUP_REMOTE:?set FI_BACKUP_REMOTE in .env, e.g. oci:fin-intel-bac
 KEEP_DAYS="${FI_BACKUP_KEEP_DAYS:-30}"
 DB_KEEP_DAYS="${FI_BACKUP_DB_KEEP_DAYS:-8}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-DB="${FI_BACKUP_DATABASE:-fin_intel}"  # PostgreSQL database (local socket, this user)
+DB="${FI_BACKUP_DATABASE:-fin_intel}"  # PostgreSQL database (PGHOST, PGUSER: compose.yaml)
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 ESSENTIAL_TABLES=(raw_responses accounts portfolio_transactions position_snapshots)

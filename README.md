@@ -145,7 +145,7 @@ API endpoints:
 
 ## Deployment
 
-See [deploy/README.md](deploy/README.md): one Oracle Cloud Always Free Arm VM runs the API as a systemd service, scheduled syncs as timers, and nightly backups to object storage. Set `FI_API_KEY` so every endpoint except `/health` requires an `X-API-Key` header.
+See [deploy/README.md](deploy/README.md): one Oracle Cloud Always Free Arm VM runs PostgreSQL, the API and the scheduled syncs and backups in containers (`compose.yaml`), with the data on the host. Set `FI_API_KEY` so every endpoint except `/health` requires an `X-API-Key` header.
 
 ## Development
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# One-time server setup on Ubuntu 24.04 (run with sudo). Re-running it updates the code
-# and the systemd units. See deploy/README.md for the steps around it.
+# Server setup and deploys on Ubuntu 24.04 (run with sudo): installs Docker, clones or pulls
+# the repo, builds the image, migrates, and (re)starts the containers (compose.yaml).
+# See deploy/README.md for the steps around it.
 set -euo pipefail
 
 REPO="${REPO:-https://github.com/deOliveira-R/financial_intelligence.git}"
@@ -8,41 +9,30 @@ APP_USER=finintel
 APP_DIR="/home/$APP_USER/financial_intelligence"
 
 apt-get update
-apt-get install -y git rclone postgresql
+apt-get install -y git docker.io docker-compose-v2
+systemctl enable --now docker
 
 id "$APP_USER" >/dev/null 2>&1 || useradd --create-home --shell /bin/bash "$APP_USER"
-
-# PostgreSQL: the app user owns the database and connects over the local socket (peer
-# authentication, no password). Data directory and tuning: deploy/README.md.
-sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '$APP_USER'" | grep -q 1 ||
-  sudo -u postgres createuser "$APP_USER"
-sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = 'fin_intel'" | grep -q 1 ||
-  sudo -u postgres createdb --owner "$APP_USER" fin_intel
-
-# uv for the app user; it installs the pinned Python itself (see .python-version).
-if [ ! -x "/home/$APP_USER/.local/bin/uv" ]; then
-  sudo -u "$APP_USER" bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
-fi
 
 if [ -d "$APP_DIR/.git" ]; then
   sudo -u "$APP_USER" git -C "$APP_DIR" pull --ff-only
 else
   sudo -u "$APP_USER" git clone "$REPO" "$APP_DIR"
 fi
-sudo -u "$APP_USER" bash -c "cd '$APP_DIR' && ~/.local/bin/uv sync --frozen --no-dev"
+sudo -u "$APP_USER" mkdir -p "$APP_DIR/data/raw"
 
-install -m 644 "$APP_DIR"/deploy/systemd/*.service "$APP_DIR"/deploy/systemd/*.timer \
-  /etc/systemd/system/
-systemctl daemon-reload
-
-# Migrate before the API restarts onto new code (needs .env, so skipped on first install).
-if [ -f "$APP_DIR/.env" ]; then
-  sudo -u "$APP_USER" bash -c "cd '$APP_DIR' && .venv/bin/fin-intel migrate"
-fi
-if systemctl is-active --quiet fin-intel-api; then
-  systemctl restart fin-intel-api
+if [ ! -f "$APP_DIR/.env" ]; then
+  echo
+  echo "Cloned. Next (see deploy/README.md): create $APP_DIR/.env, then re-run this script."
+  exit 0
 fi
 
-echo
-echo "Installed. Next (see deploy/README.md): create $APP_DIR/.env, restore or load data, then:"
-echo "  sudo systemctl enable --now fin-intel-api fin-intel-daily.timer fin-intel-weekly.timer fin-intel-backup.timer"
+cd "$APP_DIR"
+export CODE_VERSION="$(sudo -u "$APP_USER" git -C "$APP_DIR" rev-parse --short HEAD)"
+docker compose build
+# Migrate before the API restarts onto new code.
+docker compose up -d --wait postgres
+docker compose run --rm -T api fin-intel migrate
+docker compose up -d --remove-orphans
+docker image prune -f >/dev/null
+docker compose ps

@@ -12,6 +12,7 @@ and statistics that respect how financial data misleads.
 
 import json
 import math
+import os
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -41,6 +42,10 @@ def _canonical(variant: dict[str, Any]) -> str:
 
 
 def _code_version() -> str | None:
+    """The commit the code runs from: the image's build argument in a container (no .git
+    there), else git."""
+    if version := os.environ.get("FI_CODE_VERSION"):
+        return version
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=5

@@ -130,11 +130,14 @@ Rules that hold everywhere:
 - **Server:** Oracle Cloud Always Free Arm VM (Phoenix), Ubuntu 24.04, app user
   `finintel`, repo at `/home/finintel/financial_intelligence`. Reached over Tailscale; the
   API listens on `127.0.0.1:8000`. See [deploy/README.md](../deploy/README.md).
-- **Schedule (systemd timers):** `sync-daily` Mon–Fri 23:30 UTC, `sync-weekly` Sun 06:00
-  UTC, backup 04:00 UTC. Long backfills run as transient units
-  (`systemd-run --unit=... --uid=finintel ...`).
-- **Deploy:** `sudo bash deploy/install.sh` pulls `main`, syncs dependencies, migrates,
-  then restarts the API.
+- **Containers (`compose.yaml`):** `postgres` (data on the host's block volume), `api`, and
+  `cron`, all but Postgres from one image built on the server from the checkout. Data stays
+  on the host (`/data`, `data/raw`).
+- **Schedule (supercronic, `deploy/crontab`):** `sync-daily` Mon–Fri 23:30 UTC,
+  `sync-weekly` Sun 06:00 UTC, backup 04:00 UTC. Long backfills run as detached one-off
+  containers (`docker compose run -d --name ... cron fin-intel ...`).
+- **Deploy:** `sudo bash deploy/install.sh` pulls `main`, builds the image, migrates, then
+  restarts the containers.
 - **Backups:** `deploy/backup.sh` uploads the tables that can't be rebuilt (raw index,
   portfolio) as SQL, plus the raw files present at dump time, to OCI Object Storage
   (rclone remote `oci`), and verifies both. Everything else is rebuilt from raw.
