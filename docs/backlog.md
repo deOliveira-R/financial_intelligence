@@ -229,7 +229,18 @@ walk-forward out-of-sample splits, and storing runs for comparison.
   (`jobs.history`: errors, kinds, output tails) and the code, to diagnose and, where it
   can, fix it (a branch and tests, as a person would). The states, hints and output tails
   in `job_state`/`job_events` are built for that reader.
-- A front end shows `/status`: each step's state, and a notification icon when one is
-  failed or blocked, with the error and its hint.
+- ~~A front end shows `/status`~~ done in the dashboard prototype (2026-10-20).
 - Item-level quarantine: an item that fails the same way for weeks (beyond 404s, which
   already don't fail a step) could be set aside so its step reports ok with a note.
+
+## Dashboard (prototype 2026-10-20)
+
+- A "test" button per key: one cheap call to the provider (FRED series, Tiingo meta, Massive
+  ticker...) so a pasted key shows working or rejected at once, not after the next step.
+- Settings beyond keys: schedule times and memory limits live in `.env` because compose
+  reads them at start; editing them from the page would need a restart path.
+- Tabs to revisit once used: a screener tab (presets, filters), a themes/supply-chain view
+  (dossier/theme, graph), 13F manager pages, a research tab (timeseries builder, backtests,
+  event studies), filing text search.
+- The bundle is one ~480 KB chunk (lightweight-charts the largest part); split per tab if
+  load time matters over the tailnet.

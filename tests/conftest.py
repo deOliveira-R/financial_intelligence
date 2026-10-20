@@ -21,6 +21,8 @@ def settings(monkeypatch):
     monkeypatch.setenv("FI_MASSIVE_API_KEY", "massive-key")
     monkeypatch.setenv("FI_OPENDART_API_KEY", "dart-key")
     monkeypatch.setenv("FI_EDINET_API_KEY", "edinet-key")
+    # Settings saved from the dashboard are read from this database (settings_store.py).
+    monkeypatch.setenv("FI_DATABASE_URL", TEST_DATABASE_URL)
     get_settings.cache_clear()
     base._limiters.clear()
     # Mocked providers needn't wait out real rate limits (e.g. Massive's 5 calls/minute).

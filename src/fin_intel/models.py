@@ -99,6 +99,16 @@ class JobState(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class AppSetting(Base):
+    """A setting saved from the dashboard (settings_store.py), applied over the environment."""
+
+    __tablename__ = "app_settings"
+
+    name: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class JobEvent(Base):
     """One attempt of a scheduled step and how it ended, with the end of its output: the
     history a person, or a model diagnosing a failure, reads."""

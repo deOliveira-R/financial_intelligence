@@ -141,6 +141,10 @@ Rules that hold everywhere:
   containers (`docker compose run -d --name ... cron fin-intel ...`). Machine-specific
   settings (paths, ids, memory, schedule, image pins) live in `.env` (`.env.example`), not
   the image.
+- **Dashboard:** `frontend/` (React), built in the image's Node stage and served by `api` at
+  `/` (hash routes; the API owns the other paths). Tailnet users named by Tailscale Serve
+  pass the key check (`FI_TAILNET_USERS`). Settings saved from it (`settings_store.py`,
+  table `app_settings`) apply over `.env` in every process via `get_settings()`.
 - **Deploy:** `sudo bash deploy/install.sh` pulls `main`, builds the image, migrates, then
   restarts the containers.
 - **Backups:** `deploy/backup.sh` uploads the tables that can't be rebuilt (raw index,

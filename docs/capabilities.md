@@ -182,6 +182,15 @@ only on exceptions), the speculation track high-attention with its own signals.
   company_dossier, theme_dossier, timeline, supply_chain, search_filings, filing_text,
   timeseries, data_catalog, distress_alerts, job_status), read-only, errors explained. Connect over SSH (deploy/README.md).
 
+## 10. Dashboard
+
+- `https://<server>.<tailnet>.ts.net/` (tailnet only): Markets (key prices and rates,
+  charts, COT positioning, releases, distress watch, insider clusters, Congress), Company
+  (search; price, metrics, statements, insiders, 13F holders, timeline), Portfolio
+  (positions, harvest candidates and replacements, realized gains), System (a header dot;
+  steps, attempts with output, feed freshness) and Settings (provider keys with their
+  status, the SEC identity, the watchlist; saved over `.env`, `/settings`).
+
 ## Data operations
 
 - The schedule is a set of steps with states, retried until they succeed: `jobs status`

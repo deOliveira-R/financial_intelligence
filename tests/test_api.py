@@ -133,6 +133,78 @@ def test_api_key_required_when_configured(client, monkeypatch):
     assert client.get("/securities/AAPL", headers={"X-API-Key": "wrong"}).status_code == 401
     assert client.get("/securities/AAPL", headers={"X-API-Key": "s3cret"}).status_code == 200
     assert client.get("/health").status_code == 200  # uptime checks stay open
+    # The dashboard: a tailnet user named by Tailscale Serve, when allowed.
+    tailnet = {"Tailscale-User-Login": "me@example.com"}
+    assert client.get("/securities/AAPL", headers=tailnet).status_code == 200
+    monkeypatch.setenv("FI_TAILNET_USERS", "someone@example.com, ME@example.com")
+    get_settings.cache_clear()
+    assert client.get("/securities/AAPL", headers=tailnet).status_code == 200
+    other = {"Tailscale-User-Login": "other@example.com"}
+    assert client.get("/securities/AAPL", headers=other).status_code == 401
+    monkeypatch.setenv("FI_TAILNET_USERS", "")
+    get_settings.cache_clear()
+    assert client.get("/securities/AAPL", headers=tailnet).status_code == 401
+
+
+def test_settings_saved_from_the_dashboard_apply_over_the_environment(client, session):
+    from fin_intel import jobs
+    from fin_intel.cli.schedule import steps
+    from fin_intel.config import get_settings
+    from fin_intel.models import SyncState
+
+    def setting(name):
+        return next(s for s in client.get("/settings").json() if s["name"] == name)
+
+    fred = setting("fred_api_key")
+    assert (fred["source"], fred["value"], fred["env"]) == ("env", "••••••••", "FI_FRED_API_KEY")
+    assert (setting("lda_api_key")["status"], setting("eia_api_key")["source"]) == (
+        "not set",
+        "default",
+    )
+    # A key the provider refused.
+    now = datetime.now(UTC)
+    session.add(
+        SyncState(
+            provider="fred",
+            dataset="series",
+            key="UNRATE",
+            last_attempt=now,
+            last_error="HTTP 401 Unauthorized",
+        )
+    )
+    dart = next(s for s in steps() if s.name == "dart")
+    jobs.start(session, dart, now)
+    blocked = jobs.Outcome(ok=False, kind="not_configured", error="set FI_OPENDART_API_KEY")
+    jobs.finish(session, steps(), dart, blocked, now, now)
+    assert setting("fred_api_key")["status"] == "rejected"
+    assert setting("opendart_api_key")["status"] == "missing"
+
+    # Saving a new key: masked, applied, and the blocked step retried now.
+    saved = client.put("/settings/opendart_api_key", json={"value": " new-dart-key-1234 "})
+    assert saved.json() == {"retried": ["dart"]}
+    dart_key = setting("opendart_api_key")
+    assert (dart_key["source"], dart_key["value"]) == ("dashboard", "••••••••1234")
+    assert get_settings().opendart_api_key == "new-dart-key-1234"
+    session.expire_all()  # still blocked until it runs, but runnable now
+    assert jobs.next_runnable(session, steps(), datetime.now(UTC)).name == "dart"
+
+    client.put("/settings/watchlist", json={"value": "aapl, msft\nasml"})
+    assert get_settings().watchlist_tickers == ["AAPL", "MSFT", "ASML"]
+    assert client.delete("/settings/opendart_api_key").status_code == 204
+    assert get_settings().opendart_api_key == "dart-key"
+    assert client.put("/settings/database_url", json={"value": "x"}).status_code == 404
+    assert client.put("/settings/fred_api_key", json={"value": " "}).status_code == 400
+
+
+def test_dashboard_is_served_at_the_root(client, monkeypatch, tmp_path):
+    import fin_intel.api as api
+
+    monkeypatch.setattr(api, "UI_DIR", tmp_path)
+    assert client.get("/").status_code == 404
+    (tmp_path / "index.html").write_text("<!doctype html><title>fin-intel</title>")
+    page = client.get("/")
+    assert (page.status_code, page.headers["cache-control"]) == (200, "no-cache")
+    assert "fin-intel" in page.text
 
 
 def test_congress_endpoints(client, session):

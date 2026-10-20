@@ -184,7 +184,11 @@ and fix what it can; a front end shows `/status` with a notification icon.
   error kind until they succeed; `jobs status`, `/status`, `/jobs/<step>/events`, MCP
   `job_status`. GDELT runs one query an hour; 13F freshness is quarterly.
 - [ ] Model-driven diagnosis of failed steps (needs the API key; backlog).
-- [ ] Front end over `/status` (backlog).
+- [x] **Dashboard prototype** (2026-10-20, `frontend/`, served at `/` over the tailnet):
+  Markets, Company, Portfolio tabs; system status as a header dot that stays quiet while
+  all is well (page with steps, attempts and output, feeds); Settings to paste keys and edit
+  the watchlist (saved in `app_settings` over `.env`, retrying blocked steps), with each
+  key's status. Next: use it, then revisit what each tab shows and how.
 
 ## Working rules for this plan
 

@@ -1,5 +1,14 @@
 # The app image: the CLI, API, MCP server and scheduled jobs all run from it (compose.yaml).
 # Python comes from uv, pinned by .python-version, as on every other machine.
+
+# The dashboard (frontend/): Node only builds it; the app image serves the static files.
+FROM --platform=$BUILDPLATFORM node:24-trixie-slim@sha256:7f486cabe892bff8fef04c0f7da8dba84a560be3e4e2740b7a86afc57ebec315 AS dashboard
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend ./
+RUN npm run build
+
 FROM debian:trixie-slim
 
 ARG TARGETARCH
@@ -28,6 +37,7 @@ COPY src ./src
 # Only the scripts the containers run; settings and the compose file stay outside.
 COPY deploy/backup.sh deploy/cron.sh ./deploy/
 RUN uv sync --frozen --no-dev
+COPY --from=dashboard /frontend/dist ./frontend/dist
 
 # There's no .git in the image: the research trial log reads the commit from here.
 ARG CODE_VERSION

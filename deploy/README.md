@@ -133,7 +133,12 @@ sudo tailscale serve --bg 8000      # https://<vm-name>.<tailnet>.ts.net -> the 
 
 **Public: [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).** This needs a domain on Cloudflare (free plan). Create a tunnel to `http://localhost:8000` and put Cloudflare Access in front of it, or rely on `FI_API_KEY`. Only serve SEC and FRED data publicly: the free tiers of the commercial providers don't allow redistribution.
 
-Every endpoint except `/health` requires `X-API-Key` when `FI_API_KEY` is set:
+**The dashboard** is at the same address, `https://<vm-name>.<tailnet>.ts.net/`, from any
+device on the tailnet. Serve tells the API who the tailnet user is (`Tailscale-User-Login`),
+so the browser needs no key; `FI_TAILNET_USERS` limits it to some logins. Its Settings page
+saves provider keys and the watchlist in the database, over `.env`.
+
+Other clients: every endpoint except `/health` requires `X-API-Key` when `FI_API_KEY` is set:
 
 ```sh
 curl -H "X-API-Key: $KEY" https://<host>/securities/AAPL

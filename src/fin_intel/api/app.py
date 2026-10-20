@@ -18,11 +18,26 @@ from fin_intel.models import (
 )
 
 
-def require_api_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
-    """With FI_API_KEY set, every endpoint but /health needs the header X-API-Key."""
-    expected = get_settings().api_key
-    if expected and not (x_api_key and secrets.compare_digest(x_api_key, expected)):
-        raise HTTPException(401, "missing or invalid X-API-Key", {"WWW-Authenticate": "ApiKey"})
+def require_api_key(
+    x_api_key: Annotated[str | None, Header()] = None,
+    tailscale_user_login: Annotated[str | None, Header()] = None,
+) -> None:
+    """With FI_API_KEY set, every endpoint but /health needs the header X-API-Key, or a
+    tailnet user allowed by FI_TAILNET_USERS (the dashboard in a browser).
+
+    Tailscale Serve, the only way in from outside the host, sets Tailscale-User-Login on
+    requests from tailnet users and drops any the client sent. Whatever reaches the port
+    directly (the host, containers on the compose network) could set it too: those are
+    already inside.
+    """
+    settings = get_settings()
+    expected = settings.api_key
+    if not expected or (x_api_key and secrets.compare_digest(x_api_key, expected)):
+        return
+    allowed = {u.strip().lower() for u in settings.tailnet_users.split(",") if u.strip()}
+    if tailscale_user_login and ("*" in allowed or tailscale_user_login.lower() in allowed):
+        return
+    raise HTTPException(401, "missing or invalid X-API-Key", {"WWW-Authenticate": "ApiKey"})
 
 
 app = FastAPI(title="Financial Intelligence API", version="0.2.0")

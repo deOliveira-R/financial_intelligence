@@ -29,7 +29,9 @@ uv run pytest -q                          # ~250 tests, ~10 s; must pass before 
 uv run ruff check . && uv run ruff format .
 uv run fin-intel --help                   # every CLI command (syncs, rebuilds, research)
 uv run fin-intel make-migration "message" # after changing models.py; review, then `ruff format` it
-uv run fin-intel serve                    # API on http://127.0.0.1:8000/docs
+uv run fin-intel serve                    # API on http://127.0.0.1:8000/docs, dashboard at /
+cd frontend && npm install && npm run dev # dashboard with hot reload (API: FI_DEV_API, .env.example)
+cd frontend && npm run build              # type-check and build into frontend/dist (served at /)
 ```
 
 `tests/test_migrations.py` fails if models and migrations drift apart.
@@ -51,7 +53,10 @@ timeseries.py           research specs (px:, fred:, breadth:, plus registered so
                         screener.py, screentest.py, events.py
 cli/                    typer CLI by area (market, filings, players, macro, research, analytics,
                         ops: schedules and rebuilds, portfolio)
-api/                    read-only FastAPI, routers by area (app.py: key check, session, lookups)
+api/                    FastAPI, routers by area (app.py: key or tailnet check, session, lookups);
+                        read-only but for the dashboard's settings (settings_store.py)
+frontend/               the dashboard: Vite + React + TypeScript, hash routes, one page per tab;
+                        built in the image's Node stage and served by the api container at /
 ```
 
 ## Rules that keep the data trustworthy

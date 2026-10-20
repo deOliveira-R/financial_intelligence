@@ -21,8 +21,11 @@ class Settings(BaseSettings):
     edinet_api_key: str | None = None  # Japan's EDINET (free registration)
     opendart_api_key: str | None = None  # Korea's OpenDART (free registration)
     http_timeout: float = 30.0
-    # When set, every API endpoint except /health requires the header `X-API-Key: <value>`.
+    # When set, every API endpoint except /health requires the header `X-API-Key: <value>`,
+    # or a tailnet user named by Tailscale Serve (the dashboard): `*` for any, a
+    # comma-separated list of logins, or empty for none.
     api_key: str | None = None
+    tailnet_users: str = "*"
     # Scheduled syncs (sync-daily / sync-weekly). Comma-separated lists.
     watchlist: str = ""  # tickers for Tiingo history and SEC fundamentals
     fred_series: str = ""  # empty: the curated macro pack (macro.py)
@@ -49,4 +52,29 @@ def _split(value: str) -> list[str]:
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    """The environment (and .env), with the settings saved from the dashboard over it."""
+    settings = Settings()
+    saved = _saved(settings.database_url)
+    return settings.model_copy(update=saved) if saved else settings
+
+
+def _saved(database_url: str) -> dict[str, str]:
+    """Settings saved from the dashboard (settings_store.py), or none when the database
+    isn't reachable or not migrated yet: commands that don't need it still run."""
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.pool import NullPool
+
+    from fin_intel.settings_store import EDITABLE
+
+    try:
+        engine = create_engine(
+            database_url, poolclass=NullPool, connect_args={"connect_timeout": 3}
+        )
+        try:
+            with engine.connect() as conn:
+                rows = conn.execute(text("SELECT name, value FROM app_settings")).all()
+        finally:
+            engine.dispose()
+    except Exception:
+        return {}
+    return {name: value for name, value in rows if name in EDITABLE}
