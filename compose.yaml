@@ -103,7 +103,8 @@ services:
     # Also the limit of one-off jobs (docker compose run cron ...)
     mem_limit: ${FI_CRON_MEMORY:-6g}
     healthcheck:
-      test: ["CMD", "pidof", "supercronic"]
+      # One-off jobs (compose run cron ...) don't start the schedule (no /tmp/crontab)
+      test: ["CMD-SHELL", "pidof supercronic || [ ! -e /tmp/crontab ]"]
       interval: 60s
       timeout: 5s
       retries: 3

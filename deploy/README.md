@@ -179,7 +179,8 @@ curl -s -H "X-API-Key: $KEY" localhost:8000/status       # recent runs, failing 
 sudo bash deploy/install.sh                              # deploy updates (pull, build, migrate, restart)
 ```
 
-Long jobs run detached in their own container, then are followed and waited on:
+Long jobs run detached in their own container, then are followed and waited on. A deploy
+(`install.sh`) ends running one-off jobs, so check `sudo docker ps` first:
 
 ```sh
 sudo docker compose run -d --name fi-job cron fin-intel rebuild fundamentals
