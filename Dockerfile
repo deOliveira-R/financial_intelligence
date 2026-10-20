@@ -31,5 +31,6 @@ RUN uv sync --frozen --no-dev
 
 # There's no .git in the image: the research trial log reads the commit from here.
 ARG CODE_VERSION
-ENV FI_CODE_VERSION=${CODE_VERSION} PATH=/app/.venv/bin:$PATH HOME=/tmp
+# Unbuffered: job output reaches docker logs as it happens.
+ENV FI_CODE_VERSION=${CODE_VERSION} PATH=/app/.venv/bin:$PATH HOME=/tmp PYTHONUNBUFFERED=1
 CMD ["fin-intel", "--help"]
