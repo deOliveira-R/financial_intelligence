@@ -6,10 +6,6 @@ name: fin-intel
 
 x-app: &app
   image: fin-intel:latest
-  build:
-    context: .
-    args:
-      CODE_VERSION: ${CODE_VERSION:-}
   restart: unless-stopped
   user: "${APP_UID:-1002}:${APP_GID:-1002}"
   env_file: .env
@@ -62,6 +58,11 @@ services:
 
   api:
     <<: *app
+    # Builds the image the other app services share (one build, not one per service)
+    build:
+      context: .
+      args:
+        CODE_VERSION: ${CODE_VERSION:-}
     command: ["fin-intel", "serve", "--host", "0.0.0.0", "--port", "8000"]
     # Localhost only: reached through Tailscale serve, as before.
     ports:
