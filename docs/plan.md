@@ -4,9 +4,13 @@ The working plan across sessions. Agreed with the user on 2026-10-11: clean and 
 the backend before extending it. Read this first when resuming; update the status lines as
 work lands. Deferred ideas stay in [backlog.md](backlog.md); this file is the sequence.
 
-**Status (2026-10-11 23:45 UTC):** phases 1-4 v1 are deployed (main = `graph`); the old
-SQLite file is deleted. Deferred by the user (2026-10-11): phone notifications and the
-Fidelity/Vanguard imports ("other stuff first"). Next: phase 5 with the user.
+**Status (2026-10-20):** phases 1-4 v1 deployed; phase 5 research H001-H005 done (see
+Phase 5). Operations (2026-10-20, below): the server runs in containers and the schedule
+is steps with states, retried until they succeed. The GDELT backfill is complete (17
+queries since 2017), so the thesis trackers are unblocked. Deferred by the user: phone
+notifications (dropped: the server is to be autonomous) and the Fidelity/Vanguard imports.
+A ProtonVPN exit node for the tailnet is another session's work (separate compose project
+and tailnet node on the same VM). Next: the "Later" items of Phase 5 with the user.
 
 ## Why
 
@@ -164,6 +168,23 @@ Later: trackers for theses 2, 4, 6-8 once GDELT's load completes; new distress s
 Hypotheses, analysis skills, evals and hill-climbing on the historical data, using the
 timeline, dossiers and graph. LLM skills extract supplier/customer links and policy
 relevance from filing and presidential text (feeding graph layer 3).
+
+## Operations: autonomous server (2026-10-20)
+
+The user's goal: a server that runs and repairs itself, with no phone notifications. Later
+an Anthropic API key on the server lets a model diagnose `failed` steps from their history
+and fix what it can; a front end shows `/status` with a notification icon.
+
+- [x] **Containers** (compose: postgres, api, cron; data on the host). Settings in `.env`
+  with defaults in `compose.yaml` (TrueNAS-style: images pinned by digest, the image holds
+  only code); read-only app containers, all capabilities dropped, healthchecks, memory
+  limits. Moved from the host install on 2026-10-20 reusing the database directory.
+- [x] **Steps with states** (`jobs.py`, `cli/schedule.py`): the schedule marks steps due; a
+  reconciler every 10 min runs them in child processes with time limits and retries by
+  error kind until they succeed; `jobs status`, `/status`, `/jobs/<step>/events`, MCP
+  `job_status`. GDELT runs one query an hour; 13F freshness is quarterly.
+- [ ] Model-driven diagnosis of failed steps (needs the API key; backlog).
+- [ ] Front end over `/status` (backlog).
 
 ## Working rules for this plan
 
