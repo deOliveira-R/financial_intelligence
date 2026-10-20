@@ -138,6 +138,25 @@ device on the tailnet. Serve tells the API who the tailnet user is (`Tailscale-U
 so the browser needs no key; `FI_TAILNET_USERS` limits it to some logins. Its Settings page
 saves provider keys and the watchlist in the database, over `.env`.
 
+**A domain of your own** (the server uses `fin-intel.external.de-oliveira.me`): the
+`proxy` service (Caddy, `deploy/caddy/`) serves it, and the ts.net name, on the tailnet
+address in place of `tailscale serve`.
+
+1. A public DNS record, not proxied: `fin-intel.external.example.com A <tailscale ip -4>`.
+   Anyone can resolve it; only the tailnet can reach it.
+2. A Cloudflare API token with Zone > DNS > Edit on the zone (the certificate's DNS
+   challenge: the server isn't reachable for an HTTP one).
+3. In `.env`: `COMPOSE_PROFILES=proxy`, `FI_DOMAIN`, `FI_TAILNET_IP`, `FI_TAILNET_NAME`,
+   `CLOUDFLARE_API_TOKEN` (`.env.example`).
+4. `sudo tailscale serve reset` (it holds port 443 on the tailnet address), then deploy.
+
+Caddy can't tell which tailnet user is asking, so it passes the API key itself: anything
+that reaches the address on 443 gets in. Limit that in the tailnet policy to your own
+devices (the NAS and the exit node are tailnet devices too), e.g.
+`{"src": ["autogroup:member"], "dst": ["tag:server:443"], ...}`, and narrow
+`FI_PROXY_ALLOW` if needed. Back to Serve: `COMPOSE_PROFILES=` in `.env`,
+`docker compose up -d --remove-orphans`, `sudo tailscale serve --bg 8000`.
+
 Other clients: every endpoint except `/health` requires `X-API-Key` when `FI_API_KEY` is set:
 
 ```sh

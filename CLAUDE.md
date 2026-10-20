@@ -102,6 +102,9 @@ frontend/               the dashboard: Vite + React + TypeScript, hash routes, o
   repo checkout `/home/finintel/financial_intelligence` holds the compose file, `.env` and
   `data/raw`; the database is in `/data` on the host. Commands run from that directory:
   `sudo docker compose exec cron fin-intel ...` (psql: `exec postgres psql -U finintel fin_intel`).
+- The dashboard and API: `https://fin-intel.external.de-oliveira.me` (Caddy, service
+  `proxy`, tailnet address only; Cloudflare DNS record and DNS-challenge certificate), also
+  under the node's ts.net name.
 - Deploy: `ssh fin-intel 'sudo bash /home/finintel/financial_intelligence/deploy/install.sh'`
   (pull `main`, build the image, migrate, restart the containers).
 - Long jobs: `sudo docker compose run -d --name NAME cron fin-intel ...`, then

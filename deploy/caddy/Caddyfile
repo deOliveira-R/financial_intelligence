@@ -1,0 +1,33 @@
+# The dashboard and API under a domain name, on the tailnet address only (compose.yaml,
+# service `proxy`). FI_DOMAIN's certificate comes from Let's Encrypt through Cloudflare's
+# DNS challenge; the ts.net name's from tailscaled.
+#
+# Caddy can't tell which tailnet user is asking (Tailscale Serve could), so it passes the
+# API key itself: who gets in is decided by who can reach the address, the tailnet policy,
+# and FI_PROXY_ALLOW (source addresses).
+{
+	default_bind {$FI_TAILNET_IP}
+	admin off
+}
+
+(app) {
+	@outside not remote_ip {$FI_PROXY_ALLOW}
+	respond @outside 403
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:{$FI_API_PORT} {
+		header_up X-API-Key {$FI_API_KEY}
+		header_up -Tailscale-User-Login
+	}
+}
+
+{$FI_DOMAIN} {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		resolvers 1.1.1.1
+	}
+	import app
+}
+
+{$FI_TAILNET_NAME} {
+	import app
+}

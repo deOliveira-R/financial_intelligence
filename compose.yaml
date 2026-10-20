@@ -110,3 +110,35 @@ services:
       interval: 60s
       timeout: 5s
       retries: 3
+
+  # The domain name (FI_DOMAIN) in front of the API, on the tailnet address; only with
+  # COMPOSE_PROFILES=proxy (the server). Replaces `tailscale serve`, which can't use a
+  # domain of its own and holds the same port.
+  proxy:
+    profiles: [proxy]
+    build: deploy/caddy
+    image: fin-intel-caddy:latest
+    restart: unless-stopped
+    network_mode: host  # binds the tailnet address, reaches the API on 127.0.0.1
+    environment:
+      FI_DOMAIN: ${FI_DOMAIN:?set FI_DOMAIN, e.g. fin-intel.external.example.com}
+      FI_TAILNET_IP: ${FI_TAILNET_IP:?set FI_TAILNET_IP (tailscale ip -4)}
+      FI_TAILNET_NAME: ${FI_TAILNET_NAME:?set FI_TAILNET_NAME (the node's ts.net name)}
+      FI_PROXY_ALLOW: ${FI_PROXY_ALLOW:-100.64.0.0/10 fd7a:115c:a1e0::/48}
+      FI_API_PORT: ${FI_API_PORT:-8000}
+      FI_API_KEY: ${FI_API_KEY:-}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN (DNS edit)}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${FI_PROXY_DATA:-./data/caddy}:/data  # certificates and the ACME account
+      - /var/run/tailscale/tailscaled.sock:/var/run/tailscale/tailscaled.sock
+    read_only: true
+    tmpfs: [/tmp, /config]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    depends_on:
+      api:
+        condition: service_healthy
+    logging: *logging
