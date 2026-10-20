@@ -10,15 +10,27 @@ and `.env`.
 |---|---|---|
 | `postgres` | always | PostgreSQL 16 (`postgres:16`), data in `FI_PG_DATA` on the host, reachable only on the compose network |
 | `api` | always | API on `127.0.0.1:8000` |
-| `cron` | Mon–Fri 23:30 UTC | `fin-intel sync-daily`: market bars, splits and dividends, breadth, SEC fundamentals (bulk), insiders, congress, FRED, EIA, Korean and Japanese filings, Taiwanese prices, company metrics, watchlist prices |
-| | Sun 06:00 UTC | `fin-intel sync-weekly`: SEC tickers, Massive reference, 13F, CFTC, ADR share counts, SIC codes, corporate events, missing SEC filings, filing text, Taiwanese and European statements, cross-listings, release calendar, contracts, input-output tables, short interest, N-PORT, Congress, lobbying, bills, presidential documents, outcomes, World Bank commodities, `prune-raw` |
-| | hourly | `fin-intel sync-news --stalest 1`: the GDELT query refreshed longest ago (GDELT throttles bursts) |
+| `cron` | Mon–Fri 23:30 UTC | daily steps: market bars, splits and dividends, breadth, SEC fundamentals (bulk), insiders, congress, FRED, EIA, Korean and Japanese filings, Taiwanese prices, company metrics, watchlist prices |
+| | Sun 06:00 UTC | weekly steps: SEC tickers, Massive reference, 13F, CFTC, ADR share counts, SIC codes, corporate events, missing SEC filings, filing text, Taiwanese and European statements, cross-listings, release calendar, contracts, input-output tables, short interest, N-PORT, Congress, lobbying, bills, presidential documents, outcomes, World Bank commodities, `prune-raw` |
+| | hourly | news: the GDELT query refreshed longest ago (GDELT throttles bursts) |
 | | daily 04:00 UTC | `deploy/backup.sh`: irreplaceable tables (raw index, portfolio) and the raw files present at dump time to an rclone remote, verified |
 
-The cron service runs them with [supercronic](https://github.com/aptible/supercronic) (cron
-for containers: logs to `docker compose logs cron`, never starts a job that is still
-running), from a crontab `deploy/cron.sh` writes at start. A run missed while the server was
-down isn't replayed; the next one picks up from the last success.
+**Steps with states, retried until they succeed** (`jobs.py`, `cli/schedule.py`). The times
+above only mark a group of steps *due*; a reconciler (`fin-intel jobs run`, every 10 minutes)
+runs what is due, one step at a time, each in its own process with a time limit, and
+records every attempt (`job_events`, with the end of its output). A failure is retried with
+a backoff that follows its kind: provider outages, throttling, timeouts and interrupted
+runs after 15 min, 1 h, 4 h, then every 12 h; HTTP 4xx, bad credentials and crashes after
+1 h, 6 h, then daily; a missing key or setting is `blocked` and checked daily. A step is
+`retrying`, then `failed` (needs attention; still retried) after repeated failures, and
+`ok` again on its own once a retry succeeds. Steps that read others' data (`after`) wait
+for them while they run and run again when one succeeds late. A reconciler that died
+leaves its step `running`; the next one marks it interrupted and retries it. States:
+`fin-intel jobs status`, `/status`, MCP `job_status`; history: `/jobs/<step>/events`.
+
+The cron service runs the schedule with [supercronic](https://github.com/aptible/supercronic)
+(cron for containers: logs to `docker compose logs cron`, never starts a job that is still
+running), from a crontab `deploy/cron.sh` writes at start.
 
 **Configuration.** As in TrueNAS's app catalog, the image holds only the code, pinned
 (Python, packages, supercronic, uv); everything that differs between machines is a setting
@@ -172,7 +184,9 @@ sudo docker compose exec cron bash -c 'fin-intel migrate &&
 cd /home/finintel/financial_intelligence
 sudo docker compose ps                                   # services and health
 sudo docker compose logs cron --since 24h                # last syncs' output
-sudo docker compose exec cron fin-intel sync-daily       # sync now
+sudo docker compose exec cron fin-intel jobs status      # steps not ok: error, kind, what to do
+sudo docker compose exec cron fin-intel jobs retry STEP  # retry now instead of after the backoff
+sudo docker compose exec cron fin-intel sync-daily       # mark the daily steps due and run them now
 sudo docker compose exec cron fin-intel sync-prices TSLA # any CLI command
 sudo docker compose exec postgres psql -U finintel fin_intel
 curl -s -H "X-API-Key: $KEY" localhost:8000/status       # recent runs, failing items

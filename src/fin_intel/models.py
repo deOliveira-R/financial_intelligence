@@ -79,6 +79,43 @@ class SyncRun(Base):
     message: Mapped[str | None] = mapped_column(Text)
 
 
+class JobState(Base):
+    """A scheduled step's state, kept until it succeeds (jobs.py): ok, due, running,
+    retrying, failed (still retried, less often) or blocked (needs a setting)."""
+
+    __tablename__ = "job_state"
+
+    name: Mapped[str] = mapped_column(String, primary_key=True)
+    status: Mapped[str] = mapped_column(String)
+    attempts: Mapped[int] = mapped_column(default=0)  # consecutive failures
+    due_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_success: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_failure: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_kind: Mapped[str | None] = mapped_column(String)
+    error: Mapped[str | None] = mapped_column(Text)
+    hint: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class JobEvent(Base):
+    """One attempt of a scheduled step and how it ended, with the end of its output: the
+    history a person, or a model diagnosing a failure, reads."""
+
+    __tablename__ = "job_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String)  # the state it left the step in
+    attempt: Mapped[int]
+    error_kind: Mapped[str | None] = mapped_column(String)
+    error: Mapped[str | None] = mapped_column(Text)
+    output: Mapped[str | None] = mapped_column(Text)
+
+
 class SyncState(Base):
     """Latest sync outcome per item, e.g. (tiingo, daily_prices, AAPL)."""
 

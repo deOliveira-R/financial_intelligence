@@ -223,6 +223,21 @@ def data_catalog(alerts_only: bool = False) -> list[dict[str, Any]]:
 
 
 @tool
+def job_status(problems_only: bool = True, history_of: str | None = None) -> Any:
+    """The scheduled steps that keep the data current, each with a state: ok, due,
+    running, retrying (on its own, with backoff), failed (needs attention; still retried),
+    blocked (a missing key or setting). Problem steps carry the error, its kind and what to
+    do. `history_of`: one step's recent attempts with the end of their output, to diagnose."""
+    from fin_intel import jobs
+    from fin_intel.cli.schedule import steps
+
+    with session_factory()() as session:
+        if history_of:
+            return _plain(jobs.history(session, history_of))
+        return _plain(jobs.overview(session, steps(), problems_only))
+
+
+@tool
 def distress_alerts(flagged_only: bool = True) -> list[dict[str, Any]]:
     """Distress scores of the user's watchlist and holdings under a validated model (H001:
     late filings, restatements, exchange notices, debt acceleration, weak Altman Z'', short

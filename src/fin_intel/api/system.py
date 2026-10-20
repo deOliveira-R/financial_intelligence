@@ -36,22 +36,61 @@ class SyncRunOut(Orm):
     message: str | None
 
 
+class JobOut(BaseModel):
+    name: str
+    label: str
+    group: str
+    after: list[str]
+    status: str  # ok, due, running, retrying, failed, blocked, never run
+    attempts: int
+    last_success: datetime | None
+    last_failure: datetime | None
+    next_attempt: datetime | None
+    error_kind: str | None
+    error: str | None
+    hint: str | None
+
+
+class JobEventOut(BaseModel):
+    started_at: datetime
+    finished_at: datetime
+    status: str
+    attempt: int
+    error_kind: str | None
+    error: str | None
+    output: str | None
+
+
 class StatusOut(BaseModel):
+    jobs: list[JobOut]
     recent_runs: list[SyncRunOut]
     failing: list[SyncStateOut]
 
 
 @router.get("/status", response_model=StatusOut)
 def status(session: SessionDep) -> StatusOut:
-    """Recent sync runs and every item whose last sync failed."""
+    """Every scheduled step's state (failed and blocked ones need attention; the rest
+    retry on their own), recent sync runs, and every item whose last sync failed."""
+    from fin_intel import jobs
+    from fin_intel.cli.schedule import steps
+
     runs = session.scalars(select(SyncRun).order_by(SyncRun.id.desc()).limit(20))
     failing = session.scalars(
         select(SyncState).where(SyncState.last_error.is_not(None)).order_by(SyncState.key)
     )
     return StatusOut(
+        jobs=[JobOut(**j) for j in jobs.overview(session, steps())],
         recent_runs=[SyncRunOut.model_validate(r) for r in runs],
         failing=[SyncStateOut.model_validate(s) for s in failing],
     )
+
+
+@router.get("/jobs/{name}/events", response_model=list[JobEventOut])
+def job_events(session: SessionDep, name: str, limit: int = 10) -> list[JobEventOut]:
+    """A scheduled step's recent attempts, newest first, with the end of each output."""
+    from fin_intel import jobs
+
+    return [JobEventOut(**e) for e in jobs.history(session, name, min(limit, 100))]
 
 
 @router.get("/catalog")

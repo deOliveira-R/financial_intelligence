@@ -1,5 +1,5 @@
 """The CLI application and what every command shares: per-item runs recorded in
-sync_runs, and scheduled steps that keep going when one fails."""
+sync_runs (the schedule is in schedule.py)."""
 
 import logging
 import sys
@@ -10,6 +10,7 @@ from typing import Annotated, Any
 import typer
 from sqlalchemy.orm import Session
 
+from fin_intel import jobs
 from fin_intel.db import init_db, session_factory
 from fin_intel.models import SyncRun
 from fin_intel.providers import (
@@ -47,12 +48,14 @@ def run_items(job: str, items: list[str], fn: Callable[[Session, str], Any]) -> 
                     typer.echo(f"{job} {item}: {fn(session, item)} rows")
                     run.items_ok += 1
                 except QuotaExceededError as exc:
+                    jobs.record_error(exc)
                     failed.append(item)
                     skipped = items[i + 1 :]
                     message = f"{exc}; skipped: {' '.join(skipped)}" if skipped else str(exc)
                     typer.secho(f"{job} {item}: {message}", fg="red", err=True)
                     break
                 except ProviderError as exc:
+                    jobs.record_error(exc)
                     failed.append(item)
                     typer.secho(f"{job} {item}: {exc}", fg="red", err=True)
                 bookkeeping.commit()
@@ -75,18 +78,3 @@ def run_items(job: str, items: list[str], fn: Callable[[Session, str], Any]) -> 
 def weekdays(start: date, end: date) -> list[date]:
     days = (start + timedelta(days=i) for i in range((end - start).days + 1))
     return [d for d in days if d.weekday() < 5]
-
-
-def run_steps(job: str, steps: list[tuple[str, Callable[[], None]]]) -> None:
-    """Run each step even if an earlier one failed; fail at the end if any did."""
-    failed = []
-    for name, step in steps:
-        typer.secho(f"== {name}", bold=True)
-        try:
-            step()
-        except typer.Exit as exc:
-            if exc.exit_code:
-                failed.append(name)
-    if failed:
-        typer.secho(f"{job}: failed steps: {', '.join(failed)}", fg="red", err=True)
-        raise typer.Exit(1)

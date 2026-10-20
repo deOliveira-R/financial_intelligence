@@ -101,8 +101,11 @@ api/                    read-only FastAPI, routers by area (app.py: key check, s
   (pull `main`, build the image, migrate, restart the containers).
 - Long jobs: `sudo docker compose run -d --name NAME cron fin-intel ...`, then
   `docker logs NAME`; wait with `docker wait NAME`, then `docker rm NAME`.
-- Schedule (UTC): `sync-daily` Mon–Fri 23:30, `sync-weekly` Sun 06:00, backup 04:00; output
-  in `docker compose logs cron`.
+- Schedule (UTC): daily steps Mon–Fri 23:30, weekly Sun 06:00, backup 04:00, one news query
+  hourly. These only mark steps due; `jobs run` (every 10 min) runs them and retries
+  failures with backoff until they succeed (`jobs.py`, steps in `cli/schedule.py`). Check
+  `fin-intel jobs status` (or `/status`) for failed or blocked steps before digging into
+  logs (`docker compose logs cron`). A new scheduled sync is a `Step` in `cli/schedule.py`.
 - The image has no `.git`: the research trial log takes the commit from `FI_CODE_VERSION`
   (set at build by `install.sh`). Build it through `install.sh` so the log stays traceable.
 - The developer's laptop runs ProtonVPN: some sources rate-limit or fail locally (EIA

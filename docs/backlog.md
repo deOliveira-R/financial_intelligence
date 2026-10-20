@@ -221,3 +221,15 @@ walk-forward out-of-sample splits, and storing runs for comparison.
 - A one-shot permissions service (TrueNAS's pattern) that fixes ownership of `data/raw` and
   the database directory before the services start; today install.sh creates `data/raw` as
   `finintel` and the cluster keeps its host owner.
+
+## Autonomous operations (2026-10-20, from the user)
+
+- The server is meant to run on its own: no phone notifications. Later, with an Anthropic
+  API key on the server, a step that turns `failed` calls a model with the step's history
+  (`jobs.history`: errors, kinds, output tails) and the code, to diagnose and, where it
+  can, fix it (a branch and tests, as a person would). The states, hints and output tails
+  in `job_state`/`job_events` are built for that reader.
+- A front end shows `/status`: each step's state, and a notification icon when one is
+  failed or blocked, with the error and its hint.
+- Item-level quarantine: an item that fails the same way for weeks (beyond 404s, which
+  already don't fail a step) could be set aside so its step reports ok with a note.

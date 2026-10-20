@@ -61,7 +61,8 @@ Rules that hold everywhere:
 | Portfolio | `portfolio.py`, `importers.py` | Tax lots (FIFO), harvesting, wash-sale window, replacements |
 | Domain data | `japan.py`, `carry.py`, `contracts.py`, `shortinterest.py`, `putcall.py`, `funds.py`, `filing_text.py`, `universe.py` | JGB curve and flows, yen carry gauge, federal contracts, short interest, put/call, index ETF holdings, filing text (tsvector search), deep-history universe |
 | Taxonomy and graph | `themes.py`, `industries.py`, `graph.py` | Themes map each industry to every source's codes; BEA input-output tables give industry-to-industry flows; `graph_nodes`/`graph_edges` (derived) hold industries, final demand and themes with `supplies`, `part_of` and `maps_to` edges, walked with recursive CTEs |
-| Catalog | `catalog.py` | Feed freshness from `sync_state` against expected ages (`EXPECTED`, mirroring the schedules), failing-item thresholds, tables per feed; `catalog --check` ends sync-daily |
+| Catalog | `catalog.py` | Feed freshness from `sync_state` against expected ages (`EXPECTED`, mirroring the schedules), failing-item thresholds, tables per feed; shown by `jobs status` |
+| Schedule | `jobs.py`, `cli/schedule.py` | Scheduled steps as states (ok, due, running, retrying, failed, blocked) kept until they succeed: the schedule marks groups due, a reconciler runs them in child processes with time limits, retries by error kind with backoff, reruns dependents after a late success; every attempt in `job_events` |
 | Dossiers | `dossier.py` | A company or theme on a date, assembled from the other modules, every section point in time and failing independently |
 | Timeline | `timeline.py` | Public-dated events read from the source tables on request (no copy): sources register with `@timeline.source("kind")` and filter by companies or a theme (themes' keywords make text matches precise) |
 | Research | `backtest.py`, `screentest.py`, `events.py` | Rules on point-in-time series, screen backtests, disclosure event studies |
@@ -133,8 +134,9 @@ Rules that hold everywhere:
 - **Containers (`compose.yaml`):** `postgres` (data on the host's block volume), `api`, and
   `cron`, all but Postgres from one image built on the server from the checkout. Data stays
   on the host (`/data`, `data/raw`).
-- **Schedule (supercronic, `deploy/cron.sh`, times from `FI_SCHEDULE_*`):** `sync-daily` Mon–Fri 23:30 UTC,
-  `sync-weekly` Sun 06:00 UTC, backup 04:00 UTC, one GDELT news query hourly. Long backfills
+- **Schedule (supercronic, `deploy/cron.sh`, times from `FI_SCHEDULE_*`):** daily steps
+  Mon–Fri 23:30 UTC, weekly Sun 06:00 UTC, backup 04:00 UTC, one GDELT news query hourly;
+  these mark steps due and `jobs run` (every 10 min) runs and retries them (`jobs.py`). Long backfills
   run as detached one-off
   containers (`docker compose run -d --name ... cron fin-intel ...`). Machine-specific
   settings (paths, ids, memory, schedule, image pins) live in `.env` (`.env.example`), not

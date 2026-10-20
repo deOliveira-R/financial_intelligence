@@ -180,11 +180,14 @@ only on exceptions), the speculation track high-attention with its own signals.
 
 - `fin-intel mcp`: the same research functions as MCP tools for agents (list_themes,
   company_dossier, theme_dossier, timeline, supply_chain, search_filings, filing_text,
-  timeseries, data_catalog, distress_alerts), read-only, errors explained. Connect over SSH (deploy/README.md).
+  timeseries, data_catalog, distress_alerts, job_status), read-only, errors explained. Connect over SSH (deploy/README.md).
 
 ## Data operations
 
-- `sync-daily` (Mon–Fri after the US close): market bars, splits and dividends, breadth,
+- The schedule is a set of steps with states, retried until they succeed: `jobs status`
+  (`/status`, MCP `job_status`) shows each step not ok with its error, kind and what to do;
+  `jobs retry STEP` skips the backoff; `/jobs/<step>/events` is its history with output.
+- `sync-daily` (Mon–Fri after the US close; marks the steps due and runs them): market bars, splits and dividends, breadth,
   SEC fundamentals (bulk, changed companies only), insiders, congress, FRED, EIA, Korean
   and Japanese filings, Taiwanese prices, then company metrics.
 - `sync-weekly` (Sunday): SEC and Massive reference lists, 13F, CFTC, ADR share counts, SIC
@@ -194,9 +197,9 @@ only on exceptions), the speculation track high-attention with its own signals.
   retention.
 - `rebuild <target|all>` (`fin-intel rebuild --help` lists the targets, e.g. industries)
   reproduces tables from raw without the network; `migrate`, `prune-raw`, `derive*`.
-- `/status` shows recent runs and failing items; `catalog` (`/catalog`) every feed's
-  freshness against its schedule, failing items and tables. sync-daily ends with
-  `catalog --check`, so a stale or failing feed fails the run.
+- `/status` shows the steps' states, recent runs and failing items; `catalog` (`/catalog`)
+  every feed's freshness against its schedule, failing items and tables (stale and failing
+  feeds also close `jobs status`).
 
 ## Known limits
 

@@ -167,7 +167,9 @@ class Provider:
         if resp.status_code == 404:
             raise NotFoundError(f"{self.name}: not found: {url}")
         if resp.is_error:
-            raise ProviderError(f"{self.name}: HTTP {resp.status_code}: {resp.text[:200]}")
+            raise ProviderError(
+                f"{self.name}: HTTP {resp.status_code}: {resp.text[:200]}", resp.status_code
+            )
         return resp
 
     def check_text_error(self, text: str) -> None:

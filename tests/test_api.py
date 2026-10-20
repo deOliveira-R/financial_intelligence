@@ -100,10 +100,27 @@ def test_economic(client):
     ]
 
 
-def test_status(client):
+def test_status(client, session):
+    from datetime import UTC, datetime
+
+    from fin_intel import jobs
+    from fin_intel.cli.schedule import steps
+
     status = client.get("/status").json()
     assert status["recent_runs"][0]["job"] == "sync-prices"
     assert status["failing"] == []
+    assert {j["status"] for j in status["jobs"]} == {"never run"}
+
+    now = datetime.now(UTC)
+    bars = next(s for s in steps() if s.name == "market-bars")
+    jobs.start(session, bars, now)
+    outcome = jobs.Outcome(ok=False, kind="auth", error="HTTP 401", output="traceback...")
+    jobs.finish(session, steps(), bars, outcome, now, now)
+    job = next(j for j in client.get("/status").json()["jobs"] if j["name"] == "market-bars")
+    assert (job["status"], job["error_kind"], job["label"]) == ("retrying", "auth", "market bars")
+    assert "check the key" in job["hint"]
+    events = client.get("/jobs/market-bars/events").json()
+    assert [(e["status"], e["output"]) for e in events] == [("retrying", "traceback...")]
 
 
 def test_api_key_required_when_configured(client, monkeypatch):

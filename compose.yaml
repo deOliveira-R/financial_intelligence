@@ -97,6 +97,8 @@ services:
       FI_SCHEDULE_WEEKLY: ${FI_SCHEDULE_WEEKLY-0 6 * * 0}
       FI_SCHEDULE_NEWS: ${FI_SCHEDULE_NEWS-17 * * * *}
       FI_SCHEDULE_BACKUP: ${FI_SCHEDULE_BACKUP-0 4 * * *}
+      # Runs whatever is due or due for a retry (empty: nothing runs on its own)
+      FI_SCHEDULE_RECONCILE: ${FI_SCHEDULE_RECONCILE-*/10 * * * *}
     volumes:
       - ./data/raw:/app/data/raw
       - ${RCLONE_CONFIG_DIR:-~/.config/rclone}:/config/rclone:ro

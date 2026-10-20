@@ -10,6 +10,7 @@ from fin_intel.cli import (  # noqa: F401  (registers commands)
     players,
     portfolio,
     research,
+    schedule,
 )
 from fin_intel.cli.app import app
 

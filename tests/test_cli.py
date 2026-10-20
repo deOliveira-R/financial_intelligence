@@ -77,7 +77,9 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
     import typer
 
     from fin_intel import fx
-    from fin_intel.cli import ops
+    from fin_intel.cli import schedule
+    from fin_intel.models import JobState
+    from fin_intel.providers import ProviderError
 
     calls = []
 
@@ -86,33 +88,42 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
 
     def failing(*a, **k):
         calls.append("market")
-        raise typer.Exit(1)
+        raise ProviderError("massive: HTTP 503: unavailable", 503)
 
+    monkeypatch.setattr(schedule, "execute", schedule.run_step)  # in this process
     monkeypatch.setenv("FI_WATCHLIST", "aapl, msft")
     monkeypatch.setenv("FI_FRED_SERIES", "GDP")
-    monkeypatch.setattr(ops, "sync_market_daily", failing)
-    monkeypatch.setattr(ops, "sync_actions", ok("actions"))
-    monkeypatch.setattr(ops, "sync_economic", lambda series: calls.append(("fred", series)))
-    monkeypatch.setattr(ops, "sync_prices", lambda tickers: calls.append(("prices", tickers)))
-    monkeypatch.setattr(ops, "derive_breadth_cmd", ok("breadth"))
-    monkeypatch.setattr(ops, "sync_fundamentals_bulk", ok("fundamentals"))
-    monkeypatch.setattr(ops, "derive_metrics_cmd", ok("metrics"))
-    monkeypatch.setattr(ops, "sync_insiders", ok("insiders"))
-    monkeypatch.setattr(ops, "sync_congress", ok("congress"))
-    monkeypatch.setattr(ops, "sync_eia", ok("eia"))
-    monkeypatch.setattr(ops, "sync_japan", ok("japan"))
-    monkeypatch.setattr(ops, "sync_cboe", ok("cboe"))
-    monkeypatch.setattr(ops, "sync_dart", ok("dart"))
-    monkeypatch.setattr(ops, "sync_edinet", ok("edinet"))
-    monkeypatch.setattr(ops, "sync_tw_prices", ok("tw prices"))
+    monkeypatch.setattr(schedule, "sync_market_daily", failing)
+    monkeypatch.setattr(schedule, "sync_actions", ok("actions"))
+    monkeypatch.setattr(schedule, "sync_economic", lambda series: calls.append(("fred", series)))
+    monkeypatch.setattr(schedule, "sync_prices", lambda tickers: calls.append(("prices", tickers)))
+    monkeypatch.setattr(schedule, "derive_breadth_cmd", ok("breadth"))
+    monkeypatch.setattr(schedule, "sync_fundamentals_bulk", ok("fundamentals"))
+    monkeypatch.setattr(schedule, "derive_metrics_cmd", ok("metrics"))
+    monkeypatch.setattr(schedule, "sync_insiders", ok("insiders"))
+    monkeypatch.setattr(schedule, "sync_congress", ok("congress"))
+    monkeypatch.setattr(schedule, "sync_eia", ok("eia"))
+    monkeypatch.setattr(schedule, "sync_japan", ok("japan"))
+    monkeypatch.setattr(schedule, "sync_cboe", ok("cboe"))
+    monkeypatch.setattr(schedule, "sync_dart", ok("dart"))
+    monkeypatch.setattr(schedule, "sync_edinet", ok("edinet"))
+    monkeypatch.setattr(schedule, "sync_tw_prices", ok("tw prices"))
+    monkeypatch.setattr(schedule, "distress_cmd", ok("distress"))
+
+    def exit_1():
+        calls.append("insiders")
+        raise typer.Exit(1)  # failed items, no provider error recorded
+
+    monkeypatch.setattr(schedule, "sync_insiders", exit_1)
 
     result = CliRunner().invoke(app, ["sync-daily"])
     # A failed step doesn't stop the others, but the command still fails.
-    assert result.exit_code == 1 and "failed steps: market bars" in result.output
+    assert result.exit_code == 1, result.output
+    assert "market-bars: retrying" in result.output and "metrics: ok" in result.output
     assert calls == [
         "market",
         "actions",
-        "breadth",
+        "breadth",  # its input failed and retries later: it doesn't wait (runs again then)
         "fundamentals",
         "insiders",
         "congress",
@@ -124,8 +135,14 @@ def test_scheduled_syncs_run_every_step_and_report_failures(db_file, monkeypatch
         "edinet",
         "tw prices",
         "metrics",
+        "distress",
         ("prices", ["AAPL", "MSFT"]),
     ]
+    with db_file.connect() as conn:
+        states = dict(conn.execute(select(JobState.name, JobState.error_kind)).all())
+    assert states["market-bars"] == "transient" and states["insiders"] == "error"
+    status = CliRunner().invoke(app, ["jobs", "status"])
+    assert "retrying   market-bars" in status.output and "HTTP 503" in status.output
 
 
 @respx.mock
@@ -156,3 +173,20 @@ def test_sync_news_stalest_refreshes_the_queries_left_longest(db_file, monkeypat
     result = CliRunner().invoke(app, ["sync-news", "--stalest", "2"])
     assert result.exit_code == 0, result.output
     assert [c.request.url.params["query"] for c in route.calls] == ['"never"', '"older"']
+
+
+def test_steps_run_in_their_own_process_and_report_how_they_ended(db_file):
+    from datetime import timedelta
+
+    from fin_intel import jobs
+    from fin_intel.cli import schedule
+
+    # A step the child doesn't know fails before it can report: a crash, with its output.
+    outcome = schedule.execute(jobs.Step("no-such-step", "x", "daily", lambda: None))
+    assert (outcome.ok, outcome.kind) == (False, "crash")
+    assert "unknown step" in outcome.output
+    names = [s.name for s in schedule.steps()]
+    assert len(names) == len(set(names))
+    known = set(names)
+    assert all(set(s.after) <= known for s in schedule.steps())
+    assert all(s.timeout >= timedelta(hours=1) for s in schedule.steps())

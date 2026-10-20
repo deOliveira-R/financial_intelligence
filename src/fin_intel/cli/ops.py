@@ -1,6 +1,7 @@
-"""Operations: the daily and weekly schedules, rebuilds, raw retention, migrations, the API."""
+"""Operations: the feed catalog, rebuilds, raw retention, migrations, the API (the schedule
+is in schedule.py)."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Annotated
 
 import typer
@@ -8,134 +9,10 @@ import typer
 from fin_intel import (
     registry,
 )
-from fin_intel.cli.analytics import derive_breadth_cmd, derive_metrics_cmd, derive_outcomes_cmd
-from fin_intel.cli.app import app, run_steps
-from fin_intel.cli.filings import (
-    fill_xbrl_gaps,
-    sync_crosslist,
-    sync_dart,
-    sync_edinet,
-    sync_esef,
-    sync_events,
-    sync_filing_text,
-    sync_fundamentals_bulk,
-    sync_funds,
-    sync_population,
-    sync_sic,
-    sync_tw_prices,
-    sync_twse,
-)
-from fin_intel.cli.macro import (
-    sync_bis,
-    sync_calendar,
-    sync_cboe,
-    sync_commodities,
-    sync_contracts,
-    sync_cot,
-    sync_economic,
-    sync_eia,
-    sync_industries,
-    sync_japan,
-    sync_panel,
-)
-from fin_intel.cli.market import (
-    sync_actions,
-    sync_adr_shares,
-    sync_market_daily,
-    sync_prices,
-    sync_reference,
-    sync_tickers,
-)
-from fin_intel.cli.players import (
-    sync_13f,
-    sync_bills,
-    sync_conflict,
-    sync_congress,
-    sync_insiders,
-    sync_legislators,
-    sync_lobbying,
-    sync_presidential,
-    sync_short_interest,
-)
-from fin_intel.cli.research import distress_cmd
-from fin_intel.config import get_settings
+from fin_intel.cli.app import app
 from fin_intel.db import session_factory
 from fin_intel.raw import default_store, prune
 from fin_intel.rebuild import TARGETS, rebuild
-
-
-@app.command(rich_help_panel="Operations")
-def sync_daily() -> None:
-    """Scheduled daily sync: market bars, recent actions, breadth, fundamentals of companies
-    that filed, company metrics, FRED series, watchlist prices, distress alerts on the
-    watchlist and holdings.
-
-    Run after the US close (data is end-of-day). Lists come from FI_WATCHLIST and
-    FI_FRED_SERIES; OTC bars follow FI_MARKET_OTC.
-    """
-    settings = get_settings()
-    recent = (date.today() - timedelta(days=30)).isoformat()  # catches late corrections
-    steps = [
-        ("market bars", lambda: sync_market_daily(otc=settings.market_otc)),
-        ("splits and dividends", lambda: sync_actions(since=recent)),
-        ("market breadth", derive_breadth_cmd),
-        ("fundamentals (SEC bulk, changed companies only)", sync_fundamentals_bulk),
-        ("insider transactions", sync_insiders),
-        ("congressional trades", sync_congress),
-        ("economic series", lambda: sync_economic(settings.fred_series_ids)),
-        ("EIA energy data", sync_eia),
-        ("Japanese rates and flows (MoF)", sync_japan),
-        ("options put/call (Cboe)", sync_cboe),
-        ("Korean filings (DART)", lambda: sync_dart(limit=6000)),
-        ("Japanese filings (EDINET)", sync_edinet),
-        ("Taiwanese prices", sync_tw_prices),
-        ("company metrics", derive_metrics_cmd),  # uses every market's new data
-        ("distress alerts on watched companies (H001)", lambda: distress_cmd(score=True)),
-    ]
-    if settings.watchlist_tickers:
-        steps.append(("watchlist prices", lambda: sync_prices(settings.watchlist_tickers)))
-    # Last: a stale or failing feed fails the run, so it shows in /status and the journal.
-    steps.append(("feed freshness", lambda: catalog_cmd(check=True, all_feeds=False)))
-    run_steps("sync-daily", steps)
-
-
-@app.command(rich_help_panel="Operations")
-def sync_weekly() -> None:
-    """Scheduled weekly sync: security lists and raw retention (fundamentals load nightly
-    from SEC's bulk file in sync-daily)."""
-    settings = get_settings()
-    steps = [
-        ("SEC tickers", sync_tickers),
-        ("Massive reference", lambda: sync_reference(otc=settings.market_otc)),
-        ("institutional holdings (13F)", lambda: sync_13f(files=4)),
-        ("CFTC positioning", sync_cot),
-        ("ADR share counts", sync_adr_shares),
-        ("SIC codes of new issuers", sync_sic),
-        ("corporate events (SEC filings)", sync_events),
-        ("research population (every SEC financial filer since 2009)", sync_population),
-        ("filings missing from SEC company facts", fill_xbrl_gaps),
-        ("filing text of the deep-history universe (new filings)", sync_filing_text),
-        ("Taiwanese companies (TWSE/TPEx)", sync_twse),
-        ("European annual reports (ESEF)", sync_esef),
-        ("cross-listings of foreign companies", sync_crosslist),
-        ("economic release calendar", sync_calendar),
-        ("JGB history (MoF, monthly file)", lambda: sync_japan(history=True)),
-        ("federal contract obligations (USAspending)", sync_contracts),
-        ("input-output tables and concordances (BEA, Census; monthly)", sync_industries),
-        ("credit by sector, ~45 economies (BIS; monthly)", sync_bis),
-        ("commodity prices since 1960 (World Bank Pink Sheet; monthly)", sync_commodities),
-        ("cross-country research panel (OECD, Macrohistory; monthly)", sync_panel),
-        ("short interest (FINRA)", sync_short_interest),
-        ("index ETF holdings (N-PORT)", sync_funds),
-        ("members of Congress and committees", sync_legislators),
-        ("lobbying reports (Senate LDA)", sync_lobbying),
-        ("bills in Congress (GovInfo)", sync_bills),
-        ("presidential documents (Federal Register)", sync_presidential),
-        ("conflict events (UCDP; ACLED with a Research account)", sync_conflict),
-        ("forward outcomes", derive_outcomes_cmd),
-    ]
-    steps.append(("raw retention", lambda: prune_raw(keep=3, min_age_days=31, dry_run=False)))
-    run_steps("sync-weekly", steps)
 
 
 @app.command("catalog", rich_help_panel="Operations")
@@ -194,7 +71,6 @@ def prune_raw(
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
 ) -> None:
     """Drop raw responses no rebuild can need (old snapshots, old errors)."""
-    from datetime import timedelta
 
     result = prune(
         default_store(),
