@@ -147,22 +147,46 @@ def test_manager_changes(session):
     assert [f.name for f in thirteenf.find_filers(session, "berkshire")] == [BRK[1]]
 
 
+def listing(code, ticker, figi, composite, share_class="BBG001S5N8V8"):
+    return {
+        "exchCode": code,
+        "ticker": ticker,
+        "figi": figi,
+        "compositeFIGI": composite,
+        "shareClassFIGI": share_class,
+        "securityType": "Common Stock",
+    }
+
+
+def test_best_listing_prefers_the_us_market():
+    foreign = listing("CP", "EXMOC", "BBG00B8TC1V3", "BBG00B8TC1V3")
+    venue = listing("UZ", "XOM", "BBG01496HVM6", "BBG01496HVL7")
+    composite = listing("US", "XOM", "BBG000GZQ728", "BBG000GZQ728")
+    assert thirteenf.best_listing([foreign, venue, composite]) is composite
+    assert thirteenf.best_listing([foreign, venue]) is venue
+    swiss = listing("SW", "CELG", "BBG006TLNNG5", "BBG006TLNNG5")
+    euro = listing("XS", "CELGEUR", "BBG00FZLPC61", "BBG00FZLPBQ1")
+    assert thirteenf.best_listing([euro, swiss]) is swiss  # a plain ticker beats a currency line
+    assert thirteenf.best_listing([foreign, swiss]) is foreign  # two foreign lines: the first
+    assert thirteenf.best_listing([foreign]) is foreign
+    assert thirteenf.best_listing([]) is None
+
+
 @respx.mock
 def test_openfigi_mapping_links_securities_and_rebuilds(session, raw_store):
     session.add(Security(ticker="AAPL", figi="BBG000B9XRY4", origin="sec"))
+    # Coca-Cola is known only by its share class (as Massive reports it); OpenFIGI answers
+    # its CUSIP with a Mexican listing, which links through that share class.
+    session.add(Security(ticker="KO", share_class_figi="BBG001S5R6K8", origin="massive"))
     session.commit()
     answers = {
         AAPL: {
             "data": [
-                {
-                    "figi": "BBG000B9Y5X2",
-                    "compositeFIGI": "BBG000B9XRY4",
-                    "ticker": "AAPL",
-                    "exchCode": "US",
-                    "securityType": "Common Stock",
-                }
+                listing("XS", "AAPLEUR", "BBG00FZLPC61", "BBG00FZLPBQ1", "BBG001S5N8V8"),
+                listing("UW", "AAPL", "BBG000B9Y5X2", "BBG000B9XRY4", "BBG001S5N8V8"),
             ]
         },
+        KO: {"data": [listing("CP", "KOC", "BBG00B8TC2W1", "BBG00B8TC2W1", "BBG001S5R6K8")]},
         BOND: {"warning": "No identifier found."},
     }
 
@@ -178,22 +202,35 @@ def test_openfigi_mapping_links_securities_and_rebuilds(session, raw_store):
         "https://www.sec.gov/files/x/form-13f-data-sets/01mar2026-31may2026_form13f.zip"
     ).respond(
         content=dataset(
-            Q1, [r for r in Q1_ROWS if r[3] != KO] + [("B1", 9, "TREASURY", BOND, 1, 1, "", "")]
+            Q1,
+            [r for r in Q1_ROWS if r[3] != KO]
+            + [("B1", 9, "TREASURY", BOND, 1, 1, "", "")]
+            + [("B1", 10, "COCA COLA CO", KO, 800, 10, "", "")],
         )
     )
     sec = SecProvider(raw_store=raw_store)
     ((period, url),) = sec.list_13f_datasets().items()
     assert period == "2026-03-01_2026-05-31"
     thirteenf.sync_13f_dataset(session, sec, period, url)
-    assert sorted(thirteenf.unmapped_cusips(session)) == sorted([AAPL, BOND])
+    assert sorted(thirteenf.unmapped_cusips(session)) == sorted([AAPL, BOND, KO])
 
     thirteenf.sync_cusip_mappings(session, OpenFigiProvider(raw_store=raw_store))
     sent = json.loads(route.calls[0].request.content)
-    assert {j["idValue"] for j in sent} == {AAPL, BOND}
+    assert {j["idValue"] for j in sent} == {AAPL, BOND, KO}
     aapl = session.get(CusipMapping, AAPL)
     assert aapl.security_id == session.scalar(select(Security.id).where(Security.ticker == "AAPL"))
+    assert aapl.ticker == "AAPL" and aapl.share_class_figi == "BBG001S5N8V8"  # not the EUR line
+    ko = session.get(CusipMapping, KO)
+    assert ko.security_id == session.scalar(select(Security.id).where(Security.ticker == "KO"))
     assert session.get(CusipMapping, BOND).security_type == "unknown"
     assert thirteenf.unmapped_cusips(session) == []  # nothing left to ask
+    # A looked-up CUSIP that links to nothing is asked again only on request; "unknown" never.
+    ko.security_id = None
+    session.commit()
+    assert thirteenf.unmapped_cusips(session) == []
+    assert thirteenf.unmapped_cusips(session, retry_unlinked=True) == [KO]
+    thirteenf.link_securities(session)
+    session.commit()
 
     before = session.scalar(select(func.count()).select_from(InstitutionalPosition))
     with respx.mock:

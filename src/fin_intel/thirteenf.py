@@ -20,6 +20,7 @@ The raw files are complete, so a different threshold is one rebuild away.
 import csv
 import io
 import logging
+import re
 import zipfile
 from collections import defaultdict
 from collections.abc import Callable
@@ -237,7 +238,9 @@ def load(session: Session, data: bytes, min_aum: float | None = None) -> int:
 
 
 def link_securities(session: Session) -> int:
-    """Attach securities to CUSIP mappings by composite FIGI, FIGI or ticker."""
+    """Attach securities to CUSIP mappings by composite FIGI, FIGI, share-class FIGI (the
+    same for every listing of the shares, so a foreign listing still finds the company)
+    or, last, ticker."""
     securities = list(session.scalars(select(Security)))
     by_figi = {s.figi: s.id for s in securities if s.figi}
     by_class = {s.share_class_figi: s.id for s in securities if s.share_class_figi}
@@ -247,6 +250,7 @@ def link_securities(session: Session) -> int:
         security_id = (
             by_figi.get(m.composite_figi or "")
             or by_figi.get(m.figi or "")
+            or by_class.get(m.share_class_figi or "")
             or by_class.get(m.figi or "")
             or by_ticker.get((m.ticker or "").replace("/", "-"))
         )
@@ -256,14 +260,17 @@ def link_securities(session: Session) -> int:
     return linked
 
 
-def unmapped_cusips(session: Session) -> list[str]:
+def unmapped_cusips(session: Session, retry_unlinked: bool = False) -> list[str]:
     """CUSIPs held in 13F positions or tracked funds that aren't linked to a security and
     haven't been looked up on OpenFIGI yet. A FIGI supplied by the filer may be an
     exchange-level one rather than the composite FIGI our securities carry, so it doesn't
-    count as resolved by itself."""
-    resolved = select(CusipMapping.cusip).where(
-        CusipMapping.security_id.is_not(None) | CusipMapping.security_type.is_not(None)
-    )
+    count as resolved by itself. With `retry_unlinked`, CUSIPs OpenFIGI did answer but
+    that still link to no security are asked again (answers before 2026-10 kept whichever
+    listing came first, often a foreign one, and no share-class FIGI)."""
+    looked_up = CusipMapping.security_type.is_not(None)
+    if retry_unlinked:
+        looked_up = CusipMapping.security_type == "unknown"  # nothing to gain from asking again
+    resolved = select(CusipMapping.cusip).where(CusipMapping.security_id.is_not(None) | looked_up)
     held = (
         select(InstitutionalPosition.cusip)
         .union(select(FundHolding.cusip).where(FundHolding.cusip.is_not(None)))
@@ -272,19 +279,38 @@ def unmapped_cusips(session: Session) -> list[str]:
     return list(session.scalars(select(held.c.cusip).where(held.c.cusip.not_in(resolved))))
 
 
+_PLAIN_TICKER = re.compile(r"^[A-Z]{1,5}([./][A-Z0-9]{1,2})?$")  # no currency suffix
+
+
+def best_listing(data: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """OpenFIGI answers a CUSIP with at most ten listings, foreign ones often first (Exxon's
+    Mexican line, EXMOC) and the US composite not always among them: prefer the composite,
+    then a US venue with a plain ticker, then any plain ticker, then the first answer."""
+
+    def rank(d: dict[str, Any]) -> int:
+        code, ticker = d.get("exchCode") or "", d.get("ticker") or ""
+        plain = bool(_PLAIN_TICKER.match(ticker))
+        if code == "US":
+            return 0
+        if plain and code.startswith("U"):
+            return 1
+        return 2 if plain else 3
+
+    return min(data, key=rank, default=None)  # stable: the first of equal rank
+
+
 def load_openfigi(session: Session, cusips: list[str], results: list[dict[str, Any]]) -> int:
     """Store OpenFIGI's answers (one per requested CUSIP, in order). `security_type` is set
     either way, marking the CUSIP as looked up ("unknown" when OpenFIGI has no match)."""
     records = []
     for cusip, result in zip(cusips, results, strict=False):
-        data = (result or {}).get("data") or []
-        # Prefer the US composite listing when OpenFIGI returns several.
-        best = next((d for d in data if d.get("exchCode") == "US"), data[0] if data else None)
+        best = best_listing((result or {}).get("data") or [])
         records.append(
             {
                 "cusip": cusip,
                 "figi": best.get("figi") if best else None,
                 "composite_figi": best.get("compositeFIGI") if best else None,
+                "share_class_figi": best.get("shareClassFIGI") if best else None,
                 "ticker": best.get("ticker") if best else None,
                 "security_type": (best.get("securityType") or "other") if best else "unknown",
             }
@@ -416,11 +442,14 @@ def sync_13f_dataset(session: Session, sec_provider: SecProvider, period: str, u
 
 
 def sync_cusip_mappings(
-    session: Session, openfigi: OpenFigiProvider, progress: Callable[[int, int], None] | None = None
+    session: Session,
+    openfigi: OpenFigiProvider,
+    progress: Callable[[int, int], None] | None = None,
+    retry_unlinked: bool = False,
 ) -> int:
     """Look up every unmapped CUSIP on OpenFIGI, one committed batch at a time (a first
     run without an API key takes hours; progress survives interruptions)."""
-    cusips = unmapped_cusips(session)
+    cusips = unmapped_cusips(session, retry_unlinked)
     done = 0
     for i in range(0, len(cusips), openfigi.batch):
         batch = cusips[i : i + openfigi.batch]

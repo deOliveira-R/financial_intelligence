@@ -598,6 +598,9 @@ class CusipMapping(Base):
     cusip: Mapped[str] = mapped_column(String, primary_key=True)
     figi: Mapped[str | None] = mapped_column(String)
     composite_figi: Mapped[str | None] = mapped_column(String)
+    # The same for every listing of a share class, so it links a CUSIP to our security
+    # whichever exchange's listing OpenFIGI answered with.
+    share_class_figi: Mapped[str | None] = mapped_column(String)
     ticker: Mapped[str | None] = mapped_column(String)
     security_type: Mapped[str | None] = mapped_column(String)
     security_id: Mapped[int | None] = mapped_column(ForeignKey("securities.id"))
@@ -619,6 +622,10 @@ class QuarterlyPrice(Base):
     shares_total: Mapped[float] = mapped_column(Float)
     security_id: Mapped[int | None] = mapped_column(ForeignKey("securities.id"), index=True)
     cik: Mapped[int | None] = mapped_column(index=True)
+    # "security": through cusip_mappings and securities; "insiders": a company with no
+    # security row (dead before our listings begin), found by the ticker insiders filed
+    # under in the same window. None when unknown.
+    cik_source: Mapped[str | None] = mapped_column(String)
 
 
 class CongressReport(Base):

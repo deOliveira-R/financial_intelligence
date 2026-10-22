@@ -81,6 +81,9 @@ def sync_13f(
     since: Annotated[
         str | None, typer.Option(help="Load every data set from this date, e.g. 2013-01-01")
     ] = None,
+    relink: Annotated[
+        bool, typer.Option(help="Ask OpenFIGI again about CUSIPs that link to no security")
+    ] = False,
 ) -> None:
     """Load institutional holdings (13F data sets, three months each), then map their
     CUSIPs to securities via OpenFIGI (set FI_OPENFIGI_API_KEY to make that ~100x faster)."""
@@ -116,7 +119,9 @@ def sync_13f(
             typer.echo(f"  mapped {done}/{total} CUSIPs")
 
     run_items(
-        "sync-13f", ["cusips"], lambda s, _: thirteenf.sync_cusip_mappings(s, openfigi, progress)
+        "sync-13f",
+        ["cusips"],
+        lambda s, _: thirteenf.sync_cusip_mappings(s, openfigi, progress, retry_unlinked=relink),
     )
 
 
