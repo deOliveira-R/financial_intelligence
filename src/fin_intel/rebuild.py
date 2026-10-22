@@ -56,6 +56,8 @@ from fin_intel.models import (
     LegislatorTerm,
     LobbyingIssue,
     LobbyingReport,
+    ManagerBestIdea,
+    ManagerQuarter,
     NewsVolume,
     PanelObservation,
     PortfolioTransaction,
@@ -84,6 +86,8 @@ TABLES: dict[str, list] = {
     "holdings": [
         QuarterlyPrice,
         QuarterlyPricePart,
+        ManagerBestIdea,
+        ManagerQuarter,
         InstitutionalPosition,
         InstitutionalFiler,
         CusipMapping,

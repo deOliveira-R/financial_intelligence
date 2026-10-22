@@ -200,6 +200,9 @@ pre-registered before any result:
   vs 0.57; holdout below on both). With H006: no monthly timing rule tested improved
   risk-adjusted returns since 2016; drawdown control was only bought with return.
 - [x] Ken French factor returns loaded (`factors.py`, `sync-factors`, weekly; `ff:` series).
+- [ ] **H010** best ideas of concentrated, patient 13F managers (research/H010-best-ideas.md,
+  candidates row d): pre-registered 2026-10-22; `managers.py` (books and best ideas by
+  quarter, `derive-managers`) and the study next, on H008's machinery.
 - [ ] Data in parallel: watchlist option chains recorded daily (check Massive's options
   tier), VIX futures (CFE) for candidate i.
 - Also found: FRED's ICE BofA spreads start 2023-10 (license); Moody's `BAA10Y` added as

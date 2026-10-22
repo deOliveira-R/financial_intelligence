@@ -248,7 +248,10 @@ def difference(a: dict[str, Any], b: dict[str, Any], lags: int) -> dict[str, Any
 
 
 def after_controls(
-    quarters: list[Quarter], flags: dict[tuple[int, date], Flag], reps: int = 1000
+    quarters: list[Quarter],
+    flags: dict[tuple[int, date], Flag],
+    reps: int = 1000,
+    kind: str = "opportunistic",
 ) -> dict[str, Any]:
     """Pooled regression of flagged companies' excess returns on sector and momentum-decile
     indicators (demeaned, so the constant is the adjusted mean), errors from a bootstrap
@@ -256,7 +259,7 @@ def after_controls(
     rows: dict[date, list[tuple[float, str, int | None]]] = defaultdict(list)
     for quarter in quarters:
         for (cik, q), flag in flags.items():
-            if q == quarter.end and cik in quarter.returns and flag.get("opportunistic"):
+            if q == quarter.end and cik in quarter.returns and flag.get(kind):
                 rows[q].append(
                     (quarter.excess(cik), quarter.sector[cik] or "none", quarter.momentum[cik])
                 )
@@ -291,6 +294,7 @@ def exits(
     prices: dict[int, dict[date, Price]],
     flags: dict[tuple[int, date], Flag],
     events: dict[int, list[date]],
+    kind: str = "opportunistic",
 ) -> dict[str, Any]:
     """Flagged companies with a price at the signal quarter but none at the horizon: how
     many, and how many had a bankruptcy or deregistration filing in the window (read as
@@ -298,7 +302,7 @@ def exits(
     gone = failed = screened = 0
     for quarter in quarters:
         for (cik, q), flag in flags.items():
-            if q != quarter.end or not flag.get("opportunistic"):
+            if q != quarter.end or not flag.get(kind):
                 continue
             by_q = prices.get(cik, {})
             if q in by_q and quarter.later not in by_q:

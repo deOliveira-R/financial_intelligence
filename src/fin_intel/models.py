@@ -590,6 +590,37 @@ class InstitutionalPosition(Base):
     filed: Mapped[date | None] = mapped_column(Date)
 
 
+class ManagerQuarter(Base):
+    """Derived: a 13F manager's book at a quarter end (managers.py): how many equity
+    positions, their value, and the turnover into the quarter (the share of the names
+    held a quarter earlier no longer held). The screen for concentrated, patient managers
+    (research H010) and a descriptor for manager pages."""
+
+    __tablename__ = "manager_quarters"
+
+    filer_cik: Mapped[int] = mapped_column(ForeignKey("institutional_filers.cik"), primary_key=True)
+    period: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    positions: Mapped[int]
+    value: Mapped[float] = mapped_column(Float)
+    previous_positions: Mapped[int | None]  # None: no report a quarter earlier
+    turnover: Mapped[float | None] = mapped_column(Float)
+
+
+class ManagerBestIdea(Base):
+    """Derived: a position among a manager's ten largest at a quarter end that is new or
+    whose shares rose by at least half since the quarter before (managers.py)."""
+
+    __tablename__ = "manager_best_ideas"
+
+    filer_cik: Mapped[int] = mapped_column(ForeignKey("institutional_filers.cik"), primary_key=True)
+    period: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    cusip: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    rank: Mapped[int]  # 1 = the largest position
+    shares: Mapped[float] = mapped_column(Float)
+    previous_shares: Mapped[float | None] = mapped_column(Float)  # None: not held before
+    value: Mapped[float] = mapped_column(Float)
+
+
 class CusipMapping(Base):
     """Derived: which security a CUSIP is (via a FIGI in the filing or OpenFIGI)."""
 

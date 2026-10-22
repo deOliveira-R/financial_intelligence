@@ -81,6 +81,28 @@ def derive_quarterly_prices_cmd(
         typer.echo(f"quarterly prices: {quarterly.compute(session, periods)} rows")
 
 
+@app.command("derive-managers", rich_help_panel="Derived tables")
+def derive_managers_cmd(
+    all_periods: Annotated[
+        bool, typer.Option("--all", help="Recompute every quarter, not only new and recent ones")
+    ] = False,
+) -> None:
+    """13F managers' books by quarter (positions, value, turnover) and their best ideas
+    (new or doubled-up top-ten positions), from the stored holdings (no network)."""
+    from sqlalchemy import select
+
+    from fin_intel import managers
+    from fin_intel.models import InstitutionalPosition
+
+    with session_factory()() as session:
+        periods = (
+            sorted(session.scalars(select(InstitutionalPosition.period).distinct()))
+            if all_periods
+            else None
+        )
+        typer.echo(f"managers: {managers.compute(session, periods)} books")
+
+
 @app.command("backfill-metrics", rich_help_panel="Derived tables")
 def backfill_metrics_cmd(
     start: Annotated[str, typer.Option(help="YYYY-MM-DD")],
