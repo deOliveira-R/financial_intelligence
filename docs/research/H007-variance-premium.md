@@ -1,7 +1,8 @@
 # H007: selling index puts pays more when implied volatility exceeds realized
 
-Status: **pre-registered 2026-10-22, not yet run.** Track: options (candidates.md row h),
-the first use of Cboe's index histories. Validation mode A.
+Status: **pre-registered 2026-10-22; first design run void (PUT's file is daily only from
+2007, see Amendments); design re-run on 2007-2015 pending.** Track: options
+(candidates.md row h), the first use of Cboe's index histories. Validation mode A.
 
 ## Claims
 
@@ -79,6 +80,30 @@ no other volatility windows, thresholds or sort schemes are tried under H007.
   always-PUT's.
 - **Weak support:** the premium (test 1) holds but conditioning doesn't: the money is the
   plain premium with its tail, and sizing is the whole question.
+
+## Amendments (2026-10-22, after a design run the data made void)
+
+The first design run (1993-02 to 2012-12, logged as one trial) used Cboe's PUT history
+file as if it were daily. It isn't before 2007: the file has seven values between 1991
+and 2006 (one in 1991, 1994, 1997, 2001, 2004), then daily from 2007-01. Carried forward
+by the series engine, the stale values made PUT's monthly returns a step function with
+jumps of up to 54% (2001-01), so every PUT statistic of that run is meaningless and its
+"rejection" verdict is withdrawn (not a result about the claim). The equity test (test 5,
+SPY on VRP) doesn't involve PUT and stands: the slope was positive with t = 3.3 in
+1993-2012, the Bollerslev-Tauchen-Zhou finding; it is descriptive here and goes to
+candidates.md as its own hypothesis.
+
+Changes, before any valid result:
+- **Periods:** PUT is decisive from 2007: design 2007-01 to 2015-12 (108 months, with
+  2008), validation 2016-01 to 2023-05 (89 months, with 2018, 2020 and 2022), holdout from
+  2023-06. The decision months were already before 2023-07; the periods only start later.
+- **Long history, descriptive:** the same six tests on **BXMD** (Cboe S&P 500 30-delta
+  BuyWrite, daily since 1986-06), another short-volatility strategy on the index, from
+  1993-02 through each period's end. It can't decide the claim (a different instrument,
+  and it spans the decisive months too) but shows whether the pattern held over three
+  decades. VIX3M begins 2009-09, so the term-structure tests have thin samples either way.
+- Nothing else changes: the signal, the tests, the thresholds and the verdict rules are
+  as registered.
 
 ## Limits stated in advance
 

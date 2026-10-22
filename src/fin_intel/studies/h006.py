@@ -36,8 +36,9 @@ PERIODS = {
     "holdout": (research.HOLDOUT_START, date(2100, 1, 1)),
 }
 EXPANDING_FROM = 2005
-# Set after the design run (the pre-registration's choice rule), before validation.
-FROZEN: dict[str, Any] | None = None
+# The design's choice (2026-10-22, the pre-registration's rule: the largest SPY drawdown
+# reduction among the primary variants whose return gap is within a point): trend alone.
+FROZEN: dict[str, Any] | None = {"rule": "trend", "window": WINDOW, "frequency": "monthly"}
 
 
 @dataclass

@@ -1,7 +1,8 @@
 # H006: a trend and credit regime filter cuts drawdowns at little cost in return
 
-Status: **pre-registered 2026-10-22, not yet run.** Track: investing (the regime dial of
-the decision stack, candidates.md row a). Validation mode A.
+Status: **design run 2026-10-22: the trend rule chosen (SPY drawdown 0.30 of
+buy-and-hold's, return 2.4 points a year higher, 1993-2015); validation pending.** Track:
+investing (the regime dial of the decision stack, candidates.md row a). Validation mode A.
 
 ## Claim
 
@@ -90,6 +91,42 @@ value, which is how they're read (ALFRED vintages for them begin in 2005 or late
 Three variants, two assets, the design choice: six logged trials, plus the robustness
 runs (two windows and the daily version, each on three variants and two assets: twelve)
 counted in the log although not chosen from. Bonferroni over the total.
+
+## Results
+
+**Design (2026-10-22; SPY from 1993-12, RSP from 2004-03, through 2015-12; 12 logged
+variants, each covering both assets).** S = strategy, H = buy and hold, M = the constant
+mix at the strategy's exposure; the ratio and gap carry 95% block-bootstrap intervals.
+
+| Rule, window, decisions | Asset | CAGR S / H / M | Max drawdown S / H / M | DD ratio to H | CAGR gap to H | Beats M? | Verdict |
+|---|---|---|---|---|---|---|---|
+| **trend, 200, monthly** | SPY | 11.4 / 8.9 / 7.6% | -19 / -55 / -45% | 0.30 [0.13, 0.71] | +2.4 [-2.4, +8.8] | yes | support |
+| | RSP | 8.4 / 8.3 / 7.0% | -23 / -60 / -50% | 0.32 [0.25, 1.07] | +0.1 [-7.7, +8.6] | yes | partial (interval reaches 1) |
+| credit, 200, monthly | SPY | 7.6 / 8.9 / 6.2% | -24 / -55 / -33% | 0.36 [0.14, 0.68] | -1.3 [-7.7, +5.7] | yes | partial (gap) |
+| | RSP | 6.2 / 6.0 / 4.6% | -21 / -60 / -36% | 0.23 [0.10, 0.82] | +0.2 [-5.2, +5.9] | yes | support |
+| both, 200, monthly | SPY | 7.9 / 8.9 / 5.8% | -19 / -55 / -30% | 0.21 [0.11, 0.55] | -1.0 [-7.7, +6.5] | yes | partial (gap) |
+| | RSP | 6.7 / 8.3 / 5.4% | -21 / -60 / -37% | 0.23 [0.10, 0.84] | -1.6 [-10.9, +9.6] | yes | partial |
+
+Robustness, not chosen from: 150-day windows did at least as well (all six variants
+"support"; trend/150 SPY gap +1.3, both/150 SPY drawdown ratio 0.16); 250-day windows
+similar to 200. **Daily decisions are worse everywhere** (7-9 switches a
+year, return gaps of -1.5 to -3 points, two of six "rejection"): the whipsaw cost is real
+and monthly decisions are the right cadence, which suits the low-attention track.
+
+Reading: every monthly variant cut the maximum drawdown to a fifth to a third of
+buy-and-hold's and beat the constant mix on both measures, so the reduction isn't "owning
+less". The return gap is the uncertain part (intervals of about ±8 points a year on two
+or three bear markets); in the design period the trend rule *added* return (it sat out
+most of 2000-02 and 2008). The expanding view shows the price of the filter in calm
+years: through 2005-2007 the ratio was above 1 (the 1998 and 2003-2005 whipsaws before
+any bear market it could sidestep), then 0.2-0.25 from 2008 on.
+
+**Choice (the registered rule):** among the 200-day monthly variants with an SPY gap within
+a point, the largest SPY drawdown reduction: **trend** (0.30; "both" at 0.21 missed the gap
+condition by a hair, -1.0 points). Frozen: `{"rule": "trend", "window": 200, "frequency":
+"monthly"}`. Validation (2016-01 to 2023-06) runs once on it next; the expectation to beat
+is a negative return gap there (2020's V-shaped rebound and 2023's rally are the costly
+cases), judged against the drawdown reduction in 2018, 2020 and 2022.
 
 ## Risks to the test
 

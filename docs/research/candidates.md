@@ -51,6 +51,7 @@ industry-level tests have decades of clean data.
 | m | Short interest: aggregate level predicts market returns (Rapach-Ringgenberg-Zhou); high days-to-cover with weak momentum underperforms (a not-buy filter) | market; stock | since 2017-12 only: underpowered at market level | 0.3; 0.5 | queued |
 | n | Pre-FOMC drift, release-day effects, turn of month, January small-cap rebound | market, days | ready | 0.3 (faded after publication) | queued |
 | o | Theme composite (Congress, lobbying, contracts, bills) on theme ETFs vs equal weight | theme, 6-24m | ready | low power; evidence accumulates | plan.md |
+| p | The variance risk premium (VIX minus realized volatility) predicts next-month equity excess returns (Bollerslev-Tauchen-Zhou 2009): a regime input for the dial (a), not only for option writing | market, monthly, since 1990 | ready (Cboe VIX); seen once as H007's descriptive test 5 (t = 3.3 in 1993-2012) | 0.5 | queued: needs its own pre-registration |
 
 Not testable yet: breadth divergence (whole-market breadth exists for two years; earlier
 breadth would be computed on survivors); index deletions (no free bulk list of S&P changes).
@@ -60,10 +61,11 @@ breadth would be computed on survivors); index deletions (no free bulk list of S
 1. **13F quarterly price proxy** (derive, no new source): c, d, f and long-history g.
 2. **Ken French data library** (free, no key): factor and industry returns since 1926, for
    the "beat the obvious" controls in every stock-level test and thesis 5.
-3. **Cboe indices** (free CSVs at `cdn.cboe.com/api/global/us_indices/daily_prices/
-   {SYMBOL}_History.csv`, redirecting to cdn-api; confirmed for VIX from 1990, VIX3M from
-   2009, VIX9D, VIX6M, VVIX, SKEW from 1990, PUT from 1991, BXM, BXMD, CLL, CNDR): h, i.
-   VIX futures (CFE historical CSVs) for i.
+3. **Cboe indices** (loaded 2026-10-22, `volatility.py`; free CSVs at
+   `cdn-api.cboe.com/api/global/us_indices/daily_prices/{SYMBOL}_History.csv`): daily
+   from VIX 1990, SKEW 1990, BXMD and CNDR 1986, BXM 2002, VVIX 2006, **PUT 2007** (seven
+   stray values before: not usable earlier), VIX6M 2008, VIX3M 2009, CLL 2008, VIX9D
+   2011. VIX futures (CFE historical CSVs) for i.
 4. **Options chains**, three tiers: start recording end-of-day chains for the watchlist
    now (Massive's options tier, if the free plan covers it: check); Alpha Vantage
    `HISTORICAL_OPTIONS` (full chain with IV and Greeks for a symbol-date, 15+ years, 25

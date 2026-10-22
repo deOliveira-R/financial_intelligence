@@ -7,6 +7,10 @@ index's return over T-bills (the premium harvested), PUT minus SPY, SPY over T-b
 Six fixed tests: the unconditional premium, a Newey-West regression on VRP (decisive),
 expanding-window tercile sorts, a rule that writes puts only above the expanding median
 (decisive), the same regression for equities, and the term-structure variants.
+
+Cboe's PUT file is daily only from 2007 (seven stray values before), so the decisive tests
+run on PUT from 2007 and the same tests on BXMD (30-delta covered calls, daily since 1986)
+give the long-history reading, descriptive (amendment of 2026-10-22).
 """
 
 import math
@@ -23,14 +27,16 @@ from fin_intel.studies import h002
 
 HYPOTHESIS = "H007"
 VIX, VIX3M, PUT, SPY, TBILL = "cboe:vix", "cboe:vix3m", "cboe:put", "px:SPY", "fred:DGS3MO"
+BXMD = "cboe:bxmd"  # the long-history instrument, descriptive
+LONG_START = date(1993, 2, 1)
 RV_DAYS = 21
 MIN_HISTORY = 60  # months before the first sort or median
 BLOCK_MONTHS = 24
 ALPHA = 0.025  # two decisive tests
 # Decision month ends; a month's outcome ends at the next month end.
 PERIODS = {
-    "design": (date(1993, 2, 1), date(2012, 12, 31)),
-    "validation": (date(2013, 1, 1), date(2023, 5, 31)),
+    "design": (date(2007, 1, 1), date(2015, 12, 31)),  # PUT is daily from 2007
+    "validation": (date(2016, 1, 1), date(2023, 5, 31)),
     "holdout": (date(2023, 6, 1), date(2100, 1, 1)),
 }
 FROZEN = {"signal": "vrp", "realized_days": RV_DAYS, "rule": "above expanding median"}
@@ -68,14 +74,17 @@ def realized_vol(prices: indicators.Series, i: int, days: int = RV_DAYS) -> floa
     return float(np.std(logs, ddof=1) * math.sqrt(252) * 100)
 
 
-def months_from(days: list[date], series: dict[str, indicators.Series]) -> list[Month]:
+def months_from(
+    days: list[date], series: dict[str, indicators.Series], instrument: str = PUT
+) -> list[Month]:
+    """One row per month end with every input: `put_ret` is the instrument's return."""
     ends = h002.month_ends(days)
     out = []
     for a, b in zip(ends, ends[1:], strict=False):
         vix, put0, put1, spy0, spy1 = (
             series[VIX][a],
-            series[PUT][a],
-            series[PUT][b],
+            series[instrument][a],
+            series[instrument][b],
             series[SPY][a],
             series[SPY][b],
         )
@@ -246,15 +255,21 @@ def run(session: Session, period: str, log: bool = True) -> list[dict[str, Any]]
     if period == "holdout" and not research.holdout_allowed(session, HYPOTHESIS, FROZEN):
         raise research.HoldoutError("freeze the variant first (study H007 --freeze), once")
     end = research.HOLDOUT_START if period != "holdout" else date.today()
-    days, series = timeseries.build(session, [VIX, VIX3M, PUT, SPY, TBILL], None, end, pit=False)
+    specs = [VIX, VIX3M, PUT, BXMD, SPY, TBILL]
+    days, series = timeseries.build(session, specs, None, end, pit=False)
     series[TBILL] = [None, *series[TBILL][:-1]]  # posted the next morning
     months = months_from(days, series)
     if period != "holdout":
         last_outcome = max((days[b] for b in h002.month_ends(days)), default=days[-1])
         research.check_period(period, last_outcome)
-    result = analyze(months, PERIODS[period])
+    window = PERIODS[period]
+    result = analyze(months, window)
     result["period"] = period
     result["verdict"] = verdict(result)
+    # The long-history reading on covered calls, from 1993 through the period's end
+    # (descriptive: a different instrument, and months the decisive tests also use).
+    long_window = (LONG_START if period != "holdout" else window[0], window[1])
+    result["long_history_bxmd"] = analyze(months_from(days, series, BXMD), long_window)
     if log:
         research.log(session, HYPOTHESIS, FROZEN, period, result)
     return [result]
