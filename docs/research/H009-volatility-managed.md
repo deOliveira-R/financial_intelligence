@@ -1,7 +1,14 @@
 # H009: volatility-managed exposure earns more per unit of risk than a fixed allocation
 
-Status: **pre-registered 2026-10-22, not yet run.** Track: investing, the regime dial of
-the decision stack after H006's rejection (candidates.md row q). Validation mode A.
+Status: **rejected as registered (2026-10-22); what stands is a consistent drawdown cut
+of a third at a cost of 3-4 points a year, with no risk-adjusted gain.** Design 1993-2015:
+Sharpe 0.51 against 0.41 (SPY), 0.68 against 0.49 (RSP, interval above zero), drawdowns
+0.57 and 0.48 of buy-and-hold's. Validation 2016-2023 (once): SPY Sharpe 0.73 against
+0.67 with the interval spanning zero (partial), RSP 0.48 against 0.57 (rejection);
+drawdown ratios 0.61 and 0.68 with intervals below 1. Holdout (once): Sharpe below
+buy-and-hold on both, return 2.4-3.7 points a year lower. See Results. Track: investing,
+the regime dial of the decision stack after H006's rejection (candidates.md row q).
+Validation mode A.
 
 ## Claim
 
@@ -63,6 +70,40 @@ is fixed, nothing is chosen between periods).
 
 One rule, two assets: one logged trial per period, plus the two robustness runs (counted,
 not chosen from). Bonferroni over three.
+
+## Results (2026-10-22)
+
+S = the rule, H = buy and hold, M = the constant mix at the rule's average exposure
+(whose Sharpe ratio equals buy-and-hold's by construction, so the Sharpe test against M
+is the test against H). Primary rule: 12% target, 21-day volatility, monthly.
+
+| Period | Asset | CAGR S / H / M | Vol S / H | Sharpe S / H | Max DD S / H / M | DD ratio to H | Sharpe diff to H | Exposure | Verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| Design 1993-12 to 2015-12 | SPY | 8.4 / 8.9 / 7.8% | 12 / 19% | 0.51 / 0.41 | -32 / -55 / -46% | 0.57 [0.43, 0.72] | +0.13 [-0.02, +0.31] | 0.79 | partial |
+| | RSP (from 2003) | 9.4 / 9.9 / 8.3% | 12 / 21% | 0.68 / 0.49 | -29 / -60 / -51% | 0.48 [0.32, 0.78] | +0.27 [+0.01, +0.46] | 0.79 | support |
+| Validation 2016-01 to 2023-06 | SPY | 10.2 / 12.9 / 10.8% | 12 / 19% | 0.73 / 0.67 | -23 / -34 / -28% | 0.61 [0.54, 0.83] | +0.07 [-0.24, +0.29] | 0.80 | partial |
+| | RSP | 6.8 / 11.2 / 9.4% | 13 / 20% | 0.48 / 0.57 | -26 / -39 / -32% | 0.68 [0.61, 0.95] | -0.11 [-0.39, +0.13] | 0.80 | **rejection** |
+| Holdout 2023-07 to 2026-10 | SPY | 16.0 / 19.7 / 18.1% | 12 / 15% | 0.91 / 0.98 | -14 / -19 / -17% | (40 months, no interval) | -0.13 | 0.90 | rejection |
+| | RSP | 11.1 / 13.5 / 12.9% | 12 / 14% | 0.56 / 0.66 | -15 / -18 / -17% | | -0.14 | 0.93 | rejection |
+
+Robustness (reported, not chosen): the 63-day window did worse everywhere in validation
+(SPY Sharpe 0.63, RSP drawdown ratio 0.83 with the interval reaching 1.19); the 15% target
+gave up less return (SPY gap -1.9 points) and less drawdown protection (ratios 0.76-0.77).
+Worst 12 months in validation: SPY -11.8% against -19.7%, RSP -16.5% against -28.6%: the
+rule was at full weight when February 2020 arrived, cut to about a third for April and
+May, and took a month to come back.
+
+**Verdict: rejected as registered.** Support needed a Sharpe ratio above buy-and-hold's on
+both assets with the interval above zero; SPY's gain was small and uncertain, RSP's was
+negative, and the holdout went the other way on both. What did hold, in every period and
+on both assets: a maximum drawdown a third to a half smaller than buy-and-hold's and below
+the constant mix's, with no whipsaw cost (the weight falls and recovers smoothly). That is
+"owning less when it is volatile", worth 3-4 points a year of return since 2016, which a
+constant 80% allocation doesn't buy at the same price in drawdown. For the low-attention
+track it is a legitimate dial for someone who values the drawdown cut more than the
+return; it is not a free lunch, and the claim of a higher return per unit of risk failed.
+Together with H006: since 2016 no monthly market-timing rule tested here has improved
+risk-adjusted returns on US indices; drawdown control has only been bought with return.
 
 ## Limits stated in advance
 

@@ -188,9 +188,12 @@ pre-registered before any result:
   of the signal's companies. Next: CUSIP→issuer mapping fix (share-class FIGI; insiders'
   ticker bridge for dead companies) and the proxy over every filer from the raw 13F files;
   then the study on 2013-Q3 onward.
-- [ ] **H009** volatility-managed exposure (research/H009-volatility-managed.md,
-  candidates row q): pre-registered 2026-10-22 as the regime dial after H006; runs on
-  H006's periods and machinery.
+- [x] **H009** volatility-managed exposure (research/H009-volatility-managed.md,
+  candidates row q): **rejected** (2026-10-22). Drawdowns a third to a half smaller than
+  buy-and-hold's in every period and on both assets, but 3-4 points a year of return and
+  no risk-adjusted gain (validation SPY Sharpe 0.73 vs 0.67 with a wide interval, RSP 0.48
+  vs 0.57; holdout below on both). With H006: no monthly timing rule tested improved
+  risk-adjusted returns since 2016; drawdown control was only bought with return.
 - [x] Ken French factor returns loaded (`factors.py`, `sync-factors`, weekly; `ff:` series).
 - [ ] Data in parallel: watchlist option chains recorded daily (check Massive's options
   tier), VIX futures (CFE) for candidate i.
