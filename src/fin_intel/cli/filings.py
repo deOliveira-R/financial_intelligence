@@ -54,9 +54,9 @@ def sync_fundamentals_bulk(
 
     store = default_store()
     downloaded = zip_path is None
-    path = (
-        Path(zip_path) if zip_path else Path(settings().raw_dir).parent / "tmp" / "companyfacts.zip"
-    )
+    # Under the raw directory: the only writable, persistent path in the containers (the
+    # image is read-only and /tmp is memory), and the ~1 GB download resumes from there.
+    path = Path(zip_path) if zip_path else Path(settings().raw_dir) / "tmp" / "companyfacts.zip"
 
     def work(session: Session, _: str) -> int:
         if downloaded:
