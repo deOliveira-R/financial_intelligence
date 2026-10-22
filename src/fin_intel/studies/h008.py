@@ -66,6 +66,10 @@ class Price:
     shares: float
     value_total: float
     security_id: int | None
+    cusip: str = ""
+
+
+MAX_RETURN = 3.0  # a quarter's move beyond +300% is read as a proxy error, not a return
 
 
 Flag = dict[str, set[str]]  # kind -> insiders (opportunistic, routine, new, all)
@@ -125,11 +129,15 @@ def split_factor(
 def forward_return(
     prices: dict[date, Price], splits: dict[int, list[tuple[date, float]]], q: date, later: date
 ) -> float | None:
+    """The return of the same CUSIP between the two quarter ends; None across a change of
+    CUSIP (a retired or reclassified security prices on a different scale) or beyond
+    MAX_RETURN (a proxy error), both counted by the caller as missing."""
     p0, p1 = prices.get(q), prices.get(later)
-    if p0 is None or p1 is None or p0.price <= 0:
+    if p0 is None or p1 is None or p0.price <= 0 or p0.cusip != p1.cusip:
         return None
     recorded = splits.get(p0.security_id) if p0.security_id is not None else None
-    return p1.price * split_factor(recorded, q, later, p0, p1) / p0.price - 1
+    r = p1.price * split_factor(recorded, q, later, p0, p1) / p0.price - 1
+    return r if r <= MAX_RETURN else None
 
 
 def deciles(values: dict[int, float]) -> dict[int, int]:
@@ -287,7 +295,7 @@ def exits(
     """Flagged companies with a price at the signal quarter but none at the horizon: how
     many, and how many had a bankruptcy or deregistration filing in the window (read as
     -100% in the second reading)."""
-    gone = failed = 0
+    gone = failed = screened = 0
     for quarter in quarters:
         for (cik, q), flag in flags.items():
             if q != quarter.end or not flag.get("opportunistic"):
@@ -297,7 +305,13 @@ def exits(
                 gone += 1
                 if any(q < d <= quarter.later for d in events.get(cik, [])):
                     failed += 1
-    return {"without_price_at_horizon": gone, "with_exit_filing": failed}
+            elif q in by_q and cik not in quarter.returns:
+                screened += 1  # priced at both ends, but across CUSIPs or beyond MAX_RETURN
+    return {
+        "without_price_at_horizon": gone,
+        "with_exit_filing": failed,
+        "screened_as_proxy_error": screened,
+    }
 
 
 def analyze(
@@ -412,6 +426,7 @@ def load_prices(session: Session, end: date) -> dict[int, dict[date, Price]]:
             QuarterlyPrice.shares_total,
             QuarterlyPrice.value_total,
             QuarterlyPrice.security_id,
+            QuarterlyPrice.cusip,
         ).where(
             QuarterlyPrice.cik.is_not(None),
             QuarterlyPrice.filers >= MIN_FILERS,
@@ -420,10 +435,10 @@ def load_prices(session: Session, end: date) -> dict[int, dict[date, Price]]:
         )
     ).all()
     out: dict[int, dict[date, Price]] = defaultdict(dict)
-    for cik, period, price, shares, value, security_id in rows:
+    for cik, period, price, shares, value, security_id, cusip in rows:
         current = out[cik].get(period)
         if current is None or value > current.value_total:
-            out[cik][period] = Price(price, shares, value, security_id)
+            out[cik][period] = Price(price, shares, value, security_id, cusip)
     return out
 
 

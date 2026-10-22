@@ -1,6 +1,7 @@
 from datetime import date
 
 import numpy as np
+import pytest
 
 from fin_intel.studies import h008
 
@@ -24,6 +25,25 @@ def test_quarter_end_and_classification():
     assert flags[1, date(2018, 12, 31)]["new"] == {"c"} and flags[1, date(2018, 12, 31)]["all"] == {
         "c"
     }
+
+
+def test_returns_stay_within_a_cusip_and_screen_impossible_moves():
+    q, later = date(2020, 3, 31), date(2020, 6, 30)
+    prices = {
+        q: h008.Price(10.0, 100.0, 1e3, None, "OLD"),
+        later: h008.Price(80.0, 12.0, 1e3, None, "NEW"),
+    }
+    assert h008.forward_return(prices, {}, q, later) is None  # a retired CUSIP: no return
+    same = {
+        q: h008.Price(10.0, 100.0, 1e3, None, "A"),
+        later: h008.Price(12.0, 100.0, 1e3, None, "A"),
+    }
+    assert h008.forward_return(same, {}, q, later) == pytest.approx(0.2)
+    jump = {
+        q: h008.Price(1.0, 100.0, 1e3, None, "A"),
+        later: h008.Price(9.0, 100.0, 1e3, None, "A"),
+    }
+    assert h008.forward_return(jump, {}, q, later) is None  # +800%: a proxy error
 
 
 def test_split_factor_recorded_and_inferred():
@@ -60,7 +80,7 @@ def synthetic(edge: float, seed: int = 5):
         if cik % 13 == 0:  # a routine buyer: every March since 2010, so routine from 2013
             purchases += [buy(cik, f"r{cik}", date(y, 3, 10)) for y in range(2010, 2024)]
         for i, q in enumerate(ends):
-            by_q[q] = h008.Price(level, 1000.0, level * 1000.0 * (1 + cik % 10), None)
+            by_q[q] = h008.Price(level, 1000.0, level * 1000.0 * (1 + cik % 10), None, str(cik))
             boost = 0.0
             if i >= 1 and cik % 13 and rng.random() < 0.06:
                 purchases.append(buy(cik, f"o{cik}", date(q.year, q.month, 15)))
@@ -85,3 +105,4 @@ def test_signal_found_when_present_and_not_when_absent():
     none = h008.analyze(purchases, prices, {}, sic, members, {}, window, reps=100)
     assert none["verdict"] in ("rejection", "weak")
     assert "h4" in none and none["h1"]["exits"]["without_price_at_horizon"] == 0
+    assert none["h1"]["exits"]["screened_as_proxy_error"] == 0

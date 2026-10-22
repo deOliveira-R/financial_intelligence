@@ -153,6 +153,24 @@ Small companies, one-quarter holding: about 0.5% round trip is assumed when judg
 whether a supported effect is worth trading; a 4%-a-year excess net of that is the floor
 for a tilt, not a standalone strategy.
 
+**2026-10-22, coverage re-measured and a data screen, after a first design run whose
+numbers were impossible (before any valid result):**
+- Coverage of company-quarters with a qualifying purchase, by a price from three or more
+  filers, after every fix: 2013 43%, 2014 45%, 2015 49%, 2016 54%, 2017 58%, 2018 64%,
+  2019 68%, 2020 74%, 2021 74%, 2022 81%. Of the 914k priced CUSIP-quarters since 2013,
+  354k reach an issuer through a security, 98k through the issuer prefix, 8k through
+  insiders' tickers, 455k none (bonds, funds, foreign and unknown identifiers). The study
+  runs on the covered share; the design window's coverage is 53% of flagged
+  company-quarters and is a limit of the result.
+- The first design run (logged as trial 1) showed mean excess returns of 300% a quarter
+  against medians near zero: a company's price was taken from whichever CUSIP institutions
+  held the most of in each quarter, and when that CUSIP changed (a retired identifier, a
+  reclassification) the two prices were on different scales. **Screen, fixed now:** a
+  return is computed only between the same CUSIP at both quarter ends; a quarter's move
+  beyond +300% is read as a proxy error; both are treated as missing and counted
+  (`exits.screened_as_proxy_error`). A genuine fourfold quarter is rare enough that the
+  cost of the screen is small and symmetric across the groups compared.
+
 ## Risks to the test
 
 - The price proxy is quarterly and from institutional reports: a thinly held company
