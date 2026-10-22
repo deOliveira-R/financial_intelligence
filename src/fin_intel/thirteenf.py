@@ -421,10 +421,13 @@ def find_filers(session: Session, query: str, limit: int = 20) -> list[Instituti
 def load_13f_dataset(session: Session, body: bytes, period: str = "") -> int:
     """`period` is the data set's key (`2013-01-01_2013-03-31`): data sets of filings before
     FULL_SINCE keep only large and watched filers."""
+    from fin_intel import quarterly
+
     end = period.split("_")[-1]
     historical = bool(end) and date.fromisoformat(end) < FULL_SINCE
     count = load(session, body, HISTORY_MIN_AUM if historical else None)
     link_securities(session)
+    quarterly.load_parts(session, period, body)  # prices over every filer, large or small
     return count
 
 

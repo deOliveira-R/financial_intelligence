@@ -51,17 +51,30 @@ def derive_quarterly_prices_cmd(
     all_periods: Annotated[
         bool, typer.Option("--all", help="Recompute every quarter, not only new and recent ones")
     ] = False,
+    from_raw: Annotated[
+        bool,
+        typer.Option(
+            "--from-raw",
+            help="First pass over stored 13F files without parts yet (every file with --all)",
+        ),
+    ] = False,
 ) -> None:
     """Quarter-end prices for every stock institutions held, from 13F values (the median of
-    value/shares across filers): survivorship-free since 2001, for stock-level research."""
+    value/shares across every filer): survivorship-free since 2013-Q2, for stock-level
+    research. The 13F sync keeps the per-file parts current; --from-raw builds them from
+    the raw store (no network)."""
     from sqlalchemy import select
 
     from fin_intel import quarterly
-    from fin_intel.models import InstitutionalPosition
+    from fin_intel.models import QuarterlyPricePart
+    from fin_intel.raw import default_store
 
     with session_factory()() as session:
+        if from_raw:
+            done = quarterly.parts_from_raw(session, default_store(), only_missing=not all_periods)
+            typer.echo(f"quarterly price parts: {done} rows")
         periods = (
-            sorted(session.scalars(select(InstitutionalPosition.period).distinct()))
+            sorted(session.scalars(select(QuarterlyPricePart.period).distinct()))
             if all_periods
             else None
         )

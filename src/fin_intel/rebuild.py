@@ -62,6 +62,7 @@ from fin_intel.models import (
     PresidentialDocument,
     PresidentialText,
     QuarterlyPrice,
+    QuarterlyPricePart,
     Security,
     ShortInterest,
     StatementItem,
@@ -80,7 +81,13 @@ TABLES: dict[str, list] = {
     "fundamentals": [StatementItem, Fact, FiscalCalendar, Filing, Concept],
     "prices": [DailyBar, CorporateAction],
     "insiders": [InsiderTransaction],
-    "holdings": [QuarterlyPrice, InstitutionalPosition, InstitutionalFiler, CusipMapping],
+    "holdings": [
+        QuarterlyPrice,
+        QuarterlyPricePart,
+        InstitutionalPosition,
+        InstitutionalFiler,
+        CusipMapping,
+    ],
     "congress": [
         CongressReportMember,
         CongressTrade,

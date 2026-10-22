@@ -628,6 +628,24 @@ class QuarterlyPrice(Base):
     cik_source: Mapped[str | None] = mapped_column(String)
 
 
+class QuarterlyPricePart(Base):
+    """Derived from one 13F data set file over *every* filer in it (quarterly.py): per CUSIP
+    and quarter end, the median of value/shares, how many filers reported it and the totals.
+    Files overlap on a quarter (late and amended filings land in later files), so
+    `quarterly_prices` takes each quarter's part with the most filers. Kept per file so a new
+    file adds its parts without re-reading the others."""
+
+    __tablename__ = "quarterly_price_parts"
+
+    file_key: Mapped[str] = mapped_column(String, primary_key=True)  # 2013-04-01_2013-06-30
+    cusip: Mapped[str] = mapped_column(String, primary_key=True)
+    period: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    price: Mapped[float] = mapped_column(Float)
+    filers: Mapped[int]
+    value_total: Mapped[float] = mapped_column(Float)
+    shares_total: Mapped[float] = mapped_column(Float)
+
+
 class CongressReport(Base):
     """A member of Congress's Periodic Transaction Report (congress.py). `transactions` is
     None until the report itself is parsed (paper filings never are)."""
