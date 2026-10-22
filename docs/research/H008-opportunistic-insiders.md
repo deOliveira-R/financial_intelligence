@@ -1,9 +1,16 @@
 # H008: opportunistic insider purchases predict excess returns; routine ones don't
 
-Status: **pre-registered 2026-10-22, not yet run; the price proxy is built and its
-coverage measured (see Amendments): two data fixes precede the study.** Track: investing,
-the informed-buyer trigger (candidates.md row c). Validation mode A. Prerequisite: the 13F
-quarterly price proxy (below).
+Status: **weak support as registered (2026-10-22); the holdout, run once for the record,
+supports.** Over size-decile peers, companies with an opportunistic officer or director
+purchase earned +0.8% the next quarter in design (t = 2.6), +0.3% in validation
+(t = 0.5, the decision period), +1.1% in the holdout (t = 2.7, after controls +1.1%
+[0.4, 1.9]); over four quarters +1.8%, +2.5%, +2.4%. The routine/opportunistic distinction
+itself adds little: routine buyers as defined are 6-9 companies a quarter, and "any
+qualifying purchase" tracks the opportunistic portfolio. Read as evidence that accumulates:
+a modest, consistently signed effect, significant in two of three periods, to be re-read
+on the quarters that accrue from 2026-Q4 (next clean look: eight new quarters). See
+Results. Track: investing, the informed-buyer trigger (candidates.md row c). Validation
+mode A.
 
 ## Claim
 
@@ -170,6 +177,53 @@ numbers were impossible (before any valid result):**
   beyond +300% is read as a proxy error; both are treated as missing and counted
   (`exits.screened_as_proxy_error`). A genuine fourfold quarter is rare enough that the
   cost of the screen is small and symmetric across the groups compared.
+
+## Results (2026-10-22)
+
+Calendar-time equal-weight portfolios of flagged companies, excess return over the
+equal-weight portfolio of their size decile (total institutional value), Newey-West t;
+"n" is companies per quarter. Coverage: the share of flagged company-quarters with a
+proxy price from three or more filers.
+
+| | Design 2013-Q3 to 2018-Q4 (22 quarters, coverage 53%) | Validation 2019-Q1 to 2022-Q2 (14, 74%, once) | Holdout 2022-Q3 to 2026-Q2 (15, 81%, once) |
+|---|---|---|---|
+| **Opportunistic, 1 quarter** (n ≈ 310 / 460 / 460) | **+0.80%** (t 2.6, p 0.005), median +0.7%, hit 64% | +0.30% (t 0.5, p 0.32), median +0.4%, hit 71% | **+1.10%** (t 2.7, p 0.004), median +0.5%, hit 80% |
+| after sector and momentum controls | +0.8% [+0.2, +1.5] | +0.2% [-0.8, +1.3] | +1.1% [+0.4, +1.9] |
+| strict (new insiders dropped, n ≈ 200 / 280 / 290) | +0.9% (t 2.5) | +0.1% (t 0.3) | +0.8% (t 1.7) |
+| routine (n ≈ 6 / 6 / 9) | -1.0% (t -0.7) | -1.0% (t -0.6) | -1.4% (t -0.9) |
+| all qualifying purchases (n ≈ 460 / 660 / 640) | +0.6% (t 2.5) | +0.1% (t 0.2) | +0.7% (t 1.6) |
+| cluster, two or more opportunistic buyers (n ≈ 90 / 145 / 135) | +0.6% (t 1.6) | 0.0% (t 0.0) | +2.4% (t 2.9) |
+| opportunistic minus all | +0.2% (t 1.3) | +0.2% (t 0.9) | |
+| **Opportunistic, 4 quarters** | +1.8% (t 2.2) | +2.5% (t 1.5) | +2.4% (t 3.2), hit 83% |
+| all purchases, 4 quarters | +1.6% (t 2.9) | +1.2% (t 1.2) | +2.4% (t 3.5) |
+| screened as proxy errors (1 quarter) | 410 rows (6%) | 328 (5%) | 376 (5%) |
+| flagged without a price at the horizon; with an exit filing | 12; 1 | 15; 5 | 22; 9 |
+
+The first design run (trial 1 in the log) is void: its means came from price scales
+changing across retired CUSIPs (Amendments).
+
+**Reading.** The sign is positive in every period and horizon, the size is modest (a
+point a quarter at best, two to two and a half over a year) and the significance comes and
+goes: strong in 2013-2018 and 2022-2026, absent in 2019-2022 (the pandemic crash and
+rebound, 2021's small-cap mania and 2022's bear, where whatever insiders knew was
+swamped). Validation decides, so the registered verdict is **weak support**: positive,
+under a point a quarter, not distinguishable from noise in that period. The holdout's
+support is recorded, not used to upgrade the verdict; the honest next step is the
+accumulation the protocol allows for low-power tests: re-read the one-quarter portfolio on
+the quarters after 2026-Q3 once eight have accrued.
+
+Two things the test did settle. The *routine* distinction, as defined (same month three
+years running), isolates 6-9 companies a quarter and they do worse; but the opportunistic
+portfolio is 70% of all qualifying purchases and tracks "any purchase" within 0.2 points,
+so the classification isn't where the information is: the purchase itself is. And the
+effect survives sector and momentum controls where it exists at all, so it isn't a
+small-cap or momentum tilt in disguise.
+
+**For the decision stack:** an officer or director's open-market purchase of $10,000 or
+more is a weak positive trigger worth about 2-3 points a year over size peers before costs
+on a one-year hold, which a small-cap round trip of 0.5% leaves at 1.5-2.5. That is a tilt
+to apply when the not-buy filters pass, not a reason to buy on its own. Coverage (53-81%
+of flagged companies, the rest too small for three 13F filers) is a limit of the result.
 
 ## Risks to the test
 

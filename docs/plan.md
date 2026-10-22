@@ -5,7 +5,9 @@ the backend before extending it. Read this first when resuming; update the statu
 work lands. Deferred ideas stay in [backlog.md](backlog.md); this file is the sequence.
 
 **Status (2026-10-22):** phases 1-4 v1 deployed; phase 5 research H001-H005 done (see
-Phase 5); batch 1 (H006-H008) pre-registered 2026-10-22 and in progress. Operations
+Phase 5); batch 1 run 2026-10-22: H006 and H009 (regime dials) rejected, H007 (variance
+premium conditioning) rejected with the premium standing, H008 (insider purchases) weak
+support. Next: candidates d, e, f, k on the new price proxy and factors. Operations
 (2026-10-20, below): the server runs in containers and the schedule is steps with states,
 retried until they succeed. The GDELT backfill is complete (17 queries since 2017), so the
 thesis trackers are unblocked. Deferred by the user: phone notifications (dropped: the
@@ -182,12 +184,15 @@ pre-registered before any result:
   step); PUT is daily only from 2007, so the first design run was void and re-registered.
   Selling index options paid 0.4-0.6% a month over T-bills in every period (BXMD 1993-2023
   t = 3.2), with -33% in 2008, and trailed the index since 2016.
-- [ ] **H008** opportunistic insider purchases (research/H008-opportunistic-insiders.md):
-  the 13F price proxy is built (`quarterly_prices`, `derive-quarterly-prices`, weekly after
-  13F; 806k CUSIP-quarters, exact against daily bars) but begins 2013-Q2 and covers 30-70%
-  of the signal's companies. Next: CUSIP→issuer mapping fix (share-class FIGI; insiders'
-  ticker bridge for dead companies) and the proxy over every filer from the raw 13F files;
-  then the study on 2013-Q3 onward.
+- [x] **H008** opportunistic insider purchases (research/H008-opportunistic-insiders.md):
+  **weak support as registered; the holdout supports** (2026-10-22). +0.8% a quarter over
+  size peers in design (t 2.6), +0.3% in validation (t 0.5), +1.1% in the holdout (t 2.7),
+  +1.8 to +2.5% over four quarters: a modest, consistently signed tilt, significant in two
+  of three periods; re-read after eight new quarters. The routine/opportunistic distinction
+  adds little: the purchase itself carries the information. Built for it: the 13F price
+  proxy over every filer (`quarterly_prices`, `quarterly_price_parts`, from 2013-Q2),
+  OpenFIGI fixes (US listing, share-class FIGI, `ID_CINS`, `sync-13f --relink`) and the
+  issuer bridges (`cik_source`); coverage 43% (2013) to 81% (2022) of flagged companies.
 - [x] **H009** volatility-managed exposure (research/H009-volatility-managed.md,
   candidates row q): **rejected** (2026-10-22). Drawdowns a third to a half smaller than
   buy-and-hold's in every period and on both assets, but 3-4 points a year of return and
