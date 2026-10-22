@@ -4,13 +4,14 @@ The working plan across sessions. Agreed with the user on 2026-10-11: clean and 
 the backend before extending it. Read this first when resuming; update the status lines as
 work lands. Deferred ideas stay in [backlog.md](backlog.md); this file is the sequence.
 
-**Status (2026-10-20):** phases 1-4 v1 deployed; phase 5 research H001-H005 done (see
-Phase 5). Operations (2026-10-20, below): the server runs in containers and the schedule
-is steps with states, retried until they succeed. The GDELT backfill is complete (17
-queries since 2017), so the thesis trackers are unblocked. Deferred by the user: phone
-notifications (dropped: the server is to be autonomous) and the Fidelity/Vanguard imports.
-A ProtonVPN exit node for the tailnet is another session's work (separate compose project
-and tailnet node on the same VM). Next: the "Later" items of Phase 5 with the user.
+**Status (2026-10-22):** phases 1-4 v1 deployed; phase 5 research H001-H005 done (see
+Phase 5); batch 1 (H006-H008) pre-registered 2026-10-22 and in progress. Operations
+(2026-10-20, below): the server runs in containers and the schedule is steps with states,
+retried until they succeed. The GDELT backfill is complete (17 queries since 2017), so the
+thesis trackers are unblocked. Deferred by the user: phone notifications (dropped: the
+server is to be autonomous) and the Fidelity/Vanguard imports. A ProtonVPN exit node for
+the tailnet is another session's work (separate compose project and tailnet node on the
+same VM).
 
 ## Why
 
@@ -164,6 +165,18 @@ Next, agreed with the user (2026-10-12), in order:
   supported; copper is a coincident, timely price of the industrial cycle.
 Later: trackers for theses 2, 4, 6-8 once GDELT's load completes; new distress signals
 (going concern, short-interest jumps) as a new hypothesis.
+
+**Batch 1 (2026-10-22, from [research/candidates.md](research/candidates.md)):** the
+user's direction is a hypothesis-driven search for ways of making money (risk, buy or
+not, options). Candidates ranked by source of return and data readiness; the first three
+pre-registered before any result:
+- [ ] **H006** trend + credit regime filter (research/H006-regime-filter.md): data ready.
+- [ ] **H007** variance risk premium conditional on VIX minus realized volatility
+  (research/H007-variance-premium.md): needs Cboe's index histories (`volatility.py`).
+- [ ] **H008** opportunistic insider purchases (research/H008-opportunistic-insiders.md):
+  needs the 13F quarterly price proxy (`quarterly_prices`, research.md step 1, unbuilt).
+- [ ] Data in parallel: Ken French library (controls), watchlist option chains recorded
+  daily (check Massive's options tier), VIX futures (CFE) for candidate i.
 
 Hypotheses, analysis skills, evals and hill-climbing on the historical data, using the
 timeline, dossiers and graph. LLM skills extract supplier/customer links and policy
