@@ -60,8 +60,10 @@ breadth would be computed on survivors); index deletions (no free bulk list of S
 ## Data to get, by what it unlocks
 
 1. **13F quarterly price proxy** (derive, no new source): c, d, f and long-history g.
-2. **Ken French data library** (free, no key): factor and industry returns since 1926, for
-   the "beat the obvious" controls in every stock-level test and thesis 5.
+2. **Ken French data library** (loaded 2026-10-22, `factors.py`, `ff:` series): the daily
+   factors since 1926 (five factors since 1963, momentum), for the "beat the obvious"
+   controls in every stock-level test and thesis 5. Industry and size portfolios are a
+   file away when a study needs them.
 3. **Cboe indices** (loaded 2026-10-22, `volatility.py`; free CSVs at
    `cdn-api.cboe.com/api/global/us_indices/daily_prices/{SYMBOL}_History.csv`): daily
    from VIX 1990, SKEW 1990, BXMD and CNDR 1986, BXM 2002, VVIX 2006, **PUT 2007** (seven
