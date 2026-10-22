@@ -46,6 +46,28 @@ def derive_outcomes_cmd() -> None:
         typer.echo(f"outcomes: {outcomes.compute(session)} rows")
 
 
+@app.command("derive-quarterly-prices", rich_help_panel="Derived tables")
+def derive_quarterly_prices_cmd(
+    all_periods: Annotated[
+        bool, typer.Option("--all", help="Recompute every quarter, not only new and recent ones")
+    ] = False,
+) -> None:
+    """Quarter-end prices for every stock institutions held, from 13F values (the median of
+    value/shares across filers): survivorship-free since 2001, for stock-level research."""
+    from sqlalchemy import select
+
+    from fin_intel import quarterly
+    from fin_intel.models import InstitutionalPosition
+
+    with session_factory()() as session:
+        periods = (
+            sorted(session.scalars(select(InstitutionalPosition.period).distinct()))
+            if all_periods
+            else None
+        )
+        typer.echo(f"quarterly prices: {quarterly.compute(session, periods)} rows")
+
+
 @app.command("backfill-metrics", rich_help_panel="Derived tables")
 def backfill_metrics_cmd(
     start: Annotated[str, typer.Option(help="YYYY-MM-DD")],

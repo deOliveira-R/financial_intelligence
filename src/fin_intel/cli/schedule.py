@@ -17,7 +17,12 @@ import typer
 from sqlalchemy import select, text
 
 from fin_intel import jobs
-from fin_intel.cli.analytics import derive_breadth_cmd, derive_metrics_cmd, derive_outcomes_cmd
+from fin_intel.cli.analytics import (
+    derive_breadth_cmd,
+    derive_metrics_cmd,
+    derive_outcomes_cmd,
+    derive_quarterly_prices_cmd,
+)
 from fin_intel.cli.app import app
 from fin_intel.cli.filings import (
     fill_xbrl_gaps,
@@ -192,6 +197,16 @@ def steps() -> list[Step]:
     out += [
         Step(name, label, "weekly", fn, timeout=timedelta(hours=6)) for name, label, fn in weekly
     ]
+    out.append(
+        Step(
+            "quarterly-prices",
+            "quarter-end prices from 13F values",
+            "weekly",
+            derive_quarterly_prices_cmd,
+            after=("13f",),
+            timeout=timedelta(hours=2),
+        )
+    )
     out.append(
         Step(
             "news",

@@ -603,6 +603,24 @@ class CusipMapping(Base):
     security_id: Mapped[int | None] = mapped_column(ForeignKey("securities.id"))
 
 
+class QuarterlyPrice(Base):
+    """Derived: a stock's price at a quarter end from the 13F values filed for it
+    (quarterly.py): the median of value/shares across the filers holding it, with how many
+    priced it and the total value held (a size proxy). Survivorship-free since 2001; the
+    price history stock-level research runs on where daily bars don't reach."""
+
+    __tablename__ = "quarterly_prices"
+
+    cusip: Mapped[str] = mapped_column(String, primary_key=True)
+    period: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    price: Mapped[float] = mapped_column(Float)  # as reported then: unadjusted for later splits
+    filers: Mapped[int]
+    value_total: Mapped[float] = mapped_column(Float)  # dollars held by every reporting filer
+    shares_total: Mapped[float] = mapped_column(Float)
+    security_id: Mapped[int | None] = mapped_column(ForeignKey("securities.id"), index=True)
+    cik: Mapped[int | None] = mapped_column(index=True)
+
+
 class CongressReport(Base):
     """A member of Congress's Periodic Transaction Report (congress.py). `transactions` is
     None until the report itself is parsed (paper filings never are)."""
