@@ -17,7 +17,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from fin_intel import indicators, registry, timeseries
+from fin_intel import indicators, registry, timeseries, volatility
 from fin_intel.db import upsert
 from fin_intel.models import EconomicObservation, EconomicSeries
 from fin_intel.pipeline import tracked
@@ -49,11 +49,16 @@ ALIASES = {
 
 
 def resolve(ident: str) -> str:
+    """A put/call series (`equity_pc`) or one of the volatility and strategy indices
+    (`vix`, `put`; volatility.py), which share the `cboe:` spec source."""
     if ident.upper() in SERIES:
         return ident.upper()
     if ident.lower() in ALIASES:
         return ALIASES[ident.lower()]
-    raise ValueError(f"unknown Cboe series {ident!r}; one of {', '.join(ALIASES)}")
+    if index := volatility.resolve(ident):
+        return index
+    names = ", ".join([*ALIASES, *(s.lower() for s in volatility.INDICES)])
+    raise ValueError(f"unknown Cboe series {ident!r}; one of {names}")
 
 
 def available_on(day: date) -> date:
@@ -165,7 +170,8 @@ registry.register(
 
 @timeseries.source("cboe")
 def _spec(session: Session, ident: str, days: list[date], pit: bool) -> indicators.Series:
-    """`cboe:equity_pc`, `cboe:spx_puts`... (py)."""
+    """`cboe:equity_pc`, `cboe:spx_puts` (known the next day), `cboe:vix`, `cboe:put`
+    (index closes, known at the close)."""
 
     try:
         series_id = resolve(ident)
@@ -178,4 +184,5 @@ def _spec(session: Session, ident: str, days: list[date], pit: bool) -> indicato
     ).all()
     if not rows:
         raise timeseries.SpecError(f"no data for {series_id}; run fin-intel sync-cboe")
-    return timeseries.step([(available_on(d) if pit else d, v) for d, v in rows], days)
+    lag = series_id not in volatility.SERIES
+    return timeseries.step([(available_on(d) if pit and lag else d, v) for d, v in rows], days)

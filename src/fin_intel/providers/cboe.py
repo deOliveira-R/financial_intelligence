@@ -8,6 +8,8 @@ from fin_intel.providers.ratelimit import SECOND, Limit
 
 ARCHIVE = "/resources/options/volume_and_call_put_ratios/{product}pc.csv"
 DAILY = "/data/us/options/market_statistics/daily/{day}_daily_options"
+# cdn.cboe.com redirects these to cdn-api (and the client doesn't follow redirects).
+INDEX_HISTORY = "https://cdn-api.cboe.com/api/global/us_indices/daily_prices/{symbol}_History.csv"
 
 
 class CboeProvider(Provider):
@@ -24,6 +26,12 @@ class CboeProvider(Provider):
     def fetch_archive(self, product: str) -> bytes:
         """`total`, `equity` or `index`: daily volumes from 2006 to 2019-10-04."""
         return self.get_bytes(ARCHIVE.format(product=product), dataset="pc_archive", key=product)
+
+    def fetch_index_history(self, symbol: str) -> bytes:
+        """An index's whole daily history (VIX, VIX3M, SKEW, PUT...): one CSV per index."""
+        return self.get_bytes(
+            INDEX_HISTORY.format(symbol=symbol.upper()), dataset="index_history", key=symbol.upper()
+        )
 
     def fetch_daily(self, day: date) -> Any | None:
         """A trading day's volumes and ratios; None for days without a file (holidays,

@@ -160,6 +160,25 @@ def newey_west_mean(values: Sequence[float], lags: int | None = None) -> Estimat
     return Estimate(m, se, m - 1.96 * se, m + 1.96 * se, n)
 
 
+def hac_slope(y: Sequence[float], x: Sequence[float], lags: int = 1) -> Estimate:
+    """The slope of y on x (with an intercept) with a Newey-West standard error: a
+    predictive regression whose outcomes overlap or cluster in time."""
+    import statsmodels.api as sm
+
+    pairs = [(a, b) for a, b in zip(y, x, strict=True) if a is not None and b is not None]
+    if len(pairs) < 10:
+        return Estimate(math.nan, None, None, None, len(pairs))
+    ys, xs = np.asarray(pairs, dtype=float).T
+    fit = sm.OLS(ys, sm.add_constant(xs)).fit(cov_type="HAC", cov_kwds={"maxlags": lags})
+    slope, se = float(fit.params[1]), float(fit.bse[1])
+    return Estimate(slope, se, slope - 1.96 * se, slope + 1.96 * se, len(pairs))
+
+
+def one_sided_p(estimate: Estimate) -> float | None:
+    """P-value that the estimate's true value is positive (normal approximation)."""
+    return None if estimate.t is None else float(1 - stats.norm.cdf(estimate.t))
+
+
 def block_bootstrap(
     values: Sequence[Any],
     statistic: Callable[[list[Any]], float],

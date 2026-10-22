@@ -13,6 +13,7 @@ from fin_intel import (
     macro,
     putcall,
     releases,
+    volatility,
 )
 from fin_intel.cli.app import app, run_items
 from fin_intel.config import get_settings
@@ -199,6 +200,16 @@ def sync_cboe() -> None:
 
     cboe = CboeProvider(raw_store=default_store())
     run_items("sync-cboe", ["cboe"], lambda s, _: putcall.sync_cboe(s, cboe, date.today()))
+
+
+@app.command("sync-volatility", rich_help_panel="Macro and markets")
+def sync_volatility() -> None:
+    """Load Cboe's volatility and option-strategy indices (VIX family, SKEW, PUT, BXM...):
+    each index's whole daily history, one small file per index, replaced on every run."""
+    from fin_intel.providers import CboeProvider
+
+    cboe = CboeProvider(raw_store=default_store())
+    run_items("sync-volatility", ["cboe"], lambda s, _: volatility.sync_volatility(s, cboe))
 
 
 @app.command("sync-industries", rich_help_panel="Macro and markets")

@@ -43,6 +43,7 @@ EXPECTED: dict[tuple[str, str], int] = {
     ("eia", "series"): WEEKLY,  # weekly data
     ("mof", "jgb_curve"): DAILY,
     ("cboe", "daily_options"): DAILY,
+    ("cboe", "index_history"): DAILY,
     ("dart", "report"): DAILY,
     ("edinet", "documents"): DAILY,
     ("twse", "prices"): DAILY,

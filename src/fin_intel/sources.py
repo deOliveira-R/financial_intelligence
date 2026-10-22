@@ -32,4 +32,5 @@ from fin_intel import (  # noqa: F401
     shortinterest,
     taiwan,
     thirteenf,
+    volatility,
 )

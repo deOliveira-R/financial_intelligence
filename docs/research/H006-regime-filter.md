@@ -31,7 +31,7 @@ return criterion is "within a point", not "better".
 - **Inputs, as known at each month's last close:** the asset's close against its 200-day
   simple moving average; the ICE BofA high-yield option-adjusted spread (FRED
   `BAMLH0A0HYM2`, point in time: FRED's value as published by that day) against its own
-  200-day average ("widening" when above).
+  200-day average ("widening" when above). *Amended below: `BAA10Y` since 1986.*
 - **Decisions monthly** at the last trading day's close, held for the following month
   (the low-attention track), with the position changed at that close as the daily
   backtester does. Cash earns the 3-month T-bill (`DGS3MO`, point in time) by the day.
@@ -72,6 +72,18 @@ return criterion is "within a point", not "better".
   year, or the constant mix doing as well on both measures.
 - **Partial:** support on SPY but not RSP (or the reverse) is recorded as such; the
   filter then isn't a market-regime reading but an index-specific one.
+
+## Amendments (before any results)
+
+**2026-10-22, data:** FRED now carries the ICE BofA option-adjusted spreads only from
+2023-10 (793 observations; a licensing change, which the backlog had noticed as "FRED
+keeps ~3 years"). The credit input is instead **Moody's Baa corporate yield minus the
+10-year Treasury (FRED `BAA10Y`, daily since 1986)**, the long-history credit spread; the
+same 200-day rule applies. With it, SPY's design decisions start in **1993-11** (SPY begins
+1993-01 and the average needs 200 days) rather than 1997-10, adding 1994 and 1998 to the
+design episodes. Both the spread and the T-bill yield are unrevised daily series that
+FRED posts the next morning, so "as known at the close" is the previous day's final
+value, which is how they're read (ALFRED vintages for them begin in 2005 or later).
 
 ## Trials
 

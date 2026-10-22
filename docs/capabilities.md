@@ -93,6 +93,10 @@ only on exceptions), the speculation track high-attention with its own signals.
   COT index per trader group. `/cot`, `/cot/{market}`.
 - **Options sentiment:** Cboe put/call ratios and volumes (equity, index, total since 2006;
   SPX, VIX options, ETPs since 2019), known the next day. `cboe:equity_pc`.
+- **Volatility and option-strategy indices** (Cboe, daily closes): the VIX family (`cboe:vix`
+  since 1990, `vix9d`, `vix3m`, `vix6m`, `vvix`), `skew`, and what systematic option
+  writing on the S&P 500 paid (`cboe:put` cash-secured puts since 1991, `bxm` covered calls,
+  `bxmd`, `cll`, `cndr`). `sync-volatility`; the variance risk premium study is H007.
 - **Short interest:** shares short and days to cover per stock, twice a month since
   December 2017 (FINRA), known 8 business days after settlement. `si:GME`, `si:GME:dtc`.
 - **Market internals:** daily breadth for US common stocks (advancers/decliners, A/D line,

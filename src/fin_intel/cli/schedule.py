@@ -46,6 +46,7 @@ from fin_intel.cli.macro import (
     sync_industries,
     sync_japan,
     sync_panel,
+    sync_volatility,
 )
 from fin_intel.cli.market import (
     sync_actions,
@@ -121,6 +122,7 @@ def steps() -> list[Step]:
         Step("eia", "EIA energy data", "daily", sync_eia),
         Step("japan", "Japanese rates and flows (MoF)", "daily", sync_japan),
         Step("cboe", "options put/call (Cboe)", "daily", sync_cboe),
+        Step("volatility", "volatility and strategy indices (Cboe)", "daily", sync_volatility),
         Step("dart", "Korean filings (DART)", "daily", lambda: sync_dart(limit=6000)),
         Step("edinet", "Japanese filings (EDINET)", "daily", sync_edinet),
         Step("tw-prices", "Taiwanese prices", "daily", sync_tw_prices),

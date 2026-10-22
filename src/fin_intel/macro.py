@@ -116,7 +116,10 @@ MACRO_SERIES: dict[str, tuple[str, str]] = {
     "IRSTCI01JPM156N": ("japan", "Japan call money rate, monthly"),
     "IR3TIB01JPM156N": ("japan", "Japan 3-month interbank rate, monthly"),
     # Credit, volatility and financial conditions
+    # FRED carries the ICE BofA spreads only from 2023-10 (licensing); Moody's Baa minus
+    # the 10-year Treasury is the credit spread with history (since 1986).
     "BAMLH0A0HYM2": ("risk", "High-yield credit spread (option-adjusted), daily"),
+    "BAA10Y": ("risk", "Moody's Baa corporate yield minus 10-year Treasury, daily"),
     "BAMLC0A0CM": ("risk", "Investment-grade credit spread (option-adjusted), daily"),
     "VIXCLS": ("risk", "VIX, daily"),
     "VXVCLS": ("risk", "3-month VIX, daily"),
