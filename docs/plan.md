@@ -188,10 +188,14 @@ pre-registered before any result:
   of the signal's companies. Next: CUSIP→issuer mapping fix (share-class FIGI; insiders'
   ticker bridge for dead companies) and the proxy over every filer from the raw 13F files;
   then the study on 2013-Q3 onward.
+- [ ] **H009** volatility-managed exposure (research/H009-volatility-managed.md,
+  candidates row q): pre-registered 2026-10-22 as the regime dial after H006; runs on
+  H006's periods and machinery.
 - [ ] Data in parallel: Ken French library (controls), watchlist option chains recorded
   daily (check Massive's options tier), VIX futures (CFE) for candidate i.
 - Also found: FRED's ICE BofA spreads start 2023-10 (license); Moody's `BAA10Y` added as
-  the long-history credit spread.
+  the long-history credit spread. OpenFIGI answers a CUSIP with at most ten listings and
+  needs `ID_CINS` for letter-first identifiers; SEC's 13F data sets begin 2013-Q2.
 
 Hypotheses, analysis skills, evals and hill-climbing on the historical data, using the
 timeline, dossiers and graph. LLM skills extract supplier/customer links and policy
