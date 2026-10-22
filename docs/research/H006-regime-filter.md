@@ -1,8 +1,12 @@
 # H006: a trend and credit regime filter cuts drawdowns at little cost in return
 
-Status: **design run 2026-10-22: the trend rule chosen (SPY drawdown 0.30 of
-buy-and-hold's, return 2.4 points a year higher, 1993-2015); validation pending.** Track:
-investing (the regime dial of the decision stack, candidates.md row a). Validation mode A.
+Status: **rejected as registered (2026-10-22).** The trend rule chosen on the design
+(SPY drawdown 0.30 of buy-and-hold's, return 2.4 points a year higher, 1993-2015) failed
+validation (2016-2023-06): return gap -4.7 points a year with the interval excluding zero,
+drawdown ratio 0.91, a constant 79% allocation did better on both; the holdout
+(2023-07 onward, run once for the record) cost another 7.9 points a year on SPY. See
+Results. Track: investing (the regime dial of the decision stack, candidates.md row a).
+Validation mode A.
 
 ## Claim
 
@@ -124,9 +128,40 @@ any bear market it could sidestep), then 0.2-0.25 from 2008 on.
 **Choice (the registered rule):** among the 200-day monthly variants with an SPY gap within
 a point, the largest SPY drawdown reduction: **trend** (0.30; "both" at 0.21 missed the gap
 condition by a hair, -1.0 points). Frozen: `{"rule": "trend", "window": 200, "frequency":
-"monthly"}`. Validation (2016-01 to 2023-06) runs once on it next; the expectation to beat
-is a negative return gap there (2020's V-shaped rebound and 2023's rally are the costly
-cases), judged against the drawdown reduction in 2018, 2020 and 2022.
+"monthly"}`.
+
+**Validation (2026-10-22, once; 2016-01 to 2023-06, 90 months):**
+
+| Asset | CAGR S / H / M | Max drawdown S / H / M | DD ratio to H | CAGR gap to H | Beats M? | Verdict |
+|---|---|---|---|---|---|---|
+| SPY | 8.3 / 12.9 / 10.6% | -24 / -34 / -27% | 0.91 [0.41, 1.37] | -4.7 [-9.5, -0.5] | no (worse on both) | **rejection** |
+| RSP | 5.9 / 11.2 / 9.0% | -23 / -39 / -30% | 0.77 [0.40, 1.07] | -5.3 [-8.0, +0.3] | no (worse on both) | **rejection** |
+
+The worst 12 months were *worse* with the filter on SPY (-21.4% against -19.7%): it was
+long through the February-March 2020 fall, exited at the end of March and missed April
+and May. The yearly view says the same: 2019 +10.4% against +31.2% (out after the 2018
+fourth quarter, back in after the rebound), 2020 +14.5% against +18.3%, the first half of
+2023 +10.2% against +16.8%. Exposure 0.79 with 2.1 switches a year; the constant 79% mix
+had a similar drawdown and 2.4 points a year more return.
+
+**Holdout (2023-07 to 2026-10, 40 months, once, for the record):** SPY 11.8% against
+19.7% a year (gap -7.9 points), daily maximum drawdown -10% against -19% (the filter halved
+the April 2025 fall on daily data, exited at the end of April and missed May: on month-end
+data the drawdowns were equal); RSP 11.8% against 13.5%, drawdown -9% against -18%.
+Exposure 0.90. Too few months for intervals; read as the cost of lagging: 2 to 8 points a
+year in a bull market.
+
+**Verdict: rejected as registered.** The design-period edge came from two slow bear markets
+(2000-02 and 2008), where a monthly 200-day rule steps out months before the bottom; every
+drawdown since 2016 (2018 Q4, 2020, 2022, 2025) was fast or V-shaped, and the rule exits
+after the damage and re-enters after the rebound. A constant allocation at the same average
+exposure matched its drawdowns at a higher return, which is the registered test of "timing
+rather than owning less", and it failed it. Not retuned: the 150-day variants looked better
+in design, and whether any window survives 2016-2023 is a new hypothesis with its own
+pre-registration, not a fix. What stands from the design: monthly decisions beat daily
+ones everywhere (the whipsaw cost is 1.5-3 points a year), and binary trend filters are
+regime-dependent. For the low-attention track the regime dial is better sought in
+volatility-scaled exposure (candidates.md row q), judged on these same periods.
 
 ## Risks to the test
 

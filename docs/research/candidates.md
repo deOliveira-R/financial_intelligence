@@ -36,14 +36,14 @@ industry-level tests have decades of clean data.
 
 | # | Hypothesis (mechanism) | Unit, horizon | Data | Prior | Status |
 |---|---|---|---|---|---|
-| a | Trend + credit regime filter cuts drawdowns at little return cost (slow institutional deleveraging, volatility clustering) | market, monthly, decades | ready | 0.7 drawdown, 0.4 return-neutral | **H006** |
+| a | Trend + credit regime filter cuts drawdowns at little return cost (slow institutional deleveraging, volatility clustering) | market, monthly, decades | ready | 0.7 drawdown, 0.4 return-neutral | **H006: rejected** (2026-10-22; worked through 2015, failed every fast drawdown since) |
 | b | Distress II: going-concern XBRL tag (since ~2017), short-interest jumps, auditor changes improve on H001 | company-quarter, 12m | ready (check tag coverage in `facts`) | 0.5 | queued |
 | c | Opportunistic insider buying (Cohen-Malloy-Pomorski: same-month-every-year insiders are routine, the rest informed) beats size/sector peers | stock, 3-12m | insiders ready; needs the 13F price proxy | 0.6 gross, 0.4 net | **H008** |
 | d | 13F best ideas: new top-10 positions of concentrated long-horizon managers, entered 45 days late, beat peers | stock, 12m | 13F ready; needs price proxy | 0.5 | queued |
 | e | PEAD without analysts: surprise from a seasonal random walk on XBRL EPS, dated `first_filed` | stock, 60 trading days | 2 years whole market + deep universe since 2009 | 0.5 small, 0.2 large | queued |
 | f | Spin-offs (Form 10-12B): spun entities outperform 12-24m after forced selling | ~40 events a year | check Form 10 in `corporate_events`; needs price proxy | 0.5, low power | queued |
 | g | Quality (gross profitability) and value composite vs equal-weight universe | stock, 12-36m | `screentest` exists | 0.35 value, 0.5 quality | queued |
-| h | Variance risk premium: selling index puts earns more when VIX exceeds realized volatility (insurance demand, dealer constraints) | index, monthly, since 1993 | Cboe index CSVs (free, confirmed 2026-10-22) | 0.7 premium, 0.4 conditioning | **H007** |
+| h | Variance risk premium: selling index puts earns more when VIX exceeds realized volatility (insurance demand, dealer constraints) | index, monthly, since 2007 (PUT) | Cboe index CSVs (loaded) | 0.7 premium, 0.4 conditioning | **H007: conditioning rejected; the premium stands, modest** (0.5%/month, Sharpe 0.4-0.6, -33% in 2008) |
 | i | VIX futures roll-down in contango is a premium, not a forecast; the tail is the price | VIX futures, monthly | Cboe CFE CSVs, free | 0.6 | queued |
 | j | Earnings-move straddles: implied vs realized moves on a watchlist | stock-event | needs chains (below) | unknown | needs data |
 | k | Sector and asset time-series momentum (12-1, dual momentum) across ETFs | ETF, monthly, since 1998 | ready; backtester needs rotation | 0.6 trend, 0.4 cross-sectional | queued |
@@ -51,7 +51,8 @@ industry-level tests have decades of clean data.
 | m | Short interest: aggregate level predicts market returns (Rapach-Ringgenberg-Zhou); high days-to-cover with weak momentum underperforms (a not-buy filter) | market; stock | since 2017-12 only: underpowered at market level | 0.3; 0.5 | queued |
 | n | Pre-FOMC drift, release-day effects, turn of month, January small-cap rebound | market, days | ready | 0.3 (faded after publication) | queued |
 | o | Theme composite (Congress, lobbying, contracts, bills) on theme ETFs vs equal weight | theme, 6-24m | ready | low power; evidence accumulates | plan.md |
-| p | The variance risk premium (VIX minus realized volatility) predicts next-month equity excess returns (Bollerslev-Tauchen-Zhou 2009): a regime input for the dial (a), not only for option writing | market, monthly, since 1990 | ready (Cboe VIX); seen once as H007's descriptive test 5 (t = 3.3 in 1993-2012) | 0.5 | queued: needs its own pre-registration |
+| p | The variance risk premium (VIX minus realized volatility) predicts next-month equity excess returns (Bollerslev-Tauchen-Zhou 2009) | market, monthly, since 1990 | ready (Cboe VIX); H007's descriptive test 5: t = 3.3 (1993-2012), 3.7 (2007-2015), then **-0.7 (2016-2023) and -1.3 (holdout)** | 0.3 (weakened) | queued, low priority |
+| q | **Volatility-managed exposure** (Moreira-Muir 2017): equity weight proportional to a target over last month's realized variance, capped, monthly; volatility is persistent while returns aren't lower when it's high, so scaling down in turbulent months raises the Sharpe ratio and cuts drawdowns without a binary exit | market, monthly, SPY since 1993, RSP since 2003 | ready | 0.5 | queued: the regime dial after H006's rejection, judged on H006's periods (design to 2015, validation 2016-2023-06) |
 
 Not testable yet: breadth divergence (whole-market breadth exists for two years; earlier
 breadth would be computed on survivors); index deletions (no free bulk list of S&P changes).

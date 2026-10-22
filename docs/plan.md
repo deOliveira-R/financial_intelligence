@@ -170,13 +170,28 @@ Later: trackers for theses 2, 4, 6-8 once GDELT's load completes; new distress s
 user's direction is a hypothesis-driven search for ways of making money (risk, buy or
 not, options). Candidates ranked by source of return and data readiness; the first three
 pre-registered before any result:
-- [ ] **H006** trend + credit regime filter (research/H006-regime-filter.md): data ready.
-- [ ] **H007** variance risk premium conditional on VIX minus realized volatility
-  (research/H007-variance-premium.md): needs Cboe's index histories (`volatility.py`).
+- [x] **H006** trend + credit regime filter (research/H006-regime-filter.md): **rejected**
+  (2026-10-22). The trend rule chosen on 1993-2015 (drawdown 0.30 of buy-and-hold's,
+  +2.4 points a year) lost 4.7 points a year in 2016-2023 with no drawdown edge over a
+  constant 79% allocation; the fast, V-shaped drawdowns since 2016 are its failure mode.
+  Monthly decisions beat daily everywhere. Follow-up: volatility-managed exposure
+  (candidates row q), not a retune.
+- [x] **H007** variance risk premium conditional on VIX minus realized volatility
+  (research/H007-variance-premium.md): **conditioning rejected, the premium stands**
+  (2026-10-22). Cboe's index histories loaded (`volatility.py`, `sync-volatility`, daily
+  step); PUT is daily only from 2007, so the first design run was void and re-registered.
+  Selling index options paid 0.4-0.6% a month over T-bills in every period (BXMD 1993-2023
+  t = 3.2), with -33% in 2008, and trailed the index since 2016.
 - [ ] **H008** opportunistic insider purchases (research/H008-opportunistic-insiders.md):
-  needs the 13F quarterly price proxy (`quarterly_prices`, research.md step 1, unbuilt).
+  the 13F price proxy is built (`quarterly_prices`, `derive-quarterly-prices`, weekly after
+  13F; 806k CUSIP-quarters, exact against daily bars) but begins 2013-Q2 and covers 30-70%
+  of the signal's companies. Next: CUSIP→issuer mapping fix (share-class FIGI; insiders'
+  ticker bridge for dead companies) and the proxy over every filer from the raw 13F files;
+  then the study on 2013-Q3 onward.
 - [ ] Data in parallel: Ken French library (controls), watchlist option chains recorded
   daily (check Massive's options tier), VIX futures (CFE) for candidate i.
+- Also found: FRED's ICE BofA spreads start 2023-10 (license); Moody's `BAA10Y` added as
+  the long-history credit spread.
 
 Hypotheses, analysis skills, evals and hill-climbing on the historical data, using the
 timeline, dossiers and graph. LLM skills extract supplier/customer links and policy

@@ -15,7 +15,8 @@ came next, out of sample, beyond what simple known effects already say. Started
 | SEC fundamentals | 2009 onward | **biased before ~2022**: 2.9k issuers in 2012, 15k in 2023 |
 | Corporate events (8-K items, late filings, delistings) | 1993 onward | **biased**: fetched only for today's listings (5,547 issuers, all active) |
 | Insider trades | 2006 onward | free (bulk dataset, every issuer) |
-| 13F positions | 2001 onward | free (every reported holding) |
+| 13F positions | **2013-Q2 onward** (SEC's data sets begin there; earlier quarters hold only restated positions); filers under $1B dropped before 2025-06 | free (every reported holding of the kept filers) |
+| Quarterly prices from 13F values (`quarterly_prices`, 2026-10-22) | 2013-Q2 onward | free of survivorship; covers what the kept filers held (30-70% of companies insiders buy; see H008) |
 
 Consequences:
 

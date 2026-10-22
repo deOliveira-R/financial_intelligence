@@ -1,8 +1,14 @@
 # H007: selling index puts pays more when implied volatility exceeds realized
 
-Status: **pre-registered 2026-10-22; first design run void (PUT's file is daily only from
-2007, see Amendments); design re-run on 2007-2015 pending.** Track: options
-(candidates.md row h), the first use of Cboe's index histories. Validation mode A.
+Status: **claim (2) rejected; claim (1) stands as a modest premium (2026-10-22).** The
+first design run was void (PUT's file is daily only from 2007, see Amendments). On
+2007-2015 the premium rose with VRP (t = 3.2) and the rule doubled the Sharpe ratio; in
+validation (2016-2023-05, once) the slope was zero, the terciles unordered and the rule
+halved the Sharpe ratio; the holdout (once, for the record) agreed. Selling index options
+earned 0.4-0.6% a month over T-bills in every period (BXMD 1993-2023: t = 3.2), with
+-33% in 2008 and -21% in 2020, and trailed owning the index since 2016. See Results.
+Track: options (candidates.md row h), the first use of Cboe's index histories. Validation
+mode A.
 
 ## Claims
 
@@ -104,6 +110,43 @@ Changes, before any valid result:
   decades. VIX3M begins 2009-09, so the term-structure tests have thin samples either way.
 - Nothing else changes: the signal, the tests, the thresholds and the verdict rules are
   as registered.
+
+## Results (2026-10-22)
+
+Months are decision month ends; "premium" is PUT's monthly return over T-bills; the
+rule holds PUT when VRP exceeds its expanding median, T-bills otherwise.
+
+| | Design 2007-01 to 2015-12 (108 months) | Validation 2016-01 to 2023-05 (89, once) | Holdout 2023-06 to 2026-09 (40, once) |
+|---|---|---|---|
+| Premium, mean (NW t) | 0.4% (1.2) | 0.6% (1.7) | 0.6% (2.0) |
+| PUT: CAGR, vol, Sharpe, max DD | 5.1%, 12%, 0.42, -33% | 7.7%, 11%, 0.62, -21% | 12.0%, 6%, 1.15, -6% |
+| SPY: the same | 5.5%, 16%, 0.38, -51% | 13.8%, 16%, 0.81, -24% | 19.6%, 13%, 1.14, -8% |
+| PUT minus SPY, mean (t) | -0.1% (-0.3) | **-0.5% (-2.5)** | -0.6% (-1.6) |
+| Test 2, slope on VRP (t, p) | **+0.002 (3.2, 0.001)** support | -0.000 (-0.4, 0.67) no | +0.000 (0.3, 0.39) no |
+| Test 3, terciles bottom / middle / top | -0.2 / -0.1 / **+1.3%** [0.4, 2.2] | 0.4 / 0.8 / 0.4% | 0.5 / 0.8 / 0.3% |
+| Test 4, rule vs always-PUT: Sharpe | 0.79 vs 0.42; DD -9% vs -33% | **0.30 vs 0.62** | 0.40 vs 1.15 |
+| Test 4, Sharpe difference [interval] | +0.38 [-0.19, +0.78] weak | -0.33 [-0.71, +0.27] no | -0.75 (too few months) |
+| Test 5, SPY excess on VRP (t) | **3.7** | -0.7 | -1.3 |
+| Test 6, term structure (from 2009-10) | nothing (76 months) | nothing | nothing |
+| Verdict | partial | **rejection** | rejection |
+
+**BXMD, the long-history reading (30-delta covered calls, descriptive):** 1993-02 to
+2015-12 (275 months): premium 0.6% (t = 2.6), slope t = 2.9, terciles 0.2 / -0.2 / 1.0%,
+rule Sharpe 0.54 vs 0.36. Through 2023-05 (364 months): premium 0.6% (**t = 3.2**),
+slope t = 1.3, terciles 0.3 / 0.3 / 0.9%, rule Sharpe 0.48 vs 0.44 (difference +0.04
+[-0.28, +0.38]). Holdout: premium 0.9% (t = 2.2), no conditioning.
+
+**Reading.** The premium is real but modest: half a percent a month over T-bills, a
+Sharpe ratio of 0.4-0.6 over three decades, drawdowns of a third in 2008 and a fifth in
+2020, and since 2016 half a percent a month *less* than owning the index. Conditioning
+on VRP looked strong in 2007-2015 because the post-crash months of 2009 (VIX still high,
+realized volatility collapsing) were both the highest VRP and the best premia; out of
+sample the sign vanished and the rule only threw away half the good months. The term
+structure said nothing in any period. The equity side result (test 5) also failed after
+2016, so candidates.md row p is weakened, not strengthened. For the options track the
+money is the plain premium, and sizing against the tail (how much premium per unit of
+crash exposure) matters more than timing; VIX-futures roll (row i) is the next item, and
+stock-level work (row j) still needs chain data.
 
 ## Limits stated in advance
 

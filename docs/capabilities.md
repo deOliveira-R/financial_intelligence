@@ -55,7 +55,10 @@ only on exceptions), the speculation track high-attention with its own signals.
   day's Form 4s); cluster buys (3+ insiders buying on the open market within 30 days, not
   under 10b5-1 plans). `/insiders/clusters`, `/insiders/{ticker}`.
 - **Institutions (13F):** every filer's quarterly holdings, summed per security, with
-  quarter-over-quarter changes; CUSIPs mapped to securities via OpenFIGI.
+  quarter-over-quarter changes; CUSIPs mapped to securities via OpenFIGI. Also a
+  quarter-end **price proxy for every stock institutions held** (the median of value/shares
+  across filers, `quarterly_prices`, since 2013-Q2, survivorship-free, exact where it can
+  be checked): the price history stock-level research runs on where daily bars don't reach.
   `/holdings/managers?q=berkshire`, `/holdings/managers/{cik}`, `/holdings/security/{ticker}`.
 - **Congress:** House (PDF) and Senate (eFD) periodic transaction reports since 2012:
   member, owner, ticker, type, amount range, dates. Each report is linked to the member
