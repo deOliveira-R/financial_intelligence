@@ -1,8 +1,14 @@
 # H010: the new best ideas of concentrated, patient managers beat their peers
 
-Status: **pre-registered 2026-10-22, not yet run.** Track: investing, the informed-buyer
-trigger from 13F (candidates.md row d). Validation mode A. Runs on H008's price proxy and
-machinery.
+Status: **weak support as registered (2026-10-22).** The screened managers' new best ideas
+earned +0.8%, +1.3% and +3.9% over size-decile peers in the four quarters after entry
+(design, validation, holdout; t 0.7, 0.3, 1.6), against -0.4%, -0.1% and +1.0% for the
+same signal from every filer: the screen adds 1-3 points a year in every period, never
+significantly, on 60-90 companies a quarter. The consensus variant (two or more screened
+managers, 8-13 companies a quarter) was +0.9%, +2.7% and then +15.7% (t 3.1) in the
+holdout: an observation to pre-register on new quarters, not a result. See Results. Track:
+investing, the informed-buyer trigger from 13F (candidates.md row d). Validation mode A.
+Runs on H008's price proxy and machinery.
 
 ## Claim
 
@@ -77,6 +83,39 @@ begin 2014-Q2 (prices from 2013-Q2):
 - **Rejection:** excess at or below zero, or no better than `any_manager`.
 - **Weak support:** positive but under two points, or vanishing after controls, or no
   better than the unscreened signal (then the disclosure, not the manager, carries it).
+
+## Results (2026-10-22)
+
+Entry at the quarter end after the signal quarter; excess return over size-decile peers;
+Newey-West t (three lags for four quarters). About 112, 126 and 151 managers a quarter
+passed the screen in the three periods (of ~1,300-1,900 filers stored); `derive-managers`
+built 116,703 manager-quarters.
+
+| | Design, entries 2014-Q3 to 2018-Q1 (15 quarters) | Validation 2018-Q2 to 2021-Q3 (14, once) | Holdout 2021-Q4 to 2025-Q2 (15, once) |
+|---|---|---|---|
+| **Best idea, four quarters** (n ≈ 59 / 85 / 90) | +0.8% (t 0.7), median +1.2%, hit 60% | +1.3% (t 0.3), median +1.9%, hit 50% | +3.9% (t 1.6, p 0.06), median +1.7%, hit 67% |
+| after sector and momentum controls | +1.1% [-0.8, +3.0] | +1.0% [-4.3, +6.1] | +3.0% [-1.3, +7.6] |
+| consensus, two or more managers (n ≈ 8 / 12 / 11) | +0.9% (t 0.5) | +2.7% (t 0.4) | **+15.7% (t 3.1)**, hit 87% |
+| any filer's best idea (n ≈ 520 / 690 / 730) | -0.4% (t -0.8) | -0.1% (t -0.1) | +1.0% (t 1.3) |
+| best idea minus any filer | +1.3% (t 1.2) | +1.4% (t 0.5) | +2.9% (t 1.2) |
+| best idea, one quarter | 0.0% (t 0.0) | -0.6% (t -0.5) | +0.4% (t 0.5) |
+| screened as proxy errors (four quarters) | 84 rows | 134 | 106 |
+
+**Reading.** Positive in every period and above the unscreened signal in every period, so
+the screen (concentration, patience, size) does select better buyers than the average
+13F filer; but the effect is one to four points a year on 60-90 names a quarter, and with
+14 quarters it never approaches the registered bar. Validation decides: **weak support**.
+One quarter after entry there is nothing, as the mechanism (slow diffusion) predicts.
+The consensus portfolio's holdout, +15.7% a year with t = 3.1 on about ten names a
+quarter, is the kind of number that invites a story (the 2022-2025 period rewarded a few
+concentrated bets heavily); it was +0.9% and +2.7% in the two earlier periods, so it goes
+to the queue as its own hypothesis on quarters from 2026-Q4, and nothing more.
+
+**For the decision stack:** a concentrated, patient manager opening or doubling a top-ten
+position is a weak positive trigger of the same size as an insider purchase (H008), on
+far fewer companies and with a quarter's extra lag; where both coincide the case is
+stronger, which is the natural next test once H008's and H010's flags are on the same
+table. Capacity and attention suit the low-attention track: a dozen candidates a quarter.
 
 ## Limits stated in advance
 
