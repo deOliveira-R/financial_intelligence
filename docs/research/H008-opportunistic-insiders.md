@@ -129,6 +129,26 @@ where both exist) and its coverage measured before any signal was computed:
 - Only after both fixes is coverage re-measured and written here; the study runs on what
   remains, with the covered share per year reported as a limit of the result.
 
+**2026-10-22, the fixes as built (before any result):**
+- Mapping: OpenFIGI answers a CUSIP with at most ten listings and the US composite is not
+  always among them; the US venue with a plain ticker is now preferred, the share-class
+  FIGI stored and linked, and CINS identifiers (a letter first: Accenture, Medtronic, NXP,
+  Chubb) asked under `ID_CINS`, which OpenFIGI needs. Two identifier bridges fill the
+  issuer where no security row exists, each recorded in `quarterly_prices.cik_source`:
+  `insiders` (the CUSIP's US ticker matched to the symbol insiders filed under within a
+  year of the quarter, only when one issuer did) and `issuer_prefix` (a retired CUSIP,
+  such as GE's before its 2021 reverse split, shares its six-character issuer number with
+  the one that replaced it, only when every mapped CUSIP of that prefix agrees).
+- Every filer: `quarterly_price_parts`, one pass per raw 13F file over all its reports;
+  a quarter takes its part with the most reports. Study code: `studies/h008.py`.
+- Implementation details fixed now: the insider is identified by owner CIK (name only
+  when the filing has none); a company's price is the CUSIP institutions held the most of;
+  size deciles use the total value held; splits come from `corporate_actions` where the
+  company has a security row, and otherwise are read off the holdings (shares held
+  jumping by an integer ratio while the price moves by its inverse); exits are reported
+  as counts (companies without a price at the horizon, and how many of those filed a
+  bankruptcy item or a deregistration form in the window) rather than imputed.
+
 Small companies, one-quarter holding: about 0.5% round trip is assumed when judging
 whether a supported effect is worth trading; a 4%-a-year excess net of that is the floor
 for a tilt, not a standalone strategy.
