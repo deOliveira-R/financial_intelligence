@@ -266,10 +266,13 @@ def unmapped_cusips(session: Session, retry_unlinked: bool = False) -> list[str]
     exchange-level one rather than the composite FIGI our securities carry, so it doesn't
     count as resolved by itself. With `retry_unlinked`, CUSIPs OpenFIGI did answer but
     that still link to no security are asked again (answers before 2026-10 kept whichever
-    listing came first, often a foreign one, and no share-class FIGI)."""
+    listing came first, often a foreign one, and no share-class FIGI), as are the CINS
+    identifiers (a letter first) it found nothing for when asked as CUSIPs."""
     looked_up = CusipMapping.security_type.is_not(None)
     if retry_unlinked:
-        looked_up = CusipMapping.security_type == "unknown"  # nothing to gain from asking again
+        looked_up = (CusipMapping.security_type == "unknown") & (
+            CusipMapping.cusip.op("~")("^[0-9]")
+        )  # nothing to gain from asking about a true CUSIP again
     resolved = select(CusipMapping.cusip).where(CusipMapping.security_id.is_not(None) | looked_up)
     held = (
         select(InstitutionalPosition.cusip)

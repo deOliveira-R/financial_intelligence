@@ -5,7 +5,7 @@ from datetime import date
 
 import httpx
 import respx
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from fin_intel import thirteenf
 from fin_intel.models import CusipMapping, InstitutionalPosition, Security
@@ -158,6 +158,14 @@ def listing(code, ticker, figi, composite, share_class="BBG001S5N8V8"):
     }
 
 
+@respx.mock
+def test_cins_identifiers_are_asked_under_their_own_type(raw_store):
+    route = respx.post("https://api.openfigi.com/v3/mapping").respond(json=[{}, {}])
+    OpenFigiProvider(raw_store=raw_store).map_cusips(["G1151C101", AAPL])  # Accenture, Apple
+    jobs = json.loads(route.calls[0].request.content)
+    assert [j["idType"] for j in jobs] == ["ID_CINS", "ID_CUSIP"]
+
+
 def test_best_listing_prefers_the_us_market():
     foreign = listing("CP", "EXMOC", "BBG00B8TC1V3", "BBG00B8TC1V3")
     venue = listing("UZ", "XOM", "BBG01496HVM6", "BBG01496HVL7")
@@ -224,12 +232,19 @@ def test_openfigi_mapping_links_securities_and_rebuilds(session, raw_store):
     assert ko.security_id == session.scalar(select(Security.id).where(Security.ticker == "KO"))
     assert session.get(CusipMapping, BOND).security_type == "unknown"
     assert thirteenf.unmapped_cusips(session) == []  # nothing left to ask
-    # A looked-up CUSIP that links to nothing is asked again only on request; "unknown" never.
+    # A looked-up CUSIP that links to nothing is asked again only on request; an "unknown"
+    # true CUSIP never, an "unknown" CINS (asked as a CUSIP before) again.
     ko.security_id = None
+    session.add(CusipMapping(cusip="G1151C101", security_type="unknown"))
+    session.add(InstitutionalPosition(filer_cik=BRK[0], period=date(2026, 3, 31),
+                                      cusip="G1151C101", put_call="", accession="B1"))  # fmt: skip
     session.commit()
     assert thirteenf.unmapped_cusips(session) == []
-    assert thirteenf.unmapped_cusips(session, retry_unlinked=True) == [KO]
+    assert sorted(thirteenf.unmapped_cusips(session, retry_unlinked=True)) == sorted(
+        ["G1151C101", KO]
+    )
     thirteenf.link_securities(session)
+    session.execute(delete(InstitutionalPosition).where(InstitutionalPosition.cusip == "G1151C101"))
     session.commit()
 
     before = session.scalar(select(func.count()).select_from(InstitutionalPosition))

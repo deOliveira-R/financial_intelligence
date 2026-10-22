@@ -15,7 +15,10 @@ Each row carries how many filers priced it, the total value and shares held (siz
 the same source) and the security and issuer it maps to through `cusip_mappings`. A
 company that died before our listings begin has no security row; its issuer is found
 through the ticker insiders filed under within a year of the quarter (`cik_source =
-"insiders"`, only when one issuer used that ticker in the window), never by name. Prices
+"insiders"`, only when one issuer used that ticker in the window). A CUSIP retired by a
+reverse split or reclassification (GE's 369604103) is unknown to OpenFIGI, but its first
+six characters name the issuer, shared with the CUSIP that replaced it (`cik_source =
+"issuer_prefix"`, only when every mapped CUSIP of that issuer agrees). Never by name. Prices
 are as reported: unadjusted for later splits (`corporate_actions` adjust on read, as for
 daily bars). The median is robust to the few filers who report in the wrong unit; a study
 should still ask for several filers per price. `derive-quarterly-prices` recomputes the
@@ -77,6 +80,22 @@ _BRIDGE = text(
         HAVING count(DISTINCT i.issuer_cik) = 1
     ) b
     WHERE q.period = :period AND q.cusip = b.cusip AND q.cik IS NULL
+    """
+)
+
+
+# Retired CUSIPs: the issuer's six-character prefix is shared with its current CUSIP.
+_PREFIX = text(
+    """
+    UPDATE quarterly_prices q SET cik = b.cik, cik_source = 'issuer_prefix'
+    FROM (
+        SELECT left(m.cusip, 6) AS prefix, min(s.cik) AS cik
+        FROM cusip_mappings m JOIN securities s ON s.id = m.security_id
+        WHERE s.cik IS NOT NULL
+        GROUP BY left(m.cusip, 6)
+        HAVING count(DISTINCT s.cik) = 1
+    ) b
+    WHERE q.period = :period AND q.cik IS NULL AND left(q.cusip, 6) = b.prefix
     """
 )
 
@@ -193,10 +212,12 @@ def compute(session: Session, periods: list[date] | None = None) -> int:
         session.execute(delete(QuarterlyPrice).where(QuarterlyPrice.period == period))
         result = session.execute(_INSERT, {"period": period})
         bridged = session.execute(_BRIDGE, {"period": period})
+        prefixed = session.execute(_PREFIX, {"period": period})
         session.commit()
         rows += result.rowcount or 0
         log.info(
-            "quarterly prices %s: %s CUSIPs, %s issuers found through insiders' tickers",
-            period, result.rowcount, bridged.rowcount,
+            "quarterly prices %s: %s CUSIPs; issuers found through insiders' tickers %s, "
+            "through the issuer prefix %s",
+            period, result.rowcount, bridged.rowcount, prefixed.rowcount,
         )  # fmt: skip
     return rows

@@ -15,6 +15,7 @@ from fin_intel.models import (
 )
 
 AAPL, CELG = "037833100", "151020104"
+GE_OLD, GE_NEW = "369604103", "369604301"  # GE's CUSIP before and after its 2021 reverse split
 Q4, Q1 = date(2022, 12, 31), date(2023, 3, 31)
 FILE = "2022-10-01_2023-05-31"
 # (accession, cik, type, period, filed, amendment, name): filers 1 and 2 in the main file,
@@ -31,6 +32,7 @@ HOLDINGS = [
     ("F1", 2, "APPLE", AAPL, 100, 1, "PUT", ""),  # options: ignored
     ("F2", 1, "APPLE", AAPL, 1.1, 10, "", ""),  # 1,100 dollars -> 110
     ("F2", 2, "CELGENE", CELG, 0.9, 10, "", ""),  # 90
+    ("F2", 3, "GENERAL ELECTRIC", GE_OLD, 0.11, 10, "", ""),  # 11; a retired CUSIP
     ("F3", 1, "APPLE", AAPL, 999, 1, "", ""),  # a notice: ignored
     ("F4", 1, "APPLE", AAPL, 1500, 10, "", ""),  # 150
 ]
@@ -57,6 +59,14 @@ def test_parts_from_a_file_then_prices_with_mapping_and_bridge(session):
     session.add(CusipMapping(cusip=AAPL, security_id=apple.id, ticker="AAPL"))
     # Celgene maps to a US ticker but no security; insiders filed under CELG around then.
     session.add(CusipMapping(cusip=CELG, ticker="CELG", security_type="Common Stock"))
+    # GE's old CUSIP is unknown to OpenFIGI; its current one is mapped and shares the prefix.
+    session.add(Issuer(cik=40545, name="GE"))
+    session.flush()
+    ge = Security(ticker="GE", cik=40545, origin="sec")
+    session.add(ge)
+    session.flush()
+    session.add(CusipMapping(cusip=GE_NEW, security_id=ge.id, ticker="GE"))
+    session.add(CusipMapping(cusip=GE_OLD, security_type="unknown"))
     session.add_all(
         [
             insider_buy("c1", 816284, "CELG", date(2022, 8, 1)),
@@ -80,12 +90,12 @@ def test_parts_from_a_file_then_prices_with_mapping_and_bridge(session):
         "value_total": 900.0,
         "shares_total": 10.0,
     }
-    assert (AAPL, Q1) in by_key and len(parts) == 3
+    assert (AAPL, Q1) in by_key and len(parts) == 4
 
-    assert quarterly.load_parts(session, FILE, dataset(FILINGS, HOLDINGS)) == 3
+    assert quarterly.load_parts(session, FILE, dataset(FILINGS, HOLDINGS)) == 4
     session.commit()
     assert quarterly.periods_to_do(session) == [Q4, Q1]
-    assert quarterly.compute(session) == 3
+    assert quarterly.compute(session) == 4
     rows = {(r.cusip, r.period): r for r in session.scalars(select(QuarterlyPrice))}
     apple_q4 = rows[(AAPL, Q4)]
     assert apple_q4.price == pytest.approx(105.0) and apple_q4.filers == 2
@@ -94,6 +104,9 @@ def test_parts_from_a_file_then_prices_with_mapping_and_bridge(session):
     celgene = rows[(CELG, Q4)]
     assert celgene.security_id is None and celgene.cik == 816284
     assert celgene.cik_source == "insiders"
+    ge_old = rows[(GE_OLD, Q4)]
+    assert ge_old.security_id is None and ge_old.cik == 40545
+    assert ge_old.cik_source == "issuer_prefix"
     assert rows[(AAPL, Q1)].price == 150.0
 
     # A later file with more reports for the quarter wins.

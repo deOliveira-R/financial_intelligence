@@ -5,6 +5,10 @@ from fin_intel.providers.base import Provider
 from fin_intel.providers.ratelimit import MINUTE, SECOND, Limit
 
 
+def id_type(identifier: str) -> str:
+    return "ID_CINS" if identifier[:1].isalpha() else "ID_CUSIP"
+
+
 class OpenFigiProvider(Provider):
     """OpenFIGI: maps identifiers (here CUSIPs from 13F filings) to FIGIs. Free; an API key
     (FI_OPENFIGI_API_KEY) raises the limits from 25 requests/minute with 10 jobs each to 25
@@ -24,8 +28,10 @@ class OpenFigiProvider(Provider):
         return {"X-OPENFIGI-APIKEY": key} if key else {}
 
     def map_cusips(self, cusips: list[str]) -> list[dict[str, Any]]:
-        """One result per CUSIP, in order: {"data": [...]} or {"warning": ...}."""
-        jobs = [{"idType": "ID_CUSIP", "idValue": c} for c in cusips]
+        """One result per CUSIP, in order: {"data": [...]} or {"warning": ...}. An identifier
+        starting with a letter is a CINS (foreign-domiciled issuers: Accenture, Medtronic,
+        NXP...), which OpenFIGI only finds under its own type."""
+        jobs = [{"idType": id_type(c), "idValue": c} for c in cusips]
         return self.post_json("/mapping", jobs, dataset="mapping", key=cusips[0])
 
     def map_jobs(self, jobs: list[dict[str, str]], key: str) -> list[dict[str, Any]]:
