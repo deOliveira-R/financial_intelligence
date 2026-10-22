@@ -15,6 +15,7 @@ from fin_intel import (  # noqa: F401
     edinet,
     energy,
     esef,
+    factors,
     filing_text,
     funds,
     industries,

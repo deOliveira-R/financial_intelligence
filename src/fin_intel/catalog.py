@@ -70,6 +70,7 @@ EXPECTED: dict[tuple[str, str], int] = {
     ("ucdp", "events"): MONTHLY,
     ("bis", "dataset"): MONTHLY,
     ("worldbank", "pinksheet"): MONTHLY,
+    ("kenfrench", "file"): MONTHLY,  # checked weekly; the library updates monthly
     ("gdelt", "doc_timeline"): WEEKLY,  # one query an hour (FI_SCHEDULE_NEWS)
     # checked monthly (yearly releases)
     ("bea", "supply_use"): MONTHLY,
@@ -92,7 +93,9 @@ TERMS: dict[str, str] = {
     "massive": PERSONAL,
     "macrohistory": PERSONAL,  # CC BY-NC-SA
     "tiingo": PERSONAL,
-    **dict.fromkeys(("fred", "cboe", "finra", "openfigi", "esef", "acled", "gdelt"), CHECK),
+    **dict.fromkeys(
+        ("fred", "cboe", "finra", "openfigi", "esef", "acled", "gdelt", "kenfrench"), CHECK
+    ),
 }
 
 

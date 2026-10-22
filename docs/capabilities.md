@@ -90,6 +90,10 @@ only on exceptions), the speculation track high-attention with its own signals.
 - **Macro pack:** 70 FRED series (energy, inflation, rates and curve, activity, commodities, freight, labor, Japan,
   dollar, credit and volatility, liquidity) plus exchange rates for 21 currencies, all with ALFRED revision
   history for point-in-time use. `/economic/{id}`.
+- **Factor returns** (Fama-French, Kenneth French's library): `ff:mkt_rf`, `ff:smb`,
+  `ff:hml`, `ff:rmw`, `ff:cma`, `ff:mom`, `ff:rf`, daily since 1926 (five factors since
+  1963), in percent; the controls stock-level studies report their effects after.
+  `sync-factors`.
 - **Energy:** 13 EIA weekly series (crude, Cushing, gasoline and distillate stocks,
   production, imports/exports, refinery utilization, products supplied, gas storage).
 - **Positioning:** CFTC Commitments of Traders for 26 markets since 2006, with a 3-year

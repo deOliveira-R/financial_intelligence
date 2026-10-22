@@ -24,6 +24,7 @@ from fin_intel.providers.fred import FredProvider
 from fin_intel.providers.gdelt import GdeltProvider
 from fin_intel.providers.gleif import GleifProvider
 from fin_intel.providers.govinfo import GovinfoProvider
+from fin_intel.providers.kenfrench import KenFrenchProvider
 from fin_intel.providers.lda import LdaProvider
 from fin_intel.providers.legislators import LegislatorsProvider
 from fin_intel.providers.massive import MassiveProvider
@@ -42,6 +43,7 @@ __all__ = [
     "BisProvider",
     "BojProvider",
     "CboeProvider",
+    "KenFrenchProvider",
     "CensusProvider",
     "CftcProvider",
     "DartProvider",

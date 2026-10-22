@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 
 from fin_intel import (
     contracts,
+    factors,
     japan,
     macro,
     putcall,
@@ -210,6 +211,17 @@ def sync_volatility() -> None:
 
     cboe = CboeProvider(raw_store=default_store())
     run_items("sync-volatility", ["cboe"], lambda s, _: volatility.sync_volatility(s, cboe))
+
+
+@app.command("sync-factors", rich_help_panel="Macro and markets")
+def sync_factors() -> None:
+    """Load Fama-French factor returns (market, size, value, profitability, investment,
+    momentum, T-bill) from Kenneth French's data library: daily since 1926, three small
+    files replaced on every run."""
+    from fin_intel.providers import KenFrenchProvider
+
+    provider = KenFrenchProvider(raw_store=default_store())
+    run_items("sync-factors", ["kenfrench"], lambda s, _: factors.sync_factors(s, provider))
 
 
 @app.command("sync-industries", rich_help_panel="Macro and markets")
